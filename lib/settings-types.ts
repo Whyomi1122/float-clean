@@ -21,6 +21,8 @@ export type WorldBookEntry = {
     useProbability?: boolean;
     role?: number;
     insertion_order: number;
+    /** 群像：常驻条目（跳过关键词扫描，始终注入）。 */
+    sticky?: boolean;
 };
 
 export type WorldBookConfig = SettingItemMeta & {
@@ -255,13 +257,14 @@ export type ContentAppId =
     | "chat" | "diary" | "music" | "reading"
     | "forum" | "cocreate" | "story" | "game" | "xiaohongshu" | "dwelling"
     | "checkphone" | "shopping" | "calendar" | "interview_magazine"
-    | "moments" | "group_chat" | "vn" | "adventure";
+    | "moments" | "group_chat" | "vn" | "adventure"
+    | "ensemble";
 
 export const CONTENT_APP_IDS: ContentAppId[] = [
     "chat", "diary", "music", "reading",
     "cocreate", "story", "game", "xiaohongshu", "dwelling",
     "checkphone", "shopping", "calendar", "interview_magazine",
-    "moments", "group_chat", "vn", "adventure"
+    "moments", "group_chat", "vn", "adventure", "ensemble"
 ];
 
 export const CONTENT_APP_LABELS: Record<ContentAppId, string> = {
@@ -283,6 +286,7 @@ export const CONTENT_APP_LABELS: Record<ContentAppId, string> = {
     group_chat: "群聊",
     vn: "漫卷",
     adventure: "冒险",
+    ensemble: "群像",
 };
 
 // Binding slot — config selections for a given scope

@@ -730,6 +730,8 @@ export async function generateImageFromConfiguredApi(params: {
   useReferenceImage?: boolean;
   settings?: ImageGenerationSettings;
   signal?: AbortSignal;
+  /** 调用来源 App（用于日志与按 App 的设定覆盖，如群像的画风）。 */
+  app?: string;
 }): Promise<ImageGenerationResult | null> {
   const settings = params.settings ?? loadImageGenerationSettings();
   if (!settings.enabled) return null;

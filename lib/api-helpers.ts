@@ -91,8 +91,8 @@ export function isNativeGoogleApi(config: ApiConfig): boolean {
 }
 
 export type SimpleLLMMessage = { role: string; content: string };
-export type SimpleLLMCallOptions = { temperature?: number; max_tokens?: number; signal?: AbortSignal; label?: string };
-export type SimpleLLMCallResult = { content: string | null; error?: string; finishReason?: string; wasTruncated?: boolean };
+export type SimpleLLMCallOptions = { temperature?: number; max_tokens?: number; signal?: AbortSignal; label?: string; strictMaxTokens?: boolean };
+export type SimpleLLMCallResult = { content: string | null; error?: string; finishReason?: string; wasTruncated?: boolean; /** 实际发出去的 max_tokens（null = 没带该参数）；护栏诊断用。 */ sentMaxTokens?: number | null; /** 供应商回报的输出 token 数；护栏诊断用。 */ completionTokens?: number | null };
 export type SimpleLLMRequest = {
     url: string;
     headers: Record<string, string>;

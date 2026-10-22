@@ -40,6 +40,7 @@ import {
   mdiHammerWrench,
   mdiGlassCocktail,
   mdiStorefrontOutline,
+  mdiTheater,
 } from "@mdi/js";
 
 type IconGlyphProps = {
@@ -71,6 +72,7 @@ const MDI_PATHS: Record<IconId, string> = {
   vnchapters: mdiBookmark,
   moments: mdiCamera,
   group_chat: mdiAccountGroup,
+  ensemble: mdiTheater,
   theme: mdiPalette,
   resources: mdiDatabase,
   resource_hub: mdiStorefrontOutline,

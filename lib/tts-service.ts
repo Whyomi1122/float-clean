@@ -6,6 +6,20 @@ import { loadVoiceConfigs, loadBindingConfig, resolveBinding } from "./settings-
 export type VoiceApiConfigResolved = VoiceApiConfig;
 
 /**
+ * 该角色是否显式绑定过语音（角色级 defaults 或 app 级 override）。
+ * 群像的台词语音开关用它区分「没绑」和「绑了但静音」。
+ */
+export function hasExplicitVoiceBinding(characterId: string, appId?: ContentAppId): boolean {
+    if (!characterId) return false;
+    const bindings = loadBindingConfig();
+    const charBinding: any = bindings.characterBindings?.find(b => b.characterId === characterId);
+    if (!charBinding) return false;
+    if (charBinding.defaults?.voiceConfigId) return true;
+    if (appId && charBinding.appOverrides?.[appId]?.voiceConfigId) return true;
+    return false;
+}
+
+/**
  * Resolve the TTS voice config for a character via the binding cascade.
  * Returns null if no voice config is bound or found.
  */

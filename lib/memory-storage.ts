@@ -260,3 +260,40 @@ export function setLastCoreSummarizedTimestamp(characterId: string, ts: string):
     if (typeof window === "undefined") return;
     kvSet(LAST_CORE_SUMMARY_TS_PREFIX + characterId, ts);
 }
+
+// ── 防污染墓碑（deleted content hashes）──
+// 用户删除/拒绝的记忆记下内容指纹；后续总结若再生成相同内容则直接丢弃。
+
+const TOMBSTONE_PREFIX = "ai_phone_memory_deleted_hashes_v1:";
+
+function tombstoneKey(characterId: string): string {
+    return TOMBSTONE_PREFIX + characterId;
+}
+
+export function isHashedDeleted(characterId: string, hash: string): boolean {
+    if (typeof window === "undefined") return false;
+    const raw = kvGet(tombstoneKey(characterId));
+    if (!raw) return false;
+    try {
+        const list: string[] = JSON.parse(raw);
+        return Array.isArray(list) && list.includes(hash);
+    } catch {
+        return false;
+    }
+}
+
+export function addDeletedHash(characterId: string, hash: string): void {
+    if (typeof window === "undefined") return;
+    const key = tombstoneKey(characterId);
+    let list: string[] = [];
+    try {
+        const raw = kvGet(key);
+        if (raw) list = JSON.parse(raw);
+    } catch { /* ignore */ }
+    if (!list.includes(hash)) {
+        list.push(hash);
+        // 墓碑设上限，防止无限膨胀；超出时丢最旧的（FIFO）
+        while (list.length > 500) list.shift();
+        kvSet(key, JSON.stringify(list));
+    }
+}

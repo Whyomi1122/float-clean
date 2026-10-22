@@ -6,7 +6,12 @@ export type MemoryEntry = {
     id: string;
     characterId: string;
     sourceApp: ContentAppId;
-    type: "long_term" | "core";
+    /**
+     * long_term = 总结管线产出的长期记忆（参考级）
+     * core      = 已废弃（2026-10-15 砍掉，不再生成）
+     * archive   = 人工确认的归档（长文档，重量级＝世界书同级）
+     */
+    type: "long_term" | "core" | "archive";
     content: string;
     embedding?: number[];
     importance: number;         // 0-1
@@ -43,7 +48,19 @@ export type MemoryConfig = {
         vn?: boolean;
         adventure?: boolean;
         custom_app?: boolean;
+        /** 群像剧本（按剧本归档，挂到参与角色） */
+        ensemble?: boolean;
     };
+    /**
+     * 防污染·墓碑：被用户删除/拒绝的记忆内容指纹（contentHash）。
+     * 后续总结若再生成相同指纹的内容，将被直接丢弃，避免「删了又冒出来」。
+     */
+    deletedMemoryHashes?: string[];
+    /**
+     * 归档确认制开关（true = 总结只产出草稿，需用户确认后才入库）。
+     * 全平台统一走人工确认。
+     */
+    archiveConfirmEnabled?: boolean;
 };
 
 export type MemorySearchResult = {
@@ -130,5 +147,26 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
         vn: true,
         adventure: true,
         custom_app: true,
+        ensemble: true,
     },
+    deletedMemoryHashes: [],
+    archiveConfirmEnabled: true,
 };
+
+/**
+ * 内容指纹：归一化（去空白/标点、统一小写）后算一个稳定 hash。
+ * 用于去重与墓碑比对，避免「同一条内容重复入库 / 删了又冒出来」。
+ */
+export function computeContentHash(content: string): string {
+    const normalized = content
+        .replace(/[\s\u3000]+/g, "")
+        .replace(/[.,!?;:'"，。！？；：、·…—\-（）()【】\[\]《》""'']/g, "")
+        .toLowerCase();
+    // FNV-1a 32-bit
+    let h = 0x811c9dc5;
+    for (let i = 0; i < normalized.length; i++) {
+        h ^= normalized.charCodeAt(i);
+        h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return ("0000000" + h.toString(16)).slice(-8) + "_" + normalized.length;
+}

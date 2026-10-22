@@ -21,6 +21,7 @@ export type IconId =
   | "vnchapters"
   | "moments"
   | "group_chat"
+  | "ensemble"
   | "settings"
   | "theme"
   | "resources"
@@ -64,6 +65,7 @@ export const PAGE_2_DEFAULT: IconId[] = [
   "xiaohongshu",
   "dwelling",
   "story",
+  "ensemble",
   "vnmode",
   "mapmode"
 ];
@@ -104,6 +106,7 @@ export const ICONS: Record<IconId, IconMeta> = {
   vnchapters: { id: "vnchapters", label: "章节", tone: "var(--c-icon-rose)", placeholder: true },
   moments: { id: "moments", label: "\u670B\u53CB\u5708", tone: "var(--c-icon-lilac)", placeholder: false },
   group_chat: { id: "group_chat", label: "\u7FA4\u804A", tone: "var(--c-icon-teal)", placeholder: false },
+  ensemble: { id: "ensemble", label: "\u7FA4\u50CF", tone: "var(--c-icon-cocreate, #C0AE8E)", placeholder: false },
   realitybridge: { id: "realitybridge", label: "iOS现实桥", tone: "var(--c-icon-teal)", placeholder: false },
   settings: { id: "settings", label: "设置", tone: "var(--c-icon-slate)", placeholder: false },
   theme: { id: "theme", label: "\u4E3B\u9898", tone: "var(--c-icon-violet)", placeholder: true },
