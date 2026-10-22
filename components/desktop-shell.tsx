@@ -917,99 +917,77 @@ function getKeyboardTargetRect(element: HTMLElement): KeyboardTargetRect {
   };
 }
 
+/**
+ * 【替换原 useAndroidCaretKeyboardLift】
+ * 原方案：键盘弹出后把整块壳子 translate3d 上移，让输入框落在键盘上方。
+ *   副作用：聊天室/剧情室输入栏贴底，上移量约等于键盘高度，顶栏被一起推出屏幕。
+ * 新方案：不改 transform，改写 --kb-inset（键盘占用高度），壳子高度从底部收缩：
+ *   .phone-shell 高度 = 100lvh - var(--kb-inset)（见 phone-shell.css）。
+ *   顶栏固定在原位，底栏自然落在键盘上沿。
+ */
 function useAndroidCaretKeyboardLift() {
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
     const root = document.documentElement;
+    const applyInset = (px: number) => {
+      const rounded = Math.max(0, Math.round(px));
+      if (rounded > 0) {
+        root.style.setProperty("--kb-inset", `${rounded}px`);
+      } else {
+        root.style.removeProperty("--kb-inset");
+      }
+    };
+
     if (!/Android/i.test(navigator.userAgent)) {
-      root.style.removeProperty("--mobile-keyboard-lift");
+      applyInset(0);
       return;
     }
 
     const mobileMq = window.matchMedia("(max-width: 500px) and (hover: none) and (pointer: coarse)");
     const viewport = window.visualViewport;
-    let focusedElement: HTMLElement | null = null;
-    let raf = 0;
-    let currentLift = 0;
-
-    const applyLift = (nextLift: number) => {
-      const rounded = Math.max(0, Math.round(nextLift));
-      if (Math.abs(rounded - currentLift) < 2) return;
-      currentLift = rounded;
-      if (rounded > 0) {
-        root.style.setProperty("--mobile-keyboard-lift", `${rounded}px`);
-      } else {
-        root.style.removeProperty("--mobile-keyboard-lift");
-      }
-    };
+    let focused = false;
 
     const update = () => {
-      raf = 0;
-      const element = focusedElement;
-      if (!element || document.activeElement !== element || !mobileMq.matches || !viewport) {
-        applyLift(0);
+      if (!viewport || !mobileMq.matches || !focused) {
+        applyInset(0);
         return;
       }
-
-      const keyboardTop = viewport.offsetTop + viewport.height;
-      const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      const targetRect = getKeyboardTargetRect(element);
-      const gap = 36;
-
-      if (keyboardInset < 80) {
-        applyLift(0);
-        return;
-      }
-
-      const naturalBottom = targetRect.bottom + currentLift;
-      const neededLift = Math.max(0, naturalBottom + gap - keyboardTop);
-      applyLift(Math.min(keyboardInset, neededLift));
-    };
-
-    const requestUpdate = () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      raf = window.requestAnimationFrame(update);
+      // 键盘占用高度 = 布局视口高 - 可视视口高（含 offsetTop 修正）
+      const inset = window.innerHeight - viewport.height - viewport.offsetTop;
+      // 小于 80 视为非键盘场景（如浏览器工具栏收起），避免误收缩
+      applyInset(inset < 80 ? 0 : inset);
     };
 
     const handleFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!isKeyboardEditableElement(target)) return;
-      focusedElement = target;
-      requestUpdate();
+      focused = true;
+      // 键盘弹出动画期间 visualViewport 不给中间值，动画结束后补算一次
+      window.setTimeout(update, 650);
+      update();
     };
 
     const handleFocusOut = () => {
-      focusedElement = null;
-      applyLift(0);
-    };
-
-    const handleCaretMove = () => {
-      if (focusedElement) requestUpdate();
+      focused = false;
+      applyInset(0);
     };
 
     const handleViewportChange = () => {
-      if (focusedElement) requestUpdate();
+      if (focused) update();
     };
 
     document.addEventListener("focusin", handleFocusIn);
     document.addEventListener("focusout", handleFocusOut);
-    document.addEventListener("click", handleCaretMove, true);
-    document.addEventListener("keyup", handleCaretMove, true);
-    document.addEventListener("input", handleCaretMove, true);
     viewport?.addEventListener("resize", handleViewportChange);
     viewport?.addEventListener("scroll", handleViewportChange);
 
     return () => {
-      if (raf) window.cancelAnimationFrame(raf);
       document.removeEventListener("focusin", handleFocusIn);
       document.removeEventListener("focusout", handleFocusOut);
-      document.removeEventListener("click", handleCaretMove, true);
-      document.removeEventListener("keyup", handleCaretMove, true);
-      document.removeEventListener("input", handleCaretMove, true);
       viewport?.removeEventListener("resize", handleViewportChange);
       viewport?.removeEventListener("scroll", handleViewportChange);
-      root.style.removeProperty("--mobile-keyboard-lift");
+      applyInset(0);
     };
   }, []);
 }

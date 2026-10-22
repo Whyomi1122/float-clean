@@ -1085,7 +1085,10 @@
 
   :root {
     --phone-screen-width: 100vw;
-    --phone-screen-height: 100lvh;
+    /* 键盘弹出时从底部收缩：--kb-inset 由 desktop-shell 的 useKeyboardInset 写入。
+       壳子顶部固定不动（顶栏保持原位），底栏随高度收缩落在键盘上沿。
+       之前作者的方案是整块壳子 translate3d 上移，副作用是顶栏被一起推出屏幕。 */
+    --phone-screen-height: calc(100lvh - var(--kb-inset, 0px));
   }
 
   html,
@@ -1124,9 +1127,8 @@
        .app-root 被裁掉，底部栏随之顶回可视区。上移量可在「状态栏」弹窗里按设备调节，
        让它约等于真实状态栏高度即可铺满。0 = 不上移（iOS 等能全屏的浏览器保持 0）。 */
     margin-top: calc(-1 * var(--status-bar-drop, 0px));
-    transform: translate3d(0, calc(-1 * var(--mobile-keyboard-lift, 0px)), 0);
-    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform;
+    /* 【已替换】整块壳子上移（--mobile-keyboard-lift）改为高度收缩方案：
+       见 :root 的 --phone-screen-height = 100lvh - var(--kb-inset)。 */
   }
 
   .phone-shell-wrap .phone-case {
