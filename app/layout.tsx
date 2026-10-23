@@ -5,6 +5,7 @@ import { ChatPluginBootstrap } from "@/components/chat-plugin-bootstrap";
 import { ChatReasoningVisibilityController } from "@/components/chat-reasoning-visibility-controller";
 import { CSSImportEnhancer } from "@/components/css-import-enhancer";
 import { ModalFocusScroll } from "@/components/modal-focus-scroll";
+import { BuildInfoPopup } from "@/components/build-info-popup";
 import { PWAManifestInjector } from "@/components/pwa-manifest-injector";
 import { PWARegistrar } from "@/components/pwa-registrar";
 import "../styles/fonts.css";
@@ -47,6 +48,7 @@ export default function RootLayout({
         <ChatPluginBootstrap />
         <ChatReasoningVisibilityController />
         <ModalFocusScroll />
+        <BuildInfoPopup />
         {children}
       </body>
     </html>

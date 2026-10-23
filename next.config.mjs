@@ -24,6 +24,10 @@ const nextConfig = {
   typedRoutes: true,
   outputFileTracingRoot: projectRoot,
   distDir: resolveDistDir(),
+  // 构建标识：Vercel 构建时自动注入真实 commit 短 hash，本地构建为空串（由 lib/build-info.ts 兜底）
+  env: {
+    NEXT_PUBLIC_BUILD_COMMIT: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7),
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
