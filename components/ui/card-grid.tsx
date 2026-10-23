@@ -25,13 +25,10 @@ export function CardGrid({
   items,
   label,
   labelClassName,
-  noIcons,
 }: {
   items: CardItem[];
   label?: string;
   labelClassName?: string;
-  /** A 方案：不渲染图标（设置页精简风格，纯文字 + 副标题 + 箭头） */
-  noIcons?: boolean;
 }) {
   return (
     <div>
@@ -46,14 +43,12 @@ export function CardGrid({
               type="button"
               onClick={item.onClick}
             >
-              {!noIcons && (
-                <span
-                  className={`card-icon${item.glassIcon ? " card-icon-glass" : ""}`}
-                  style={item.glassIcon ? undefined : cardIconStyle(item.iconColor)}
-                >
-                  {item.glassIcon ? <GlassIcon name={item.glassIcon} /> : <Icon size={22} strokeWidth={1.75} />}
-                </span>
-              )}
+              <span
+                className={`card-icon${item.glassIcon ? " card-icon-glass" : ""}`}
+                style={item.glassIcon ? undefined : cardIconStyle(item.iconColor)}
+              >
+                {item.glassIcon ? <GlassIcon name={item.glassIcon} /> : <Icon size={22} strokeWidth={1.75} />}
+              </span>
               <span className="card-card-body">
                 <span className="card-label">{item.label}</span>
                 {item.desc && <span className="card-desc">{item.desc}</span>}
@@ -70,7 +65,7 @@ export function CardGrid({
 /* ── Full-width featured card ── */
 export type FeaturedCardItem = CardItem & { desc: string };
 
-export function FeaturedCard({ item }: { item: FeaturedCardItem & { noIcons?: boolean } }) {
+export function FeaturedCard({ item }: { item: FeaturedCardItem }) {
   const Icon = item.icon;
   return (
     <button
@@ -78,14 +73,12 @@ export function FeaturedCard({ item }: { item: FeaturedCardItem & { noIcons?: bo
       type="button"
       onClick={item.onClick}
     >
-      {!item.noIcons && (
-        <span
-          className={`card-icon${item.glassIcon ? " card-icon-glass" : ""}`}
-          style={item.glassIcon ? undefined : cardIconStyle(item.iconColor)}
-        >
-          {item.glassIcon ? <GlassIcon name={item.glassIcon} /> : <Icon size={22} strokeWidth={1.75} />}
-        </span>
-      )}
+      <span
+        className={`card-icon${item.glassIcon ? " card-icon-glass" : ""}`}
+        style={item.glassIcon ? undefined : cardIconStyle(item.iconColor)}
+      >
+        {item.glassIcon ? <GlassIcon name={item.glassIcon} /> : <Icon size={22} strokeWidth={1.75} />}
+      </span>
       <div className="card-featured-body">
         <div className="card-featured-label">{item.label}</div>
         <div className="card-featured-desc">{item.desc}</div>

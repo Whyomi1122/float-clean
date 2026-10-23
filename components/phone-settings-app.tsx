@@ -397,38 +397,35 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                         <CardGrid
                             label="API Config"
                             labelClassName="settings-menu-section-title"
-                            noIcons
                             items={SETTINGS_MENU.filter(item => ["api", "voice"].includes(item.id)).map(makeCardItem)}
                         />
                         <div className="settings-data-rules-section">
                             <h3 className="settings-menu-section-title">Data & Rules</h3>
                             <div className="mt-[10px] flex flex-col gap-3">
                                 <CardGrid
-                                    noIcons
                                     items={SETTINGS_MENU.filter(item => ["presets", "worldbook", "regex", "data"].includes(item.id)).map(makeCardItem)}
                                 />
-                                <FeaturedCard item={{ ...bindingFeaturedItem, noIcons: true }} />
+                                <FeaturedCard item={bindingFeaturedItem} />
                             </div>
                         </div>
                         <div className="settings-image-generation-section">
                             <h3 className="settings-menu-section-title">Image Generation</h3>
                             <div className="mt-[10px]">
-                                <FeaturedCard item={{ ...imageGenerationFeaturedItem, noIcons: true }} />
+                                <FeaturedCard item={imageGenerationFeaturedItem} />
                             </div>
                         </div>
                         <div>
                             <h3 className="settings-menu-section-title">Connections</h3>
                             <div className="mt-[10px]">
-                                <FeaturedCard item={{ ...cloudFeaturedItem, noIcons: true }} />
+                                <FeaturedCard item={cloudFeaturedItem} />
                             </div>
                             <div className="mt-[10px]">
                                 <CardGrid
-                                    noIcons
                                     items={SETTINGS_MENU.filter(item => ["weixin", "toolbox"].includes(item.id)).map(makeCardItem)}
                                 />
                             </div>
                             <div className="mt-[10px]">
-                                <FeaturedCard item={{ ...agentComputerFeaturedItem, noIcons: true }} />
+                                <FeaturedCard item={agentComputerFeaturedItem} />
                             </div>
                         </div>
                         <div className="settings-realtime-section">
@@ -518,7 +515,6 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                         <CardGrid
                             label="User"
                             labelClassName="settings-menu-section-title"
-                            noIcons
                             items={SETTINGS_MENU.filter(item => ["identity", "about"].includes(item.id)).map(makeCardItem)}
                         />
                         {floatingDockSheetOpen && (
