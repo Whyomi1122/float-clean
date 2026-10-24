@@ -5770,3 +5770,295 @@
   gap: 6px;
   padding: 0 10px 8px;
 }
+
+/* ====== 聊天室设置 A 方案（自旧项目 25426b6 迁入）====== */
+/* ── Chat settings: Preferences 白卡分区 + 行内折叠 ── */
+.chat-prefs-page-title {
+  display: block;
+  font-size: calc(17px * var(--app-text-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--c-text);
+  line-height: 1.2;
+}
+.chat-prefs-page-title-main {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, "Songti SC", serif;
+  font-style: italic;
+  font-size: calc(22px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text);
+  letter-spacing: 0.01em;
+}
+.chat-prefs-page-title-sub {
+  margin-top: 2px;
+  font-size: calc(10px * var(--app-text-scale, 1));
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--c-text) 42%, transparent);
+}
+
+.chat-prefs-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-prefs-card {
+  background: var(--c-card);
+  border-radius: 18px;
+  padding: 14px 16px 6px;
+}
+
+.chat-prefs-section-label {
+  margin: 0;
+  padding: 2px 2px 8px;
+  font-size: calc(10px * var(--app-text-scale, 1));
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--c-text) 38%, transparent);
+}
+.chat-prefs-section-label.is-danger {
+  color: color-mix(in srgb, var(--c-danger) 70%, var(--c-text));
+}
+
+.chat-prefs-card .menu-item {
+  padding-left: 2px;
+  padding-right: 2px;
+  min-height: 64px;
+}
+.chat-prefs-card .menu-item + .menu-item {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+
+.chat-prefs-fold + .chat-prefs-fold,
+.chat-prefs-card .menu-item + .chat-prefs-fold,
+.chat-prefs-fold + .menu-item {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+
+.chat-prefs-fold-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-prefs-fold-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chat-prefs-fold-title {
+  font-size: calc(15px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text);
+  line-height: 1.25;
+}
+
+.chat-prefs-fold-sub {
+  font-size: calc(12px * var(--app-text-scale, 1));
+  font-style: italic;
+  color: var(--c-text-secondary, color-mix(in srgb, var(--c-text) 55%, transparent));
+  line-height: 1.35;
+}
+
+.chat-prefs-fold-chevron {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--c-text) 32%, transparent);
+  transition: transform 0.22s ease;
+}
+
+.chat-prefs-fold.is-open .chat-prefs-fold-chevron {
+  transform: rotate(90deg);
+}
+
+.chat-prefs-fold-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 2px 8px;
+  animation: chatPrefsFoldIn 0.18s ease;
+}
+.chat-prefs-fold-body .menu-item {
+  min-height: 46px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.chat-prefs-fold-body .menu-item + .menu-item {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 40%, transparent);
+}
+
+@keyframes chatPrefsFoldIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-prefs-danger-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 10px;
+}
+.chat-prefs-danger-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 2px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-prefs-danger-row + .chat-prefs-danger-row {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+/* 危险区回归普通设置行结构，仅标题为浅红 */
+.chat-prefs-danger-list .menu-item {
+  min-height: 58px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.chat-prefs-danger-list .menu-item .menu-label.is-danger {
+  color: color-mix(in srgb, #ef4444 78%, var(--c-text));
+}
+.chat-prefs-danger-row .menu-label-group {
+  flex: 1;
+  min-width: 0;
+}
+.chat-prefs-danger-row .menu-right {
+  color: color-mix(in srgb, var(--c-text) 26%, transparent);
+  display: flex;
+  align-items: center;
+}
+.chat-prefs-danger-row:active {
+  opacity: 0.6;
+}
+
+/* 本页开关（仅聊天页设置）——已随全局改为浅蓝 */
+
+/* 聊天背景与通话弹窗 */
+.chat-bg-modal {
+  width: min(92%, 380px);
+  max-height: 76%;
+  overflow-y: auto;
+  background: var(--c-card);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
+  animation: modalSoftRise 0.24s ease;
+}
+.chat-bg-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 10px;
+}
+.chat-bg-modal-title {
+  font-size: calc(15px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text-title, var(--c-text));
+}
+.chat-bg-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-bg-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c-text) 4%, transparent);
+}
+.chat-bg-picker-preview {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+.chat-bg-picker-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.chat-bg-picker-empty {
+  font-size: calc(11px * var(--app-text-scale, 1));
+  color: color-mix(in srgb, var(--c-text) 38%, transparent);
+}
+.chat-bg-picker-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-bg-picker-label {
+  font-size: calc(14px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text-title, var(--c-text));
+}
+.chat-bg-picker-actions {
+  display: flex;
+  gap: 8px;
+}
+.chat-bg-picker-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-text) 18%, transparent);
+  background: transparent;
+  color: var(--c-text);
+  font-size: calc(12px * var(--app-text-scale, 1));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.chat-bg-picker-btn.is-ghost {
+  border-color: transparent;
+  color: color-mix(in srgb, var(--c-text) 55%, transparent);
+}
+.chat-bg-picker-btn.is-primary {
+  border-color: transparent;
+  background: #BDD4E3;
+  color: color-mix(in srgb, var(--c-text) 82%, #000);
+  font-weight: 600;
+}
+
+/* 界面美化 (CSS) 弹窗 */
+.chat-css-modal {
+  width: min(92%, 400px);
+  height: min(72%, 520px);
+  display: flex;
+  flex-direction: column;
+  background: var(--c-card);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
+  animation: modalSoftRise 0.24s ease;
+}
+
+/* 归档弹窗按钮：浅蓝已内联在组件中 */
+
+/* 数字调节器：收窄 + 大圆角 */
+.chat-prefs-card .chat-count-stepper input,
+.chat-prefs-card .chat-prefs-stepper input,
+.chat-prefs-card .menu-right > input[type="number"] {
+  width: 48px;
+  height: 32px;
+  border-radius: 10px;
+  text-align: center;
+}
