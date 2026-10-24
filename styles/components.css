@@ -6063,8 +6063,8 @@
   text-align: center;
 }
 
-/* ---- profile settings sliders (migrated) ---- */
 
+/* profile settings sliders (migrated) */
 .profile-settings-menu .profile-slider-item {
   align-items: center;
   flex-direction: row;
@@ -6102,7 +6102,7 @@
   touch-action: none;
 }
 
-/* 展开后的滑杆必须整块可拖：pad 一下轨道上下区域，两端也能拖到极�?*/
+/* 展开后的滑杆必须整块可拖：pad 一下轨道上下区域，两端也能拖到极值 */
 .profile-settings-slider::-moz-range-track {
   height: 3px;
 }
@@ -6112,7 +6112,7 @@
   background: var(--ui-slider-thumb);
 }
 
-/* 仅在朋友�?追发这类设置页里，点轨道任意位置即刻跳值，避免拖到一半松�?*/
+/* 仅在朋友圈/追发这类设置页里，点轨道任意位置即刻跳值，避免拖到一半松手 */
 .profile-settings-menu .profile-settings-slider {
   flex-basis: 0;
 }
@@ -6156,3 +6156,42 @@
 /* ── 设置页分块卡片：标题在块内，行间细线 ── */
 .prefs-block {
   display: flex;
+  flex-direction: column;
+  background: var(--c-card);
+  border-radius: 18px;
+  padding: 6px 16px 6px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.025);
+}
+
+.prefs-block-label {
+  padding: 12px 0 6px;
+  font-size: calc(10.8px*var(--app-text-scale,1));
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  opacity: 0.5;
+}
+
+.prefs-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  padding: 15px 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.prefs-row + .prefs-row {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+
+.prefs-block-label + .prefs-row {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
