@@ -1,13 +1,144 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import CSSSchemeBar from "@/components/ui/css-scheme-picker";
+
+/**
+ * 通用滚动位置记忆：挂在 PageShell 的 .page-body 下，
+ * 离开（被其它子页面替换）时保存 scrollTop，重新挂载时恢复。
+ */
+export function SettingsScrollRestore({ storageKey }: { storageKey: string }) {
+    const anchorRef = useRef<HTMLSpanElement | null>(null);
+    useEffect(() => {
+        let host: HTMLElement | null = null;
+        let raf = 0;
+        let tries = 0;
+        let restoring = false;
+        let onScroll: (() => void) | null = null;
+        const debug: string[] = [];
+        const attach = () => {
+            const body = anchorRef.current?.closest(".page-body") as HTMLElement | null;
+            if (!body) {
+                if (tries++ < 30) raf = requestAnimationFrame(attach);
+                return;
+            }
+            host = body;
+            const saved = Number(sessionStorage.getItem(storageKey) || "0");
+            debug.push(`key=${storageKey} saved=${saved} h=${body.scrollHeight} v=${body.clientHeight}`);
+            if (saved > 0) {
+                restoring = true;
+                let stableFrames = 0;
+                const restore = () => {
+                    if (!host || !restoring) return;
+                    if (host.scrollHeight > host.clientHeight + 2) {
+                        // 只在位置不对时才写，避免每次 rAF 都触发新的 scroll 事件
+                        if (Math.abs(host.scrollTop - saved) >= 2) host.scrollTop = saved;
+                        if (Math.abs(host.scrollTop - saved) < 2) {
+                            stableFrames += 1;
+                            if (stableFrames >= 2) {
+                                restoring = false;
+                                debug.push(`restore OK top=${host.scrollTop}`);
+                                window.__scrollDebug = debug.join("\n");
+                                return;
+                            }
+                        } else {
+                            stableFrames = 0;
+                        }
+                    }
+                    raf = requestAnimationFrame(restore);
+                };
+                raf = requestAnimationFrame(restore);
+            } else {
+                window.__scrollDebug = debug.join("\n");
+            }
+            // 恢复期间绝不写入，否则会把刚要恢复的值写成 0
+            onScroll = () => {
+                if (restoring || !host) return;
+                const top = host.scrollTop;
+                sessionStorage.setItem(storageKey, String(top));
+                debug.push(`scroll top=${top}`);
+                window.__scrollDebug = debug.slice(-12).join("\n");
+            };
+            host.addEventListener("scroll", onScroll, { passive: true });
+        };
+        attach();
+        return () => {
+            cancelAnimationFrame(raf);
+            if (host && onScroll) {
+                // 卸载时 body 可能已经被移出文档，scrollTop 会读成 0 —— 绝不能写回
+                const top = host.isConnected ? host.scrollTop : Number(sessionStorage.getItem(storageKey) || "0");
+                if (top > 0) sessionStorage.setItem(storageKey, String(top));
+                host.removeEventListener("scroll", onScroll);
+            }
+        };
+    }, [storageKey]);
+    return <span ref={anchorRef} aria-hidden style={{ display: "none" }} />;
+}
+
+/** 打开子页面前主动记下当前滚动位置，不依赖组件卸载时机 */
+export function rememberSettingsScroll() {
+    const body = document.querySelector<HTMLElement>(".user-profile-page-root > .page-body");
+    if (!body) return;
+    sessionStorage.setItem("chat_settings_scroll_top", String(body.scrollTop));
+}
+
+declare global {
+    interface Window { __scrollDebug?: string }
+}
+
+/** 临时诊断弹窗：手机浏览器没有控制台时，把滚动容器状态抄回来 */
+export function ScrollDebugPanel() {
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState("");
+    const refresh = () => {
+        const list = [...document.querySelectorAll<HTMLElement>(".page-body")].map(el => {
+            const cs = getComputedStyle(el);
+            return `cls=${el.className.slice(0, 30)} top=${el.scrollTop} h=${el.scrollHeight} v=${el.clientHeight} of=${cs.overflowY} pos=${cs.position}`;
+        });
+        const s = sessionStorage.getItem("chat_settings_scroll_top") || "none";
+        const m = sessionStorage.getItem("moments_settings_scroll_top") || "none";
+        setText([`chat=${s} moments=${m}`, ...list, "---", window.__scrollDebug || "no debug"].join("\n"));
+    };
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => { refresh(); setOpen(true); }}
+                className="fixed bottom-24 left-2 z-[400] rounded-full bg-black/60 px-3 py-1 ts-11 text-white"
+            >
+                滚动诊断
+            </button>
+            {open && (
+                <div className="fixed inset-0 z-[401] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
+                    <div className="w-full max-w-md rounded-2xl bg-white p-4" onClick={e => e.stopPropagation()}>
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="ts-13 font-semibold text-[#22303a]">滚动容器诊断</span>
+                            <button className="ts-12 text-[#22303a] underline" onClick={refresh}>刷新</button>
+                        </div>
+                        <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-all text-[10px] leading-[1.5] text-[#33424d]">{text}</pre>
+                        <button
+                            className="mt-3 w-full rounded-lg bg-[#BDD4E3] py-2 ts-13 text-[#2b3a44]"
+                            onClick={() => { void navigator.clipboard?.writeText(text); }}
+                        >
+                            复制
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
+
 import {
     loadFollowUpConfig,
     saveFollowUpConfig,
     getDefaultFollowUpConfig,
     resolveUserIdentity,
+    saveUserIdentities,
+    loadUserIdentities,
+    USER_IDENTITIES_UPDATED_EVENT,
 } from "@/lib/settings-storage";
+import { fileToUserAvatarDataUrl } from "@/lib/user-avatar-image";
 import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { getApiLogs, clearApiLogs, type DebugInfo } from "@/lib/chat-engine";
@@ -38,6 +169,7 @@ import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
     Loader2,
     Bell,
+    Camera,
     CloudUpload,
     ChevronRight,
     Clock,
@@ -83,10 +215,7 @@ function ProfileSettingsIcon({ icon: Icon, color }: { icon: LucideIcon; color: s
 }
 
 function ProfileSettingsSliderItem({
-    icon,
-    color,
     label,
-    desc,
     value,
     valueLabel,
     min,
@@ -94,10 +223,7 @@ function ProfileSettingsSliderItem({
     step,
     onChange,
 }: {
-    icon: LucideIcon;
-    color: string;
     label: string;
-    desc?: string;
     value: number;
     valueLabel: string;
     min: number;
@@ -105,25 +231,48 @@ function ProfileSettingsSliderItem({
     step: number;
     onChange: (value: number) => void;
 }) {
-    return (
-        <div className="menu-item profile-slider-item">
-            <div className="profile-slider-header">
-                <ProfileSettingsIcon icon={icon} color={color} />
-                <div className="menu-label-group">
-                    <span className="menu-label">{label}</span>
-                    {desc && <span className="menu-desc">{desc}</span>}
-                </div>
+    // 收起态只显示一条细轨；点击后才展开为可拖动的滑杆，避免滚动页面时误触
+    const [active, setActive] = useState(false);
+    const pct = Math.max(0, Math.min(100, Math.round(((value - min) / Math.max(1, max - min)) * 100)));
+    if (!active) {
+        return (
+            <div className="menu-item profile-slider-item">
+                <span className="profile-slider-label">{label}</span>
+                <button
+                    type="button"
+                    className="profile-slider-mini"
+                    aria-label={`${label}：${valueLabel}`}
+                    onClick={() => setActive(true)}
+                >
+                    <span className="profile-slider-mini-fill" style={{ width: `${pct}%` }} />
+                </button>
                 <span className="profile-slider-current">{valueLabel}</span>
             </div>
+        );
+    }
+    return (
+        <div className="menu-item profile-slider-item is-active">
+            <span className="profile-slider-label">{label}</span>
             <input
                 type="range"
                 min={min}
                 max={max}
                 step={step}
                 value={value}
+                autoFocus
                 onChange={event => onChange(Number(event.target.value))}
+                onBlur={() => setActive(false)}
+                onPointerUp={event => {
+                    // 松手时把当前值写到底层，保证拖到极值也能生效
+                    const el = event.currentTarget;
+                    const next = Number(el.value);
+                    if (next !== value) onChange(next);
+                    // 手指离开后保持展开，点别处才收起，避免拖到一半被收掉
+                    if (document.activeElement !== el) setActive(false);
+                }}
                 className="ui-slider profile-settings-slider"
             />
+            <span className="profile-slider-current">{valueLabel}</span>
         </div>
     );
 }
@@ -161,8 +310,34 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const [notifHint, setNotifHint] = useState<string | null>(null);
     const [notifChecking, setNotifChecking] = useState(false);
     const [showPushSettings, setShowPushSettings] = useState(false);
+    const profileAvatarInputRef = useRef<HTMLInputElement>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
     const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
+
+    useEffect(() => {
+        const syncIdentity = () => setIdentity(resolveUserIdentity());
+        window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, syncIdentity);
+        return () => window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, syncIdentity);
+    }, []);
+
+    const handleProfileAvatarChange = async (file?: File) => {
+        if (!file) return;
+        const currentIdentity = resolveUserIdentity();
+        if (!currentIdentity) {
+            window.alert("请先在设置的“用户信息”中创建用户身份");
+            return;
+        }
+        try {
+            const avatarUrl = await fileToUserAvatarDataUrl(file);
+            const identities = loadUserIdentities();
+            saveUserIdentities(identities.map(item => (
+                item.id === currentIdentity.id ? { ...item, avatarUrl } : item
+            )));
+        } catch (error) {
+            console.error("更新用户资料头像失败", error);
+            window.alert("头像读取失败，请换一张图片后重试");
+        }
+    };
     const [userStats, setUserStats] = useState({ chats: 0, moments: 0, visitors: 1234 });
     const [walletSummary, setWalletSummary] = useState(() => {
         const wallet = loadWalletState();
@@ -314,26 +489,48 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                     bottom: 0;
                     padding-top: 0 !important;
                     background: transparent !important;
+                    overflow-y: auto !important;
+                    -webkit-overflow-scrolling: touch;
                 }
                 .user-profile-page-root .page-title {
                     display: none;
                 }
             `}</style>
             <PageShell title="" onBack={onClose} className={`user-profile-page-root ${className || ""}`}>
+                <SettingsScrollRestore storageKey="chat_settings_scroll_top" />
+                <ScrollDebugPanel />
                 <div className="relative z-[1] w-full max-w-2xl mx-auto flex flex-col pb-8">
                     
                     {/* User Info & Stats Block */}
                     <div className="flex items-center gap-5 px-6 pt-2 pb-4">
                         {/* Avatar */}
                         <div className="relative shrink-0">
-                            <div className="w-[84px] h-[84px] rounded-full overflow-hidden bg-[var(--c-card)] border-2 border-white/50 shadow-sm flex items-center justify-center relative"
-                                 style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
+                            <input
+                                ref={profileAvatarInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => {
+                                    void handleProfileAvatarChange(event.target.files?.[0]);
+                                    event.target.value = "";
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => profileAvatarInputRef.current?.click()}
+                                className="relative w-[84px] h-[84px] rounded-full overflow-hidden bg-[var(--c-card)] border-2 border-white/50 shadow-sm flex items-center justify-center group"
+                                style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
+                                aria-label="更换头像"
+                            >
                                 {identity?.avatarUrl ? (
                                     <img src={identity.avatarUrl} alt="User Avatar" className="w-full h-full object-cover" />
                                 ) : (
                                     <User size={38} color="var(--c-icon)" />
                                 )}
-                            </div>
+                                <span className="absolute bottom-0 left-0 right-0 h-6 bg-black/45 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Camera size={13} />
+                                </span>
+                            </button>
                         </div>
 
                         {/* Info & Stats */}
@@ -382,73 +579,38 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         </div>
                     </button>
 
-                    {/* Quick Features Row */}
-                    <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl flex items-center justify-between p-4 px-6"
-                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex flex-col items-center gap-2 flex-1" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowMomentsSettings(true); }}>
-                            <div className="w-[42px] h-[42px] rounded-[14px] bg-[color-mix(in_srgb,var(--c-warning)_15%,transparent)] text-[var(--c-warning)] flex items-center justify-center">
-                                <Radio size={22} strokeWidth={2} />
-                            </div>
-                            <span className="ts-12 font-semibold text-[var(--c-text-title)]">朋友圈互动</span>
-                        </button>
-                        <button className="flex flex-col items-center gap-2 flex-1" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowStickerManager(true); }}>
-                            <div className="w-[42px] h-[42px] rounded-[14px] bg-[#10b981]/15 text-[#10b981] flex items-center justify-center">
-                                <Sticker size={22} strokeWidth={2} />
-                            </div>
-                            <span className="ts-12 font-semibold text-[var(--c-text-title)]">表情包仓储</span>
-                        </button>
-                        <button className="flex flex-col items-center gap-2 flex-1" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowCSSEditor(true); }}>
-                            <div className="w-[42px] h-[42px] rounded-[14px] bg-[color-mix(in_srgb,var(--c-danger)_15%,transparent)] text-[var(--c-danger)] flex items-center justify-center">
-                                <Palette size={22} strokeWidth={2} />
-                            </div>
-                            <span className="ts-12 font-semibold text-[var(--c-text-title)]">外观CSS</span>
-                        </button>
-                    </div>
-
-                    {/* 主动消息 */}
-                    <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
-                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
-                            <Send size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                    {/* 聊天偏好 */}
+                    <div className="prefs-block mx-4">
+                        <span className="prefs-block-label">聊天偏好</span>
+                        <button className="prefs-row text-left" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowStickerManager(true); }}>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">设定角色的主动回复频率与时间间隔</span>
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">表情包仓储</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">管理聊天里可用的表情包</span>
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
-                            <Satellite size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                        <button className="prefs-row text-left" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowCSSEditor(true); }}>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">离线推送与定时消息</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">关掉后台也能收到推送、安静时段、定时主动消息</span>
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">外观CSS</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">自定义聊天页面的整体样式</span>
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
-                    </div>
-
-                    {/* 输入与提醒 */}
-                    <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
-                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
-                            <Keyboard size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                        <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">回车发送</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">开启后 Enter 发送，Shift+Enter 换行</span>
                             </div>
                             <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} />
                         </div>
-
-                        <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
-                            <Vibrate size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                        <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">语音/视频来电振动</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">角色来电等待接听时手机振动（iOS 网页不支持振动）</span>
                             </div>
                             <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
                         </div>
-
-                        <div className="flex items-center gap-3 py-3 w-full">
-                            <Bell size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                        <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">浏览器后台通知</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">{notifHint || "允许网页在后台时弹出新消息横幅提醒"}</span>
@@ -457,20 +619,43 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         </div>
                     </div>
 
+                    {/* 行为与互动 */}
+                    <div className="prefs-block mx-4">
+                        <span className="prefs-block-label">行为与互动</span>
+                        <button className="prefs-row text-left" onClick={() => { rememberSettingsScroll(); window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowMomentsSettings(true); }}>
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">朋友圈互动</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">自动发帖、评论节奏、点赞概率与翻译</span>
+                            </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                        </button>
+                        <button className="prefs-row text-left" onClick={() => { rememberSettingsScroll(); window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">设定角色的主动回复频率与时间间隔</span>
+                            </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                        </button>
+                        <button className="prefs-row text-left" onClick={() => { rememberSettingsScroll(); window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">离线推送与定时消息</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">后台推送、安静时段、定时主动消息</span>
+                            </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                        </button>
+                    </div>
+
                     {/* 高级工具 */}
-                    <div className="mx-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
-                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPluginManager(true); }}>
-                            <Puzzle size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                    <div className="prefs-block mx-4">
+                        <span className="prefs-block-label">高级</span>
+                        <button className="prefs-row text-left" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPluginManager(true); }}>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">扩展插件</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">JS 插件拦截聊天管线、注入提示词、自由渲染界面</span>
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
-
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowApiLog(true); }}>
-                            <FileCode2 size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                        <button className="prefs-row text-left" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowApiLog(true); }}>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">底层调用大模型日志</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">查看网络通信中大模型的原始数据流</span>
@@ -552,13 +737,29 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
 
     return (
         <PageShell title="追发设置" onBack={onBack} className="absolute inset-0 z-[100]">
+            <SettingsScrollRestore storageKey="followup_settings_scroll_top" />
             <div className="page-menu profile-settings-menu">
                 <p className="menu-group-desc mx-2">
-                    延迟计算：焦虑值={config.anxietyThreshold} → {config.anxietyMaxDelay}秒，焦虑值=100 → {config.anxietyMinDelay}秒，中间线性插值。焦虑值&lt;{config.anxietyThreshold}时不追发。
+                    {config.enabled
+                        ? `焦虑值越高，角色追得越急；低于 ${config.anxietyThreshold} 时不追发。不回复时最多主动发 ${IDLE_RECONNECT_MAX_CONSECUTIVE} 次，你回复后重新计数。`
+                        : "主动发送已关闭：角色不会在你没说话的时候自己发消息。等角色记忆完善后再考虑打开。"}
                 </p>
                 <div className="menu-group">
                     <div className="menu-item">
-                        <ProfileSettingsIcon icon={SlidersHorizontal} color={BINDING_ACCENTS.preset} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">允许主动发送</span>
+                            <span className="menu-desc">关掉后角色永不主动发消息（推荐保持关闭）</span>
+                        </div>
+                        <div className="menu-right">
+                            <Toggle
+                                checked={config.enabled}
+                                onChange={v => updateConfig({ enabled: v })}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="menu-group">
+                    <div className="menu-item">
                         <div className="menu-label-group">
                             <span className="menu-label">状态值字段名</span>
                             <span className="menu-desc">用于读取角色状态中的焦虑值</span>
@@ -572,10 +773,7 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
                         </div>
                     </div>
                     <ProfileSettingsSliderItem
-                        icon={Heart}
-                        color={CONTENT_APP_ACCENTS.moments}
                         label="焦虑阈值"
-                        desc={`低于 ${config.anxietyThreshold} 时不触发追发`}
                         value={config.anxietyThreshold}
                         valueLabel={`${config.anxietyThreshold}%`}
                         min={0}
@@ -584,26 +782,20 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
                         onChange={v => updateConfig({ anxietyThreshold: v })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={Clock}
-                        color={CONTENT_APP_ACCENTS.calendar}
                         label="最短等待"
-                        desc="焦虑=100时使用"
                         value={config.anxietyMinDelay}
                         valueLabel={`${config.anxietyMinDelay}秒`}
-                        min={5}
+                        min={30}
                         max={300}
                         step={5}
                         onChange={v => updateConfig({ anxietyMinDelay: v })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={Clock}
-                        color={BINDING_ACCENTS.voice}
                         label="最长等待"
-                        desc="焦虑=阈值时使用"
                         value={config.anxietyMaxDelay}
                         valueLabel={`${config.anxietyMaxDelay}秒`}
-                        min={15}
-                        max={600}
+                        min={60}
+                        max={900}
                         step={15}
                         onChange={v => updateConfig({ anxietyMaxDelay: v })}
                     />
@@ -612,7 +804,6 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
                 {/* Reset button */}
                 <div className="menu-group">
                     <button className="menu-item" onClick={handleResetDefaults}>
-                        <ProfileSettingsIcon icon={RotateCcw} color={BINDING_ACCENTS.regex} />
                         <div className="menu-label-group"><span className="menu-label menu-label-danger">恢复默认</span></div>
                     </button>
                 </div>
@@ -904,67 +1095,53 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 
     return (
         <PageShell title="朋友圈互动设置" onBack={onBack} className="absolute inset-0 z-[100]">
+            <SettingsScrollRestore storageKey="moments_settings_scroll_top" />
             <div className="page-menu profile-settings-menu">
                 <div className="menu-group">
                     <ProfileSettingsSliderItem
-                        icon={Radio}
-                        color={CONTENT_APP_ACCENTS.moments}
                         label="最短发帖间隔"
-                        desc={`${config.postIntervalMinHours}-${config.postIntervalMaxHours} 小时范围`}
                         value={config.postIntervalMinHours}
                         valueLabel={`${config.postIntervalMinHours}小时`}
                         min={1}
-                        max={48}
+                        max={24}
                         step={1}
-                        onChange={v => update({ postIntervalMinHours: Math.min(v, config.postIntervalMaxHours) })}
+                        onChange={v => update({ postIntervalMinHours: v })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={Clock}
-                        color={BINDING_ACCENTS.voice}
                         label="最长发帖间隔"
-                        desc="自动发帖等待时间上限"
                         value={config.postIntervalMaxHours}
                         valueLabel={`${config.postIntervalMaxHours}小时`}
-                        min={1}
-                        max={72}
+                        min={3}
+                        max={48}
                         step={1}
-                        onChange={v => update({ postIntervalMaxHours: Math.max(v, config.postIntervalMinHours) })}
+                        onChange={v => update({ postIntervalMaxHours: v })}
                     />
                 </div>
 
                 <div className="menu-group">
                     <ProfileSettingsSliderItem
-                        icon={MessageSquare}
-                        color={CONTENT_APP_ACCENTS.chat}
                         label="首条评论延迟"
-                        desc="发布后第一条评论的等待时间"
                         value={config.firstCommentDelaySec}
                         valueLabel={`${config.firstCommentDelaySec}秒`}
-                        min={5}
-                        max={600}
-                        step={5}
+                        min={30}
+                        max={900}
+                        step={30}
                         onChange={v => update({ firstCommentDelaySec: v })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={MessageSquareDashed}
-                        color={CONTENT_APP_ACCENTS.group_chat}
                         label="后续评论间隔"
-                        desc="连续评论之间的等待时间"
                         value={config.commentGapSec}
                         valueLabel={`${config.commentGapSec}秒`}
-                        min={5}
-                        max={300}
-                        step={5}
+                        min={30}
+                        max={900}
+                        step={30}
                         onChange={v => update({ commentGapSec: v })}
                     />
                 </div>
 
                 <div className="menu-group">
                     <ProfileSettingsSliderItem
-                        icon={MessageSquare}
-                        color={BINDING_ACCENTS.api}
                         label="评论概率"
-                        desc="角色看到动态后发表评论的概率"
                         value={Math.round(config.commentProb * 100)}
                         valueLabel={`${Math.round(config.commentProb * 100)}%`}
                         min={0}
@@ -973,10 +1150,7 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
                         onChange={v => update({ commentProb: v / 100 })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={ThumbsUp}
-                        color={CONTENT_APP_ACCENTS.shopping}
                         label="点赞概率"
-                        desc="角色看到动态后点赞的概率"
                         value={Math.round(config.likeProb * 100)}
                         valueLabel={`${Math.round(config.likeProb * 100)}%`}
                         min={0}
@@ -988,37 +1162,30 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 
                 <div className="menu-group">
                     <ProfileSettingsSliderItem
-                        icon={Clock}
-                        color={CONTENT_APP_ACCENTS.calendar}
                         label="NPC互动延迟"
-                        desc="NPC 对朋友圈产生互动的延迟"
                         value={config.npcReactionDelayMin}
                         valueLabel={`${config.npcReactionDelayMin}分钟`}
                         min={1}
-                        max={60}
+                        max={120}
                         step={1}
                         onChange={v => update({ npcReactionDelayMin: v })}
                     />
                     <ProfileSettingsSliderItem
-                        icon={Bell}
-                        color={BINDING_ACCENTS.embedding}
                         label="角色回复NPC评论延迟"
-                        desc="角色回复 NPC 评论前的等待时间"
                         value={config.replyDelaySec}
                         valueLabel={`${config.replyDelaySec}秒`}
-                        min={1}
-                        max={30}
-                        step={1}
+                        min={5}
+                        max={600}
+                        step={5}
                         onChange={v => update({ replyDelaySec: v })}
                     />
                 </div>
 
                 <div className="menu-group">
                     <div className="menu-item">
-                        <ProfileSettingsIcon icon={MessageSquare} color={CONTENT_APP_ACCENTS.moments} />
                         <div className="menu-label-group">
                             <span className="menu-label">朋友圈双语翻译</span>
-                            <span className="menu-desc">外语帖子、评论和回复自动附中文译文</span>
+                            <span className="menu-desc">外语帖子、评论和回复自动附中文译文（译文直接展开）</span>
                         </div>
                         <div className="menu-right">
                             <Toggle
@@ -1029,21 +1196,7 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
                     </div>
                     {config.bilingualTranslationEnabled && (
                         <>
-                            <div className="menu-item">
-                                <ProfileSettingsIcon icon={MessageSquareDashed} color={BINDING_ACCENTS.voice} />
-                                <div className="menu-label-group">
-                                    <span className="menu-label">折叠中文译文</span>
-                                    <span className="menu-desc">关闭后默认直接展开中文</span>
-                                </div>
-                                <div className="menu-right">
-                                    <Toggle
-                                        checked={config.collapseBilingualTranslation}
-                                        onChange={checked => update({ collapseBilingualTranslation: checked })}
-                                    />
-                                </div>
-                            </div>
                             <button className="menu-item" onClick={openBilingualPromptEditor}>
-                                <ProfileSettingsIcon icon={FileCode2} color={BINDING_ACCENTS.api} />
                                 <div className="menu-label-group">
                                     <span className="menu-label">朋友圈双语提示词</span>
                                 </div>
@@ -1060,7 +1213,6 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 
                 <div className="menu-group">
                     <div className="menu-item" onClick={() => setShowAutoPostList(!showAutoPostList)} style={{ cursor: "pointer" }}>
-                        <ProfileSettingsIcon icon={Radio} color={CONTENT_APP_ACCENTS.moments} />
                         <div className="menu-label-group">
                             <span className="menu-label">自动发帖角色</span>
                             <span className="menu-desc">
@@ -1098,7 +1250,6 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 
                 <div className="menu-group">
                     <div className="menu-item" onClick={() => setShowCharPicker(!showCharPicker)} style={{ cursor: "pointer" }}>
-                        <ProfileSettingsIcon icon={Send} color={CONTENT_APP_ACCENTS.chat} />
                         <div className="menu-label-group">
                             <span className="menu-label">立即发帖</span>
                             <span className="menu-desc">{posting ? "发帖中..." : "选择角色立即发一条朋友圈"}</span>
@@ -1131,7 +1282,6 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 
                 <div className="menu-group">
                     <button className="menu-item" onClick={() => { setConfig(DEFAULT_MOMENTS_CONFIG); saveMomentsConfig(DEFAULT_MOMENTS_CONFIG); }}>
-                        <ProfileSettingsIcon icon={RotateCcw} color={BINDING_ACCENTS.regex} />
                         <div className="menu-label-group"><span className="menu-label menu-label-danger">恢复默认</span></div>
                     </button>
                 </div>
@@ -1353,119 +1503,113 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
     return (
       <>
         <PageShell title="离线推送" onBack={onBack} className="absolute inset-0 z-[100]">
+            <SettingsScrollRestore storageKey="push_settings_scroll_top" />
             <div className="page-menu profile-settings-menu">
-                {(
-                    <>
-                        <p className="menu-group-desc mx-2">运行位置</p>
-                        <div className="menu-group">
-                            <div className="menu-item" style={{ alignItems: "stretch", flexDirection: "column", gap: 10 }}>
-                                <div className="flex items-start gap-3">
-                                    <ProfileSettingsIcon icon={CloudUpload} color={BINDING_ACCENTS.api} />
-                                    <div className="menu-label-group">
-                                        <span className="menu-label">部署到我的 Supabase</span>
-                                        <span className="menu-desc">离线预约、生成和回传使用你自己的 Supabase</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${personalCloudActive ? "bg-green-500" : "bg-black/20"}`} />
-                                    <span className="menu-label flex-1">{personalCloudActive ? "已部署" : "未部署"}</span>
-                                    <button
-                                        type="button"
-                                        className="ui-btn ui-btn-outline shrink-0 whitespace-nowrap !gap-1.5 !px-3 !text-[12px]"
-                                        onClick={() => {
-                                            sessionStorage.setItem("mascot-settings-mode", "cloud");
-                                            window.dispatchEvent(new CustomEvent("mascot-navigate", { detail: { app: "settings", mode: "cloud" } }));
-                                        }}
-                                    >
-                                        <CloudUpload size={14} /> {personalCloudActive ? "重新部署" : "去部署"}
-                                    </button>
-                                </div>
-                                {personalCloudActive && (
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex-1 flex flex-col">
-                                            <span className="menu-label">云端任务</span>
-                                            <span className="menu-desc !mt-0">开着才会派发离线预约；关掉零配额消耗</span>
-                                        </div>
-                                        {pushScheduleBusy
-                                            ? <Loader2 size={18} className="animate-spin shrink-0" />
-                                            : (
-                                                <Toggle
-                                                    checked={pushCloudScheduled}
-                                                    onChange={v => void handleTogglePushCloudSchedule(v)}
-                                                />
-                                            )}
-                                    </div>
-                                )}
-                                {pushScheduleHint && (
-                                    <span className="menu-desc !mt-0">{pushScheduleHint}</span>
-                                )}
+                {/* 云端服务 */}
+                <div className="prefs-block">
+                    <span className="prefs-block-label">云端服务</span>
+                    <div className="prefs-row" style={{ alignItems: "stretch", flexDirection: "column", gap: 10, cursor: "default" }}>
+                        <div className="flex items-center gap-3">
+                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${personalCloudActive ? "bg-green-500" : "bg-black/20"}`} />
+                            <div className="menu-label-group flex-1">
+                                <span className="menu-label">部署到我的 Supabase</span>
+                                <span className="menu-desc">{personalCloudActive ? "已部署，离线预约使用你自己的 Supabase" : "未部署，离线预约走默认通道"}</span>
                             </div>
+                            <button
+                                type="button"
+                                className="ui-btn ui-btn-outline shrink-0 whitespace-nowrap !px-3 !text-[12px]"
+                                onClick={() => {
+                                    sessionStorage.setItem("mascot-settings-mode", "cloud");
+                                    window.dispatchEvent(new CustomEvent("mascot-navigate", { detail: { app: "settings", mode: "cloud" } }));
+                                }}
+                            >
+                                {personalCloudActive ? "重新部署" : "去部署"}
+                            </button>
                         </div>
-                        <p className="menu-group-desc mx-2">系统推送</p>
-                        <div className="menu-group">
-                            <div className="menu-item">
-                                <ProfileSettingsIcon icon={Satellite} color={BINDING_ACCENTS.api} />
-                                <div className="menu-label-group">
-                                    <span className="menu-label">离线推送</span>
-                                    <span className="menu-desc">关掉后台后仍由系统推送通知（本设备）</span>
+                        {personalCloudActive && (
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 flex flex-col">
+                                    <span className="menu-label">云端任务</span>
+                                    <span className="menu-desc !mt-0">开着才会派发离线预约；关掉零配额消耗</span>
                                 </div>
-                                <div className="menu-right flex items-center gap-2">
-                                    {(offlinePushState === "on" || isShellApp) && (
-                                        <button className="ui-btn ui-btn-outline py-1 px-2 ts-11" style={{ whiteSpace: "nowrap" }} onClick={() => void handleOfflinePushTest()} disabled={offlinePushBusy}>测试</button>
+                                {pushScheduleBusy
+                                    ? <Loader2 size={18} className="animate-spin shrink-0" />
+                                    : (
+                                        <Toggle
+                                            checked={pushCloudScheduled}
+                                            onChange={v => void handleTogglePushCloudSchedule(v)}
+                                        />
                                     )}
-                                    <Toggle
-                                        checked={offlinePushState === "on" || isShellApp}
-                                        disabled={offlinePushBusy || isShellApp || offlinePushState === "unsupported"}
-                                        onChange={enabled => void handleOfflinePushToggle(enabled)}
-                                    />
-                                </div>
                             </div>
-                            <div className="menu-item">
-                                <ProfileSettingsIcon icon={Moon} color={BINDING_ACCENTS.memory} />
-                                <div className="menu-label-group">
-                                    <span className="menu-label">安静时段</span>
-                                    <span className="menu-desc">时段内角色不主动推送，回复你的消息不受影响</span>
-                                </div>
-                                <Toggle
-                                    checked={quietEnabled}
-                                    onChange={enabled => { setQuietEnabled(enabled); persistQuietHours(enabled, quietStart, quietEnd); }}
-                                />
-                            </div>
-                            {quietEnabled && (
-                                <div className="menu-item">
-                                    <div className="menu-label-group">
-                                        <span className="menu-label">时段</span>
-                                    </div>
-                                    <div className="menu-right flex items-center gap-1">
-                                        <input
-                                            type="time"
-                                            className="border-none outline-none bg-transparent ts-13 text-[var(--c-text)]"
-                                            value={quietStart}
-                                            onChange={e => { setQuietStart(e.target.value); persistQuietHours(true, e.target.value, quietEnd); }}
-                                        />
-                                        <span className="ts-13 opacity-60">至</span>
-                                        <input
-                                            type="time"
-                                            className="border-none outline-none bg-transparent ts-13 text-[var(--c-text)]"
-                                            value={quietEnd}
-                                            onChange={e => { setQuietEnd(e.target.value); persistQuietHours(true, quietStart, e.target.value); }}
-                                        />
-                                    </div>
-                                </div>
-                            )}
+                        )}
+                        {pushScheduleHint && (
+                            <span className="menu-desc !mt-0">{pushScheduleHint}</span>
+                        )}
+                    </div>
+                </div>
+
+                {/* 系统推送 */}
+                <div className="prefs-block">
+                    <span className="prefs-block-label">系统推送</span>
+                    <div className="prefs-row">
+                        <div className="menu-label-group flex-1">
+                            <span className="menu-label">离线推送</span>
+                            <span className="menu-desc">关掉后台后仍由系统推送通知（本设备）</span>
                         </div>
-                        <p className="menu-group-desc mx-2">
+                        <div className="menu-right flex items-center gap-2">
+                            {(offlinePushState === "on" || isShellApp) && (
+                                <button className="ui-btn ui-btn-outline py-1 px-2 ts-11" style={{ whiteSpace: "nowrap" }} onClick={() => void handleOfflinePushTest()} disabled={offlinePushBusy}>测试</button>
+                            )}
+                            <Toggle
+                                checked={offlinePushState === "on" || isShellApp}
+                                disabled={offlinePushBusy || isShellApp || offlinePushState === "unsupported"}
+                                onChange={enabled => void handleOfflinePushToggle(enabled)}
+                            />
+                        </div>
+                    </div>
+                    <div className="prefs-row">
+                        <div className="menu-label-group flex-1">
+                            <span className="menu-label">安静时段</span>
+                            <span className="menu-desc">时段内角色不主动推送，回复你的消息不受影响</span>
+                        </div>
+                        <div className="menu-right flex items-center gap-2">
+                            {quietEnabled && (
+                                <>
+                                    <input
+                                        type="time"
+                                        className="border-none outline-none bg-transparent ts-12 text-[var(--c-text)] opacity-70"
+                                        value={quietStart}
+                                        onChange={e => { setQuietStart(e.target.value); persistQuietHours(true, e.target.value, quietEnd); }}
+                                    />
+                                    <span className="ts-12 opacity-40">–</span>
+                                    <input
+                                        type="time"
+                                        className="border-none outline-none bg-transparent ts-12 text-[var(--c-text)] opacity-70"
+                                        value={quietEnd}
+                                        onChange={e => { setQuietEnd(e.target.value); persistQuietHours(true, quietStart, e.target.value); }}
+                                    />
+                                </>
+                            )}
+                            <Toggle
+                                checked={quietEnabled}
+                                onChange={enabled => { setQuietEnabled(enabled); persistQuietHours(enabled, quietStart, quietEnd); }}
+                            />
+                        </div>
+                    </div>
+                    {(offlinePushHint || isShellApp || offlinePushState === "unsupported") && (
+                        <p className="menu-group-desc" style={{ padding: "0 0 12px" }}>
                             {offlinePushHint || (isShellApp
                                 ? "App 版自带推送通道，已自动接管离线推送；保持系统通知权限开启即可，可点「测试」验证。"
-                                : offlinePushState === "unsupported" ? "当前环境不支持。iOS 请先添加到主屏幕，从主屏幕打开后再开启。" : "")}
+                                : "当前环境不支持。iOS 请先添加到主屏幕，从主屏幕打开后再开启。")}
                         </p>
-                    </>
-                )}
-                <p className="menu-group-desc mx-2">定时主动消息</p>
-                <div className="menu-group">
-                    <div className="menu-item">
-                        <ProfileSettingsIcon icon={Send} color={BINDING_ACCENTS.preset} />
-                        <div className="menu-label-group">
+                    )}
+                </div>
+
+                {/* 定时主动消息 */}
+                <div className="prefs-block">
+                    <span className="prefs-block-label">定时主动消息</span>
+                    <div className="prefs-row">
+                        <div className="menu-label-group flex-1">
                             <span className="menu-label">触发方式</span>
                         </div>
                         <div className="menu-right">
@@ -1479,9 +1623,8 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                             </select>
                         </div>
                     </div>
-                    <div className="menu-item">
-                        <ProfileSettingsIcon icon={User} color={BINDING_ACCENTS.identity} />
-                        <div className="menu-label-group">
+                    <div className="prefs-row">
+                        <div className="menu-label-group flex-1">
                             <span className="menu-label">角色</span>
                         </div>
                         <div className="menu-right">
@@ -1498,9 +1641,8 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                         </div>
                     </div>
                     {tmMode === "once" ? (
-                        <div className="menu-item">
-                            <ProfileSettingsIcon icon={Clock} color={BINDING_ACCENTS.voice} />
-                            <div className="menu-label-group">
+                        <div className="prefs-row">
+                            <div className="menu-label-group flex-1">
                                 <span className="menu-label">多久之后</span>
                             </div>
                             <div className="menu-right flex items-center gap-1">
@@ -1523,9 +1665,8 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                             </div>
                         </div>
                     ) : (
-                        <div className="menu-item">
-                            <ProfileSettingsIcon icon={Clock} color={BINDING_ACCENTS.voice} />
-                            <div className="menu-label-group">
+                        <div className="prefs-row">
+                            <div className="menu-label-group flex-1">
                                 <span className="menu-label">沉默超过</span>
                             </div>
                             <div className="menu-right flex items-center gap-1 ts-13">
@@ -1548,51 +1689,49 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                             </div>
                         </div>
                     )}
-                    <div className="menu-item" style={{ alignItems: "stretch", flexDirection: "column", gap: 8 }}>
+                    <div className="prefs-row" style={{ cursor: "default" }}>
                         <button className="ui-btn ui-btn-soft-action w-full" onClick={tmMode === "idle" ? handleCreateIdleRule : handleCreateTimedMsg} disabled={tmBusy}>
                             {tmBusy ? "创建中..." : "创建"}
                         </button>
                     </div>
+                    <p className="menu-group-desc" style={{ padding: "0 0 12px" }}>
+                        {tmHint || (tmMode === "idle"
+                            ? `你长时间不发消息时 TA 会主动来找你；不回复最多连发 ${IDLE_RECONNECT_MAX_CONSECUTIVE} 次，回复后重新开始计。每个角色一条规则。`
+                            : "每个角色同时仅保留一条，新建会替换旧的。关掉后台由服务端接管生成并推送（需开启离线推送）。")}
+                    </p>
                 </div>
-                <p className="menu-group-desc mx-2">
-                    {tmHint || (tmMode === "idle"
-                        ? `你长时间不发消息时 TA 会主动来找你；不回复最多连发 ${IDLE_RECONNECT_MAX_CONSECUTIVE} 次，回复后重新开始计。每个角色一条规则。`
-                        : "每个角色同时仅保留一条，新建会替换旧的。关掉后台由服务端接管生成并推送（需开启离线推送）。")}
-                </p>
 
                 {(timedSchedules.length > 0 || idleRules.length > 0) && (
-                    <>
-                        <p className="menu-group-desc mx-2">已排期</p>
-                        <div className="menu-group">
-                            {idleRules.map(rule => {
-                                const charName = loadCharacters().find(c => c.id === rule.characterId)?.name ?? "未知角色";
-                                const hours = Math.floor(rule.intervalMinutes / 60);
-                                const minutes = rule.intervalMinutes % 60;
-                                const intervalLabel = `${hours ? `${hours}小时` : ""}${minutes ? `${minutes}分钟` : hours ? "" : "0分钟"}`;
-                                return (
-                                    <div key={rule.id} className="menu-item">
-                                        <div className="menu-label-group" style={{ minWidth: 0, flex: 1 }}>
-                                            <span className="menu-label">{charName} · 沉默超过 {intervalLabel}（连发 {rule.consecutiveCount}/{IDLE_RECONNECT_MAX_CONSECUTIVE}）</span>
-                                            <span className="menu-desc" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>长时间没消息时主动来找你</span>
-                                        </div>
-                                        <button className="ui-btn ui-btn-outline py-1 px-3 ts-12" style={{ whiteSpace: "nowrap", color: "var(--c-danger)" }} onClick={() => handleDeleteIdleRule(rule)}>删除</button>
+                    <div className="prefs-block">
+                        <span className="prefs-block-label">已排期</span>
+                        {idleRules.map(rule => {
+                            const charName = loadCharacters().find(c => c.id === rule.characterId)?.name ?? "未知角色";
+                            const hours = Math.floor(rule.intervalMinutes / 60);
+                            const minutes = rule.intervalMinutes % 60;
+                            const intervalLabel = `${hours ? `${hours}小时` : ""}${minutes ? `${minutes}分钟` : ""}${hours || minutes ? "" : "0分钟"}`;
+                            return (
+                                <div key={rule.id} className="prefs-row" style={{ cursor: "default" }}>
+                                    <div className="menu-label-group flex-1" style={{ minWidth: 0 }}>
+                                        <span className="menu-label">{charName} · 沉默超过 {intervalLabel}（连发 {rule.consecutiveCount}/{IDLE_RECONNECT_MAX_CONSECUTIVE}）</span>
+                                        <span className="menu-desc" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>长时间没消息时主动来找你</span>
                                     </div>
-                                );
-                            })}
-                            {timedSchedules.map(schedule => {
-                                const charName = loadCharacters().find(c => c.id === schedule.characterId)?.name ?? "未知角色";
-                                return (
-                                    <div key={schedule.id} className="menu-item">
-                                        <div className="menu-label-group" style={{ minWidth: 0, flex: 1 }}>
-                                            <span className="menu-label">{charName} · {formatFireAt(schedule.fireAt)}</span>
-                                            <span className="menu-desc" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>固定时间后主动来找你</span>
-                                        </div>
-                                        <button className="ui-btn ui-btn-outline py-1 px-3 ts-12" style={{ whiteSpace: "nowrap", color: "var(--c-danger)" }} onClick={() => handleDeleteTimedMsg(schedule)}>删除</button>
+                                    <button className="ui-btn ui-btn-outline py-1 px-3 ts-12" style={{ whiteSpace: "nowrap", color: "var(--c-danger)" }} onClick={() => handleDeleteIdleRule(rule)}>删除</button>
+                                </div>
+                            );
+                        })}
+                        {timedSchedules.map(schedule => {
+                            const charName = loadCharacters().find(c => c.id === schedule.characterId)?.name ?? "未知角色";
+                            return (
+                                <div key={schedule.id} className="prefs-row" style={{ cursor: "default" }}>
+                                    <div className="menu-label-group flex-1" style={{ minWidth: 0 }}>
+                                        <span className="menu-label">{charName} · {formatFireAt(schedule.fireAt)}</span>
+                                        <span className="menu-desc" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>固定时间后主动来找你</span>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </>
+                                    <button className="ui-btn ui-btn-outline py-1 px-3 ts-12" style={{ whiteSpace: "nowrap", color: "var(--c-danger)" }} onClick={() => handleDeleteTimedMsg(schedule)}>删除</button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 )}
             </div>
         </PageShell>
