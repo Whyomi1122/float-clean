@@ -188,6 +188,7 @@ export function loadNativeTimeline(
         for (const msg of messages) {
             if (msg.isRetracted) continue;
             if (isPromptHiddenChatMessage(msg)) continue;
+            if (msg.deliverySessionId) continue; // 剧情投递消息不进聊天记忆，由群像归档管理
             if (options?.afterTimestamp && msg.createdAt <= options.afterTimestamp) continue;
 
             let sender: string;
@@ -278,6 +279,7 @@ export function loadNativeTimeline(
         for (const msg of messages) {
             if (msg.isRetracted) continue;
             if (isPromptHiddenChatMessage(msg)) continue;
+            if (msg.deliverySessionId) continue; // 剧情投递消息不进聊天记忆，由群像归档管理
             if (options?.afterTimestamp && msg.createdAt <= options.afterTimestamp) continue;
 
             const msgLabel = formatPromptEventLabel("私聊", msg.createdAt, timeAware, timestampOptions);

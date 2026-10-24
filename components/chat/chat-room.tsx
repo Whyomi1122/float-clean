@@ -88,6 +88,15 @@ import { extractTextToolDirectiveText } from "@/lib/text-tool-protocol";
 import { emitChatPluginEvent, getChatPluginHookBus, runChatPluginTransform } from "@/lib/chat-plugin-hooks";
 import { CHAT_PLUGIN_TOAST_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin-runtime";
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
+import {
+    findOpenSession as findOpenDeliverySession,
+    markSessionOpened as markDeliverySessionOpened,
+    closeDeliverySession,
+    formatTranscriptAsNarration,
+    loadSessionTranscript,
+    loadDeliverySessions,
+} from "@/lib/ensemble-delivery";
+import { appendEnsembleTurn } from "@/lib/ensemble-storage";
 
 // ── Call system message detection ──────────────────────────
 // Call messages are stored with user/assistant role for correct prompt alternation,
@@ -1117,6 +1126,76 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     // 自动生图失败：弹一次弹窗提示，关掉即消失（同一轮里多张失败只提示第一条）
     const [imageGenerationFailure, setImageGenerationFailure] = useState<string | null>(null);
     const [cloudDeletePending, setCloudDeletePending] = useState<{ count: number } | null>(null);
+
+    /** 待「带回剧情」的消息（点了菜单后先选剧本，再确认内容）。 */
+    const [bringBackMessage, setBringBackMessage] = useState<ChatMessage | null>(null);
+    /** 返回剧情前的二次确认（防止误触直接归档）。 */
+    const [returnStoryConfirm, setReturnStoryConfirm] = useState<string | null>(null);
+
+    /**
+     * 当前会话是不是「剧情对话段」的聊天室。
+     * 是的话，模型回复要清洗成微信格式，而不是线下剧本格式。
+     *
+     * ⚠️ 不要用「会话里已有 deliverySessionId 的消息」判断：
+     *    投递的第一条消息可能还没写进内存，进群聊第一轮就变成 false，
+     *    于是模型继续吐线下剧本格式。这里改为「本会话对应某段未关闭的剧情对话段」，进房那一刻就成立。
+     */
+    const isStoryDeliverySession = useMemo(() => {
+        try {
+            return loadDeliverySessions().some(s => s.chatSessionId === session.id);
+        } catch {
+            // 判断失败就按剧情模式处理：宁可多洗一遍，也不让剧本体泄漏到聊天里
+            return true;
+        }
+    }, [session.id, messages.length]);
+
+    /** 当前会话名下「投递了但还没返回」的剧情对话段（长按菜单里的返回入口用）。 */
+    const openStorySession = useMemo(() => {
+        try {
+            return findOpenDeliverySession({ sessionId: session.id, participantIds: session.participantIds });
+        } catch {
+            return null;
+        }
+    }, [session.id, session.participantIds, messages.length]);
+
+    // 进入会话即标记「这段剧情已经打开过」，群像那边据此提示是否已录入聊天记录
+    useEffect(() => {
+        const target = findOpenDeliverySession({ sessionId: session.id });
+        if (!target) return;
+        // 只有真的已经带着剧情消息，才算录入过
+        const [t] = loadSessionTranscript(target.id);
+        if (t && t.messages.length > 0) markDeliverySessionOpened(target.id);
+    }, [session.id]);
+
+    /**
+     * 【返回剧情】：结束当前这段剧情对话，把整段打包写进剧本。
+     */
+    const handleReturnToStory = (deliverySessionId: string) => {
+        setReturnStoryConfirm(null);
+        const result = closeDeliverySession({ deliverySessionId });
+        if (!result) {
+            showChatToast("这段已经归入过剧情了");
+            return;
+        }
+        const { session: ds, transcript } = result;
+        if (transcript.length === 0) {
+            showChatToast("这段没有找到聊天内容，已丢弃");
+            return;
+        }
+        const narration = formatTranscriptAsNarration(ds, transcript);
+        appendEnsembleTurn(ds.scriptId, {
+            id: `turn_${Date.now()}_dlv`,
+            senderType: "character",
+            senderId: "from_chat",
+            senderName: "来自聊天",
+            content: narration,
+            timestamp: new Date().toISOString(),
+            rawText: narration,
+        });
+        showChatToast(`已归入《${ds.scriptTitle}》· ${transcript.length} 句`);
+        window.dispatchEvent(new CustomEvent("float:ensemble-updated"));
+    };
+
     const [showPlusMenu, setShowPlusMenu] = useState(false);
     const [customPlusActions, setCustomPlusActions] = useState<RegisteredCustomAppChatPlusAction[]>(() => loadCustomAppChatPlusActions());
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
@@ -4920,6 +4999,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 </div>
                 <div className="flex">
                     <button onClick={() => { setQuotingMessage(m); setActiveMessageId(null); }} className="ctx-menu-btn">引用</button>
+                    {openStorySession && (
+                        <button
+                            onClick={() => {
+                                setReturnStoryConfirm(openStorySession.id);
+                                setActiveMessageId(null);
+                            }}
+                            className="ctx-menu-btn"
+                        >返回剧情</button>
+                    )}
                     {options?.allowMultiSelect !== false && (
                         <button onClick={() => startMultiSelectFromMessage(m)} className="ctx-menu-btn">多选</button>
                     )}
@@ -5429,6 +5517,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         {session.isGroup
                             ? `${session.groupName || "群聊"}(${(session.participantIds?.length || 0) + (session.isSpectator ? 0 : 1)})`
                             : (session.alias || character?.name || `User_${session.contactId.slice(-4)}`)}
+                        {openStorySession && (
+                            <span
+                                className="chat-typing-indicator"
+                                style={{ color: "#C0AE8E" }}
+                            >剧情模式</span>
+                        )}
                         {(isGenerating || isOfflineGenerating) && (
                             <span className="chat-typing-indicator">
                                 {offlineMode ? "线下生成中" : "对方正在输入"}<span className="chat-typing-dots"><i/><i/><i/></span>
@@ -6710,6 +6804,17 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 <GeneratedImageErrorDialog
                     message={imageGenerationFailure}
                     onClose={() => setImageGenerationFailure(null)}
+                />
+            )}
+
+            {returnStoryConfirm && openStorySession && openStorySession.id === returnStoryConfirm && (
+                <ConfirmDialog
+                    title="返回剧情"
+                    message={`将把本次聊天记录整理为「来自聊天」的旁白，归入《${openStorySession.scriptTitle}》，并结束这段剧情对话。确认归入？`}
+                    confirmLabel="归入剧情"
+                    cancelLabel="取消"
+                    onConfirm={() => handleReturnToStory(openStorySession.id)}
+                    onCancel={() => setReturnStoryConfirm(null)}
                 />
             )}
 
