@@ -3,15 +3,83 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
 import { isAndroidBrowser } from "./voice-input-platform";
+import { Toggle } from "@/components/ui/form";
+
+// ── 弹窗内 tab 栏（合并入口用）─────────────────────────
+
+export interface RichModalTab<T extends string> {
+    id: T;
+    label: string;
+}
+
+export function RichModalTabs<T extends string>({ tabs, active, onChange }: {
+    tabs: RichModalTab<T>[];
+    active: T;
+    onChange: (id: T) => void;
+}) {
+    if (tabs.length < 2) return null;
+    return (
+        <div className="rich-modal-tabs" role="tablist">
+            {tabs.map(tab => (
+                <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.id === active}
+                    className="rich-modal-tab"
+                    {...(tab.id === active ? { "data-active": "" } : {})}
+                    onClick={() => onChange(tab.id)}
+                >
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+// ── Call Pick Modal（合并入口：通话 → 选语音/视频）─────────────────────────────
+
+interface CallPickModalProps {
+    onPick: (kind: "voice" | "video") => void;
+    onClose: () => void;
+}
+
+export function CallPickModal({ onPick, onClose }: CallPickModalProps) {
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div onClick={e => e.stopPropagation()} className="modal-dialog">
+                <div className="ts-16 font-semibold text-center text-[var(--c-text)]">发起通话</div>
+                <div className="w-full flex flex-col gap-2.5">
+                    <button type="button" className="menu-item w-full" onClick={() => onPick("voice")}>
+                        <div className="menu-label-group">
+                            <span className="menu-label">语音通话</span>
+                            <span className="menu-desc">像打电话一样聊几句</span>
+                        </div>
+                    </button>
+                    <button type="button" className="menu-item w-full" onClick={() => onPick("video")}>
+                        <div className="menu-label-group">
+                            <span className="menu-label">视频通话</span>
+                            <span className="menu-desc">开着摄像头面对面的感觉</span>
+                        </div>
+                    </button>
+                </div>
+                <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost w-full">取消</button>
+            </div>
+        </div>
+    );
+}
 
 // ── Photo Input Modal ─────────────────────────────
 
 interface PhotoInputModalProps {
     onSend: (description: string, imageDataUrl?: string) => void;
     onClose: () => void;
+    /** 合并入口：图片组内的切换（照片墙 / 文字图片） */
+    onSwitchTab?: (tab: "photo" | "text_photo") => void;
+    tab?: "photo" | "text_photo";
 }
 
-export function PhotoInputModal({ onSend, onClose }: PhotoInputModalProps) {
+export function PhotoInputModal({ onSend, onClose, onSwitchTab, tab }: PhotoInputModalProps) {
     const [desc, setDesc] = useState("");
     const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +102,13 @@ export function PhotoInputModal({ onSend, onClose }: PhotoInputModalProps) {
                 onClick={e => e.stopPropagation()}
                 className="modal-dialog"
             >
+                {tab && (
+                    <RichModalTabs
+                        tabs={[{ id: "photo", label: "照片墙" }, { id: "text_photo", label: "文字图片" }]}
+                        active={tab}
+                        onChange={(next) => onSwitchTab?.(next as "photo" | "text_photo")}
+                    />
+                )}
                 <div className="ts-16 font-semibold text-center text-[var(--c-text)]">发送照片</div>
                 <div
                     className="w-full rounded-xl flex items-center justify-center ui-placeholder-gradient overflow-hidden cursor-pointer relative"
@@ -87,9 +162,12 @@ interface RedPacketModalProps {
     isGroup?: boolean;
     onSend: (amount: number, label: string, count?: number) => void;
     onClose: () => void;
+    /** 合并入口：钱包组内的切换（红包 / 转账） */
+    onSwitchMode?: (mode: "red_packet" | "transfer") => void;
+    showTabs?: boolean;
 }
 
-export function RedPacketModal({ mode, isGroup, onSend, onClose }: RedPacketModalProps) {
+export function RedPacketModal({ mode, isGroup, onSend, onClose, onSwitchMode, showTabs }: RedPacketModalProps) {
     const [amount, setAmount] = useState("");
     const [label, setLabel] = useState("");
     const [count, setCount] = useState("1");
@@ -122,6 +200,13 @@ export function RedPacketModal({ mode, isGroup, onSend, onClose }: RedPacketModa
                     <div className="text-white ts-16 font-semibold">{title}</div>
                 </div>
                 <div className="p-5 flex flex-col gap-3.5">
+                    {showTabs && (
+                        <RichModalTabs
+                            tabs={[{ id: "red_packet", label: "红包" }, { id: "transfer", label: "转账" }]}
+                            active={mode}
+                            onChange={(next) => onSwitchMode?.(next as "red_packet" | "transfer")}
+                        />
+                    )}
                     <div>
                         <div className="ts-12 text-[var(--c-icon)] mb-1.5">金额</div>
                         <div className="flex items-center gap-2">
@@ -276,9 +361,17 @@ export function TextPhotoModal({ onSend, onClose }: TextPhotoModalProps) {
 interface SystemInstructionModalProps {
     onSend: (text: string) => void;
     onClose: () => void;
+    /** 合并入口：指令组内切到「番外开关」 */
+    onSwitchTab?: (tab: "instruction" | "story_mode") => void;
+    tab?: "instruction" | "story_mode";
+    /** 番外指令模式开关（剧情模式 Tab 用） */
+    storyModeEnabled?: boolean;
+    onToggleStoryMode?: (enabled: boolean) => void;
+    /** 剧情模式仅限剧情会话使用 */
+    storyModeLocked?: boolean;
 }
 
-export function SystemInstructionModal({ onSend, onClose }: SystemInstructionModalProps) {
+export function SystemInstructionModal({ onSend, onClose, onSwitchTab, tab, storyModeEnabled, onToggleStoryMode, storyModeLocked }: SystemInstructionModalProps) {
     const [text, setText] = useState("");
     const trimmed = text.trim();
 
@@ -290,32 +383,71 @@ export function SystemInstructionModal({ onSend, onClose }: SystemInstructionMod
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div onClick={e => e.stopPropagation()} className="modal-dialog">
-                <div className="ts-16 font-semibold text-center text-[var(--c-text)]">系统指令注入</div>
-                <label className="w-full flex flex-col gap-2">
-                    <span className="menu-label">指令内容</span>
-                    <textarea
-                        value={text}
-                        onChange={e => setText(e.target.value)}
-                        onKeyDown={e => {
-                            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                                e.preventDefault();
-                                submit();
-                            }
-                        }}
-                        aria-label="系统指令内容"
-                        className="ui-input w-full min-h-[160px]"
-                        rows={6}
-                        style={{ resize: "vertical" }}
+                {tab && (
+                    <RichModalTabs
+                        tabs={[{ id: "instruction", label: "系统指令" }, { id: "story_mode", label: "番外指令模式" }]}
+                        active={tab}
+                        onChange={(next) => onSwitchTab?.(next as "instruction" | "story_mode")}
                     />
-                </label>
-                <div className="flex gap-3 w-full">
-                    <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">取消</button>
-                    <button
-                        onClick={submit}
-                        disabled={!trimmed}
-                        className="ui-btn ui-btn-primary flex-1"
-                    >注入</button>
+                )}
+                <div className="ts-16 font-semibold text-center text-[var(--c-text)]">
+                    {tab === "story_mode" ? "番外指令模式" : "系统指令注入"}
                 </div>
+                {tab === "story_mode" ? (
+                    <>
+                        <p className="ts-12 text-[var(--c-icon)] leading-relaxed px-1">
+                            {storyModeLocked
+                                ? "番外指令模式仅在剧情模式的会话中可用。"
+                                : "开启后，输入的发言以「旁白/指令」的口吻被角色接收，用于推动番外剧情，不作为角色对话的日常回复。"}
+                        </p>
+                        <button
+                            type="button"
+                            className="menu-item w-full"
+                            disabled={storyModeLocked}
+                            onClick={() => onToggleStoryMode?.(!storyModeEnabled)}
+                            aria-pressed={Boolean(storyModeEnabled)}
+                        >
+                            <div className="menu-label-group">
+                                <span className="menu-label">番外指令模式</span>
+                                <span className="menu-desc">{storyModeEnabled ? "已开启" : "已关闭"}</span>
+                            </div>
+                            <div className="menu-right">
+                                <Toggle checked={Boolean(storyModeEnabled) && !storyModeLocked} onChange={(v) => onToggleStoryMode?.(v)} />
+                            </div>
+                        </button>
+                        <div className="flex gap-3 w-full">
+                            <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">关闭</button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <label className="w-full flex flex-col gap-2">
+                            <span className="menu-label">指令内容</span>
+                            <textarea
+                                value={text}
+                                onChange={e => setText(e.target.value)}
+                                onKeyDown={e => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                                        e.preventDefault();
+                                        submit();
+                                    }
+                                }}
+                                aria-label="系统指令内容"
+                                className="ui-input w-full min-h-[160px]"
+                                rows={6}
+                                style={{ resize: "vertical" }}
+                            />
+                        </label>
+                        <div className="flex gap-3 w-full">
+                            <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">取消</button>
+                            <button
+                                onClick={submit}
+                                disabled={!trimmed}
+                                className="ui-btn ui-btn-primary flex-1"
+                            >注入</button>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

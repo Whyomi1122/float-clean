@@ -2,6 +2,38 @@
    Chat Page Classes (.chat-*)
    ══════════════════════════════════════════ */
 
+/* ── 合并入口弹窗内的 tab 栏 ── */
+.rich-modal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.rich-modal-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  color: var(--c-icon);
+  font-size: calc(12.5px*var(--app-text-scale,1));
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rich-modal-tab[data-active] {
+  background: var(--c-card, #fff);
+  color: var(--c-text-title);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 .chat-app {
   background: transparent;
   --ctx-menu-bg: #2c2c2c;

@@ -156,7 +156,7 @@ function MemorySettingsSliderItem({
     );
 }
 
-/** 底部弹层滑块：大滑块 + 数值 + 完成按钮，拖动过程只改本地草稿，点完成才落库 */
+/** 底部弹层滑块：大滑块 + 数值 + 完成按钮（气泡确认防误触），拖动过程只改本地草稿，确认后才落库 */
 function MemorySliderSheet({
     label,
     value,
@@ -177,6 +177,7 @@ function MemorySliderSheet({
     onClose: () => void;
 }) {
     const [draft, setDraft] = useState(value);
+    const [confirmOpen, setConfirmOpen] = useState(false);
     useEffect(() => { setDraft(value); }, [value]);
     return (
         <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={onClose}>
@@ -202,7 +203,24 @@ function MemorySliderSheet({
                         <span>{min}</span>
                         <span>{max}</span>
                     </div>
-                    <button className="ui-btn ui-btn-primary p-2.5 w-full mt-4" onClick={onDone}>完成</button>
+                    {/* 气泡确认：就在按钮旁边问，不用挪窝（仅滑块弹层使用） */}
+                    <div className="relative mt-4">
+                        <button className="ui-btn ui-btn-primary p-2.5 w-full" onClick={() => setConfirmOpen(prev => !prev)}>完成</button>
+                        {confirmOpen && (
+                            <div className="mem-bubble-confirm" onClick={event => event.stopPropagation()}>
+                                <p className="mem-bubble-confirm-text">确定保存该数值吗？</p>
+                                <div className="mem-bubble-confirm-actions">
+                                    <button className="mem-bubble-btn" onClick={() => setConfirmOpen(false)}>取消</button>
+                                    <button
+                                        className="mem-bubble-btn is-primary"
+                                        onClick={() => { setConfirmOpen(false); onDone(); }}
+                                    >
+                                        确定
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -249,6 +267,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
     const [loading, setLoading] = useState(false);
     const [summarizing, setSummarizing] = useState(false);
     const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
+    /** 提示词默认只读锁定，点「编辑」才进可写态 */
+    const [promptEditing, setPromptEditing] = useState(false);
     const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null);
     const [confirmClearAll, setConfirmClearAll] = useState(false);
     const [pickedCharId, setPickedCharId] = useState<string | null>(null);
@@ -932,10 +952,11 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                         <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
                             <div className="modal-header" data-ui="modal-header">
                                 <button className="modal-header-btn modal-header-btn-muted" onClick={() => setSummarizeRangeOpen(false)}><X size={18} /></button>
-                                <h3 className="modal-title">选择总结范围</h3>
+                                <h3 className="modal-title">本次总结范围</h3>
                                 <span style={{ width: 44 }} />
                             </div>
                             <div className="modal-body modal-body-tight" data-ui="modal-body">
+                                <p className="ts-11 text-secondary px-4 pt-1 pb-2">仅对这一次手动总结生效，不影响自动总结的间隔设置。</p>
                                 <div className="menu-group">
                                     {SUMMARIZE_RANGE_OPTIONS.map(option => (
                                         <button
@@ -1083,7 +1104,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                     />
                 ) : null}
 
-                {/* Summarization Prompt Editor */}
+                {/* Summarization Prompt Editor——默认只读锁定，点「编辑」才可改，防误触改坏 */}
                 <p className="menu-group-desc mx-2">长期记忆提示词</p>
                 <div className="menu-group">
                     <div className="menu-item">
@@ -1094,27 +1115,41 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                                 变量：{"{{char}}"} 角色、{"{{earliest}}"} 起始时间、{"{{latest}}"} 结束时间、{"{{events}}"} 记录集合
                             </span>
                         </div>
-                        {!isDefault && (
-                            <div className="menu-right">
-                                <button onClick={handleResetPrompt} className="menu-label menu-label-danger ts-12 underline">
-                                    恢复默认
-                                </button>
-                            </div>
-                        )}
+                        <div className="menu-right">
+                            <button
+                                onClick={() => {
+                                    if (promptEditing) {
+                                        // 退出编辑＝放弃未保存的改动，回到当前生效值
+                                        setEditingPrompt(null);
+                                    }
+                                    setPromptEditing(prev => !prev);
+                                }}
+                                className="ui-btn ui-btn-outline py-1 px-3 ts-12"
+                            >
+                                {promptEditing ? "完成编辑" : "编辑"}
+                            </button>
+                        </div>
                     </div>
                     <div className="px-4 pb-4 flex flex-col gap-3">
                         <textarea
                             value={currentPrompt}
-                            onChange={e => setEditingPrompt(e.target.value)}
-                            className="ui-textarea w-full min-h-[200px] ts-14 leading-relaxed resize-y"
+                            onChange={e => promptEditing && setEditingPrompt(e.target.value)}
+                            readOnly={!promptEditing}
+                            className={`ui-textarea w-full min-h-[260px] ts-14 leading-relaxed resize-y${promptEditing ? "" : " memory-prompt-locked"}`}
                         />
-                        {isModified && (
-                            <button
-                                onClick={handleSavePrompt}
-                                className="ui-btn ui-btn-primary p-2.5 w-full"
-                            >
-                                <Zap size={14} className="mr-1.5" /> 保存提词配置
-                            </button>
+                        {promptEditing && (
+                            <div className="flex gap-2">
+                                {!isDefault && (
+                                    <button onClick={handleResetPrompt} className="ui-btn ui-btn-outline p-2.5 flex-1">
+                                        恢复默认
+                                    </button>
+                                )}
+                                {isModified && (
+                                    <button onClick={handleSavePrompt} className="ui-btn ui-btn-primary p-2.5 flex-1">
+                                        <Zap size={14} className="mr-1.5" /> 保存提词配置
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>

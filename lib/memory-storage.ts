@@ -233,6 +233,28 @@ export function setLastSummarizedTimestamp(characterId: string, ts: string): voi
     kvSet(LAST_SUMMARY_TS_PREFIX + characterId, ts);
 }
 
+// ── 按来源分组的总结水位线 ──
+// 自动总结按来源 app 分组各自调用 LLM；每组各记各的进度，攒够门槛才总结，
+// 互不拖累（避免全局水位线把小来源的事件"冲掉"）。
+const GROUP_SUMMARY_TS_PREFIX = "ai_phone_mem_last_summary_grp_v1:";
+
+function groupSummaryKey(characterId: string, groupKey: string): string {
+    return GROUP_SUMMARY_TS_PREFIX + characterId + ":" + groupKey;
+}
+
+export function getGroupLastSummarizedTimestamp(characterId: string, groupKey: string): string | null {
+    if (typeof window === "undefined") return null;
+    // 旧档迁移：组水位线为空时回落到旧的全局水位线，避免旧档事件被跳过
+    return kvGet(groupSummaryKey(characterId, groupKey))
+        || kvGet(LAST_SUMMARY_TS_PREFIX + characterId)
+        || null;
+}
+
+export function setGroupLastSummarizedTimestamp(characterId: string, groupKey: string, ts: string): void {
+    if (typeof window === "undefined") return;
+    kvSet(groupSummaryKey(characterId, groupKey), ts);
+}
+
 export function getCoreMemoryCounter(characterId: string): number {
     if (typeof window === "undefined") return 0;
     const val = kvGet(CORE_COUNTER_PREFIX + characterId);

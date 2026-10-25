@@ -10,7 +10,7 @@ import { isKnownStickerLabel } from "@/lib/sticker-data";
 import { translateReasoningText } from "@/lib/reasoning-translate";
 import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
-import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal } from "./rich-input-modals";
+import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal, CallPickModal } from "./rich-input-modals";
 import { EmojiPanel, StickerPanel } from "./emoji-panel";
 import { StickerSearchSuggest } from "./sticker-search-suggest";
 import { StateValuesPanel } from "./state-values-panel";
@@ -496,7 +496,7 @@ type PendingMessageJump = {
 };
 
 const TRANSIENT_MESSAGE_PREFIX = "ui-transient-";
-type RichModalKind = "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction";
+type RichModalKind = "call" | "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction" | "story_mode";
 type ChatTextInputHandle = {
     appendText: (text: string, options?: { focus?: boolean }) => void;
     clear: () => void;
@@ -715,12 +715,19 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
             return;
         }
         const trimmed = inputText.trim();
-        if (!trimmed) return;
+        // 旧版行为：空输入点星芒键 = 触发 AI 主动回复
+        if (!trimmed) {
+            if (canTriggerAiReply) onTriggerAIResponse();
+            return;
+        }
         if (!onSendText(trimmed)) return;
         setInputText("");
         resetTextareaHeight();
         onClosePanels();
     };
+
+    /** 空输入时星芒键可用：有触发回调且会话允许（剧情/禁言/围观下不可用） */
+    const canTriggerAiReply = Boolean(onTriggerAIResponse) && !inputLocked;
 
     const panelOpen = showEmojiPanel || showStickerPanel || showPlusMenu;
     const suggestCharacterIds = useMemo(
@@ -728,20 +735,16 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         [isGroup, stickerCharacterIds, characterId],
     );
     const suggestEnabled = !inputLocked && !panelOpen && !suggestClosed && inputText.trim().length > 0;
+    // 旧版 8 项合并式加号菜单：通话/图片/钱包/指令 各自弹窗内再细分，功能不丢、入口不散
     const plusMenuItems = [
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>, label: "照片墙", onClick: () => onOpenRichModal("photo") },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="7" y1="8" x2="17" y2="8" /><line x1="7" y1="12" x2="14" y2="12" /><line x1="7" y1="16" x2="11" y2="16" /></svg>, label: "文字图片", onClick: () => onOpenRichModal("text_photo") },
-        { icon: <AlertCircle size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "系统指令", onClick: () => onOpenRichModal("system_instruction") },
-        { icon: <Clapperboard size={22} strokeWidth={1.5} color={theaterMode ? "var(--c-icon-active)" : "var(--c-text)"} />, label: "番外指令模式", active: theaterMode, onClick: onToggleTheaterMode },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>, label: "视频通话", onClick: onStartVideoCall },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /></svg>, label: "语音通话", onClick: onStartVoiceCall },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>, label: "红包", onClick: () => onOpenRichModal("red_packet") },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><text x="12" y="16" textAnchor="middle" fontSize="12" fill="var(--c-text)" stroke="none">¥</text></svg>, label: "转账", onClick: () => onOpenRichModal(isGroup ? "transfer_target" : "transfer") },
+        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>, label: "通话", onClick: () => onOpenRichModal("call") },
+        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>, label: "图片", onClick: () => onOpenRichModal("photo") },
+        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>, label: "钱包", onClick: () => onOpenRichModal("red_packet") },
         { icon: <Gift size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "礼物", onClick: () => onOpenRichModal("gift") },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
+        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
+        { icon: <AlertCircle size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "指令", onClick: () => onOpenRichModal("system_instruction") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={offlineMode ? "var(--c-icon-active)" : "var(--c-text)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" /><line x1="3" y1="3" x2="21" y2="21" /></svg>, label: "线下", active: offlineMode, onClick: onToggleOfflineMode },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" /><polyline points="14 3 14 8 21 8" /><path d="M8 13h0" /><path d="M16 13h0" /><path d="M10 17c.5.3 1.2.5 2 .5s1.5-.2 2-.5" /></svg>, label: "表情包", onClick: onToggleStickerPanel },
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -839,7 +842,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
                 </div>
                 <button
                     onClick={handleSubmit}
-                    disabled={!isGenerating && (inputLocked || !inputText.trim())}
+                    disabled={!isGenerating && (inputLocked || (!inputText.trim() && !canTriggerAiReply))}
                     style={inputLocked && !isGenerating ? { opacity: 0.35 } : undefined}
                     className="chat-input-send-btn ui-bare-btn"
                     aria-label={isGenerating ? "停止本轮生成" : (inputText.trim() ? "发送" : "触发 AI 回复")}
@@ -1182,6 +1185,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
     // Rich media input modals
     const [richModal, setRichModal] = useState<RichModalKind | null>(null);
+    /** 合并弹窗内部的 tab（图片：照片墙/文字图片；指令：系统/番外） */
+    const [richModalTab, setRichModalTab] = useState<string | null>(null);
     const [transferTarget, setTransferTarget] = useState<Character | null>(null);
     // Media detail modal (red packet / transfer detail view)
     const [mediaDetailMsg, setMediaDetailMsg] = useState<ChatMessage | null>(null);
@@ -6457,16 +6462,30 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onClose={() => setRichModal(null)}
                 />
             )}
-            {richModal === "text_photo" && (
-                <TextPhotoModal
-                    onSend={(text) => { setRichModal(null); sendRichMessage("image", { label: text }); }}
+            {richModal === "call" && (
+                <CallPickModal
+                    onPick={(kind) => {
+                        setRichModal(null);
+                        cancelFollowUp(session.id);
+                        setCallInitiator("user");
+                        if (kind === "voice") setShowVoiceCall(true);
+                        else setShowVideoCall(true);
+                    }}
                     onClose={() => setRichModal(null)}
                 />
             )}
             {richModal === "photo" && (
                 <PhotoInputModal
-                    onSend={(desc, imageDataUrl) => { setRichModal(null); sendRichMessage("image", { label: desc }, "", imageDataUrl); }}
-                    onClose={() => setRichModal(null)}
+                    tab={richModalTab === "text_photo" ? "text_photo" : "photo"}
+                    onSwitchTab={(next) => setRichModalTab(next)}
+                    onSend={(desc, imageDataUrl) => { setRichModal(null); setRichModalTab(null); sendRichMessage("image", { label: desc }, "", imageDataUrl); }}
+                    onClose={() => { setRichModal(null); setRichModalTab(null); }}
+                />
+            )}
+            {richModal === "text_photo" && (
+                <TextPhotoModal
+                    onSend={(text) => { setRichModal(null); setRichModalTab(null); sendRichMessage("image", { label: text }); }}
+                    onClose={() => { setRichModal(null); setRichModalTab(null); }}
                 />
             )}
             {richModal === "gift" && (
@@ -6485,6 +6504,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 <RedPacketModal
                     mode="red_packet"
                     isGroup={session.isGroup}
+                    showTabs
+                    onSwitchMode={(next) => setRichModal(next)}
                     onSend={(amount, label, count) => {
                         const sent = sendRichMessage("red_packet", { amount, label, status: "pending", count: count || 1 });
                         if (sent) setRichModal(null);
@@ -6505,6 +6526,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {richModal === "transfer" && (
                 <RedPacketModal
                     mode="transfer"
+                    showTabs
+                    onSwitchMode={(next) => { if (next === "red_packet") setRichModal("red_packet"); }}
                     onSend={(amount, label) => {
                         if (session.isGroup && transferTarget) {
                             const sent = sendRichMessage("transfer", {
@@ -6533,11 +6556,18 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             )}
             {richModal === "system_instruction" && (
                 <SystemInstructionModal
+                    tab={richModalTab === "story_mode" ? "story_mode" : "instruction"}
+                    onSwitchTab={(next) => setRichModalTab(next)}
+                    storyModeEnabled={theaterMode}
+                    onToggleStoryMode={(enabled) => {
+                        if (enabled !== theaterMode) toggleTheaterMode();
+                    }}
+                    storyModeLocked={!isStoryDeliverySession}
                     onSend={(text) => {
                         const sent = sendSystemInstruction(text);
                         if (sent) setRichModal(null);
                     }}
-                    onClose={() => setRichModal(null)}
+                    onClose={() => { setRichModal(null); setRichModalTab(null); }}
                 />
             )}
 

@@ -2562,6 +2562,68 @@
   letter-spacing: 0;
 }
 
+/* 提示词只读锁定态：淡一点、不可改，点「编辑」才恢复 */
+.memory-prompt-locked {
+  color: var(--c-text-secondary);
+  cursor: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 滑块弹层的气泡确认：贴着「完成」按钮上方弹出 */
+.mem-bubble-confirm {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  min-width: 200px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--c-card-bg, #fff);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  z-index: 20;
+}
+
+.mem-bubble-confirm::after {
+  content: "";
+  position: absolute;
+  right: 28px;
+  top: 100%;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  transform: translateY(-5px) rotate(45deg);
+}
+
+.mem-bubble-confirm-text {
+  font-size: calc(13px*var(--app-text-scale, 1));
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.mem-bubble-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mem-bubble-btn {
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-size: calc(12px*var(--app-text-scale, 1));
+  border: 1px solid var(--c-border);
+  background: transparent;
+  color: var(--c-text-secondary);
+}
+
+.mem-bubble-btn.is-primary {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+}
+
 .data-management-menu .menu-label-group > .menu-label {
   font-weight: 600;
 }

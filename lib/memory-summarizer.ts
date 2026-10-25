@@ -11,7 +11,8 @@ import {
     deleteMemoryEntries,
     getEventCounter,
     resetEventCounter,
-    getLastSummarizedTimestamp,
+    getGroupLastSummarizedTimestamp,
+    setGroupLastSummarizedTimestamp,
     setLastSummarizedTimestamp,
     incrementCoreMemoryCounter,
 } from "./memory-storage";
@@ -23,6 +24,22 @@ import { maybeRunCoreMemoryPipeline } from "./core-memory-builder";
 
 /** Per-character lock to prevent concurrent summarization. */
 const summarizingSet = new Set<string>();
+
+/**
+ * 总结分组：来源 app（聊天按私聊/群聊拆开，内容天然分开便于分组管理）。
+ * 返回 [groupKey, 展示名]。
+ */
+function resolveSummaryGroup(entry: { sourceApp: string; sourceDetail?: string }): { key: string; label: string } {
+    if (entry.sourceApp === "chat") {
+        return entry.sourceDetail === "group"
+            ? { key: "group_chat", label: "群聊" }
+            : { key: "chat", label: "聊天室普通模式" };
+    }
+    return { key: entry.sourceApp, label: entry.sourceApp };
+}
+
+/** 每组最少事件数：不满则留存进度下轮再总结 */
+const GROUP_MIN_EVENTS = 3;
 
 /**
  * Check if summarization should run based on event counter, then execute.
@@ -71,103 +88,129 @@ export async function runSummarizationPipeline(
         return { success: false, error: "未配置记忆总结 API（请在绑定配置 → 辅助API绑定中设置）" };
     }
 
-    // Read native app data (chat messages, moments) directly — no separate event log
-    const afterTimestamp = options?.force
-        ? undefined
-        : options?.sinceTimestamp ?? (getLastSummarizedTimestamp(characterId) ?? undefined);
+    // Read native app data (chat messages, moments) directly — no separate event log.
     // 记忆来源开关同样作用于长期总结：被关掉的来源不进总结素材。
-    // 进度水位线取「过滤后」最后一条的时间，因此关掉的来源不会把水位线推过头，
-    // 但已被水位线越过的内容重新打开后也不会回补——这一点在设置里已注明。
+    // 一次拉全量，再按组各自用水位线过滤——各组进度独立，小来源攒够门槛才总结。
     const allEntries = filterTimelineByAllowedSources(
-        loadNativeTimeline(characterId, afterTimestamp ? { afterTimestamp } : undefined),
+        loadNativeTimeline(characterId),
         config.shortTermAllowedSources,
     );
 
-    if (allEntries.length < 4) {
+    if (allEntries.length === 0) {
         if (!options?.force) resetEventCounter(characterId);
-        return { success: false, error: allEntries.length === 0 ? "没有可总结的事件" : "事件不足 4 条" };
+        return { success: false, error: "没有可总结的事件" };
     }
 
-    const formatted = formatTimelineForSummarization(allEntries);
-    if (!formatted) return { success: false, error: "格式化事件数据失败" };
+    // 按来源分组（聊天拆私聊/群聊），各组独立总结、独立水位线
+    const groups = new Map<string, { label: string; entries: typeof allEntries }>();
+    for (const entry of allEntries) {
+        const g = resolveSummaryGroup(entry);
+        if (!groups.has(g.key)) groups.set(g.key, { label: g.label, entries: [] });
+        groups.get(g.key)!.entries.push(entry);
+    }
 
-    const { eventsText, earliest, latest } = formatted;
-
-    // Use user-editable prompt template from config, with placeholder substitution
+    const manual = Boolean(options?.force || options?.sinceTimestamp);
     const promptTemplate = config.summarizationPrompt?.trim() || DEFAULT_SUMMARIZATION_PROMPT;
-    const summaryPrompt = promptTemplate
-        .replace(/\{\{char\}\}/gi, characterName)
-        .replace(/\{\{earliest\}\}/gi, earliest)
-        .replace(/\{\{latest\}\}/gi, latest)
-        .replace(/\{\{events\}\}/gi, eventsText);
+    let savedCount = 0;
+    let lastError: string | undefined;
+    let anyPending = false;
+    let globalLatest: string | undefined;
 
-    // Call LLM for summarization — compatible with all providers
-    // label 用于在「底层调用大模型日志」中标识这是记忆总结调用
-    const result = await simpleLLMCall(
-        apiConfig,
-        [{ role: "user", content: summaryPrompt }],
-        { temperature: 0.3, label: `记忆总结·${characterName}` },
-    );
+    for (const [groupKey, group] of groups) {
+        // 组水位线：手动总结用指定起点（force 则全量），自动总结用组自己的进度
+        const groupAfter = options?.force
+            ? undefined
+            : options?.sinceTimestamp ?? getGroupLastSummarizedTimestamp(characterId, groupKey) ?? undefined;
+        const groupEntries = groupAfter
+            ? group.entries.filter(e => e.timestamp > groupAfter)
+            : group.entries;
+        if (groupEntries.length === 0) continue;
+        // 门槛：自动总结时每组不满 3 条留存下轮（水位线不动）；手动总结不设门槛，有多少总结多少
+        if (!manual && groupEntries.length < GROUP_MIN_EVENTS) {
+            anyPending = true;
+            continue;
+        }
 
-    if (!result.content) {
-        return { success: false, error: result.error || "LLM 返回了空内容" };
+        const formatted = formatTimelineForSummarization(groupEntries);
+        if (!formatted) { lastError = "格式化事件数据失败"; continue; }
+        const { eventsText, earliest, latest } = formatted;
+
+        const summaryPrompt = promptTemplate
+            .replace(/\{\{char\}\}/gi, characterName)
+            .replace(/\{\{earliest\}\}/gi, earliest)
+            .replace(/\{\{latest\}\}/gi, latest)
+            .replace(/\{\{events\}\}/gi, eventsText);
+
+        // label 用于在「底层调用大模型日志」中标识这是记忆总结调用（按组标注）
+        const result = await simpleLLMCall(
+            apiConfig,
+            [{ role: "user", content: summaryPrompt }],
+            { temperature: 0.3, label: `记忆总结·${characterName}·${group.label}` },
+        );
+
+        if (!result.content) {
+            lastError = result.error || "LLM 返回了空内容";
+            continue;
+        }
+
+        if (result.wasTruncated) {
+            console.warn("[MemorySummarizer] Summary generation truncated:", result.finishReason);
+            lastError = "记忆总结结果疑似被截断，已取消入库，请稍后重试或提高模型输出上限";
+            continue;
+        }
+
+        const summary = result.content;
+
+        // Generate embedding for the summary (only if vector recall is enabled)
+        let embedding: number[] | undefined;
+        const embeddingApiConfig = config.vectorRecallEnabled ? resolveAuxiliaryApiConfig("embeddingApiConfigId") : null;
+        if (embeddingApiConfig && resolveEmbeddingModel(embeddingApiConfig)) {
+            try {
+                const emb = await generateEmbedding(summary, embeddingApiConfig);
+                if (emb) embedding = emb;
+            } catch { /* ignore */ }
+        }
+
+        const sourceSessionIds = Array.from(new Set(
+            groupEntries
+                .map(entry => entry.sessionId)
+                .filter((sessionId): sessionId is string => Boolean(sessionId)),
+        ));
+
+        // Save as long-term memory（sourceApp 填真实来源）
+        const now = new Date().toISOString();
+        const longTermEntry: MemoryEntry = {
+            id: `mem_lt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            characterId,
+            sourceApp: (groupKey === "group_chat" ? "chat" : groupKey) as MemoryEntry["sourceApp"],
+            type: "long_term",
+            content: summary,
+            embedding,
+            importance: 0.8,
+            createdAt: now,
+            updatedAt: now,
+            metadata: {
+                summarizedEvents: groupEntries.length,
+                timeSpan: `${earliest} ~ ${latest}`,
+                sourceSessionIds,
+                summaryGroup: groupKey,
+            },
+        };
+        await saveMemoryEntry(longTermEntry);
+        savedCount++;
+
+        // 组水位线推到该组最新事件；全局水位线同步推到全局最新（兼容旧读取方）
+        setGroupLastSummarizedTimestamp(characterId, groupKey, latest);
+        if (!globalLatest || latest > globalLatest) globalLatest = latest;
     }
 
-    if (result.wasTruncated) {
-        console.warn("[MemorySummarizer] Summary generation truncated:", result.finishReason);
-        return { success: false, error: "记忆总结结果疑似被截断，已取消入库，请稍后重试或提高模型输出上限" };
+    if (savedCount === 0) {
+        if (!options?.force && !anyPending) resetEventCounter(characterId);
+        return { success: false, error: lastError || "没有可总结的事件" };
     }
-
-    const summary = result.content;
-
-    // Generate embedding for the summary (only if vector recall is enabled)
-    let embedding: number[] | undefined;
-    const embeddingApiConfig = config.vectorRecallEnabled ? resolveAuxiliaryApiConfig("embeddingApiConfigId") : null;
-    if (embeddingApiConfig && resolveEmbeddingModel(embeddingApiConfig)) {
-        try {
-            const emb = await generateEmbedding(summary, embeddingApiConfig);
-            if (emb) embedding = emb;
-        } catch { /* ignore */ }
-    }
-
-    // Determine sourceApp: use the most common source among summarized entries
-    const sourceCounts = new Map<string, number>();
-    for (const e of allEntries) {
-        sourceCounts.set(e.sourceApp, (sourceCounts.get(e.sourceApp) || 0) + 1);
-    }
-    let dominantSource = "chat";
-    let maxCount = 0;
-    for (const [src, count] of sourceCounts) {
-        if (count > maxCount) { dominantSource = src; maxCount = count; }
-    }
-    const sourceSessionIds = Array.from(new Set(
-        allEntries
-            .map(entry => entry.sessionId)
-            .filter((sessionId): sessionId is string => Boolean(sessionId)),
-    ));
-
-    // Save as long-term memory
-    const now = new Date().toISOString();
-    const longTermEntry: MemoryEntry = {
-        id: `mem_lt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        characterId,
-        sourceApp: dominantSource as MemoryEntry["sourceApp"],
-        type: "long_term",
-        content: summary,
-        embedding,
-        importance: 0.8,
-        createdAt: now,
-        updatedAt: now,
-        metadata: {
-            summarizedEvents: allEntries.length,
-            timeSpan: `${earliest} ~ ${latest}`,
-            sourceSessionIds,
-        },
-    };
-    await saveMemoryEntry(longTermEntry);
 
     // Update last summarized timestamp + reset counter
-    setLastSummarizedTimestamp(characterId, latest);
+    if (globalLatest) setLastSummarizedTimestamp(characterId, globalLatest);
     resetEventCounter(characterId);
 
     // Enforce long-term limit
@@ -180,6 +223,6 @@ export async function runSummarizationPipeline(
     incrementCoreMemoryCounter(characterId);
     await maybeRunCoreMemoryPipeline(characterId, characterName);
 
-    console.log(`[MemorySummarizer] Summarized ${allEntries.length} entries → 1 long-term memory`);
+    console.log(`[MemorySummarizer] Summarized ${allEntries.length} entries → ${savedCount} long-term memories (by source group)`);
     return { success: true };
 }
