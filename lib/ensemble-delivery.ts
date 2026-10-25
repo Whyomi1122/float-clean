@@ -436,7 +436,37 @@ export function formatTranscriptAsNarration(
         const who = m.role === "user" ? "你" : (m.senderName || session.characterName);
         return `${who}：${m.content}`;
     });
-    return `（你们在手机上聊了起来）\n${lines.join("\n")}`;
+    return `（本次由剧情带入的内容：你们在手机上聊了起来）\n${lines.join("\n")}`;
+}
+
+/**
+ * 杀青归档的缺漏统计：哪些投递段的聊天没被归入剧情。
+ *
+ * 缺漏判定：投递过、但 timeline 里没有任何 endedAt（= 用户一直没点【返回剧情】）。
+ * 返回按时间排序的条目，供归档末尾标注「哪个时间段缺失聊天记录」。
+ */
+export type MissingDeliverySpan = {
+    characterName: string;
+    /** yyyy-MM-dd HH:mm */
+    startedAt: string;
+    /** 是否进过聊天室；没进过说明这条线完全没聊 */
+    opened: boolean;
+};
+
+export function collectMissingDeliverySpans(scriptId: string): MissingDeliverySpan[] {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (t: number) => {
+        const d = new Date(t);
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    return loadDeliverySessions()
+        .filter(s => s.scriptId === scriptId && !s.endedAt)
+        .sort((a, b) => a.startedAt - b.startedAt)
+        .map(s => ({
+            characterName: s.characterName,
+            startedAt: fmt(s.startedAt),
+            opened: s.opened === true,
+        }));
 }
 
 /** 放弃一段未归入的剧情对话（不写进剧本，只解除挂起状态）。 */

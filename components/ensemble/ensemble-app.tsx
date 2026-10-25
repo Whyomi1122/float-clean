@@ -3023,11 +3023,26 @@ ${lastSpeakerNote}
       // 没归入的聊天必须在归档末尾留下缺漏标注，否则用户无法判断剧情是否连贯
       const pending = getPendingSessions(s.id);
       if (pending.length > 0) {
+        const fmt = (t: number) => {
+          const d = new Date(t);
+          const p = (n: number) => String(n).padStart(2, "0");
+          return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        };
         const lines = pending.map(p => {
-          const start = new Date(p.startedAt).toLocaleString("zh-CN");
-          const end = new Date(p.startedAt + 1000 * 60).toLocaleString("zh-CN");
-          const msgCount = loadSessionTranscript(p.id)[0]?.messages.length ?? 0;
-          return `- ${start} ~ ${end} 与 ${p.characterName} 的聊天${skipChat ? "（本次未注入）" : ""}：${msgCount} 句，起点「${p.originContent.slice(0, 30)}…」`;
+          const msgs = loadSessionTranscript(p.id)[0]?.messages ?? [];
+          // 真实聊天跨度：取第一个/最后一个投递消息的时间，没有消息就退回投递时刻
+          const times = msgs.map(m => m.at).filter(Number.isFinite);
+          const firstAt = times.length > 0 ? Math.min(...times) : p.startedAt;
+          const lastAt = times.length > 0 ? Math.max(...times) : p.startedAt;
+          const span = msgs.length > 0 && Number.isFinite(firstAt) && Number.isFinite(lastAt)
+            ? `${fmt(firstAt)} ~ ${fmt(lastAt)}`
+            : `${fmt(p.startedAt)} 起`;
+          const state = msgs.length === 0
+            ? "（投递后未进入聊天室，或未产生对话）"
+            : p.opened
+              ? `（${msgs.length} 句对话，未点【返回剧情】归入）`
+              : `（${msgs.length} 句对话）`;
+          return `- ${span} 与 ${p.characterName} 的聊天${skipChat ? "（本次未注入）" : ""}${state}：起点「${p.originContent.slice(0, 30)}…」`;
         });
         content +=
           `\n\n【归档缺漏提示】以下时间段的聊天记录未并入本档案，请检查剧情是否连贯：\n` +
