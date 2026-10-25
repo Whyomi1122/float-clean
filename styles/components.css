@@ -2478,29 +2478,24 @@
   padding: 20px 24px;
 }
 
-.memory-settings-menu .memory-slider-item {
-  align-items: stretch;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.memory-slider-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* 滑块项改为「整行可点 → 弹层调节」防误触：行内只显示名称与当前值 */
+.memory-settings-menu .memory-slider-row {
   width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .memory-slider-current {
   min-width: 56px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  color: var(--c-text-secondary);
 }
 
 .memory-settings-slider {
-  flex: 0 0 auto;
-  margin-left: 48px;
-  width: calc(100% - 48px);
+  width: 100%;
 }
 
 .memory-settings-menu .menu-item:not(:last-child)::after {
@@ -2540,6 +2535,31 @@
   background: var(--c-page-body-bg);
   color: var(--c-icon);
   font-weight: 400;
+}
+
+/* 长期记忆按来源 app 分组：组头小字，组内沿用卡片间距 */
+.mem-source-group + .mem-source-group {
+  margin-top: 18px;
+}
+
+.mem-source-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 8px;
+  font-size: calc(11px*var(--app-text-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--c-text-secondary);
+}
+
+.mem-source-group-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--c-page-body-bg);
+  color: var(--c-icon);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .data-management-menu .menu-label-group > .menu-label {

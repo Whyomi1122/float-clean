@@ -52,7 +52,12 @@ export function ChatArchivePanel({
         setLoading(true);
         try {
             const list = await loadMemoryEntriesByType(characterId, "archive");
-            setArchives([...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            // 只显示本聊天室的普通模式归档；群像/剧情模式归档走群像那条线，不串到这里
+            setArchives(
+                list
+                    .filter(entry => entry.sourceApp === "chat")
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+            );
         } catch {
             setArchives([]);
         } finally {
@@ -74,15 +79,22 @@ export function ChatArchivePanel({
         if (!sessionId) return "";
         const msgs: ChatMessage[] = loadChatMessages(sessionId);
         const lines: string[] = [];
+        let inStory = false;
         for (const m of msgs) {
             if (m.isRetracted) continue;
+            // 剧情投递段（群像投递进来）用分界线隔开，提炼时与日常聊天分开叙述
+            const isStory = Boolean(m.deliverySessionId);
+            if (isStory && !inStory) lines.push("", "---------- 以下为剧情模式 ----------");
+            else if (!isStory && inStory) lines.push("", "---------- 以上为剧情模式 ----------", "");
+            inStory = isStory;
             const role = m.role === "user" ? "我" : m.role === "assistant" ? characterName : null;
             if (!role) continue;
             const text = (m.content || "").trim();
             if (!text) continue;
             lines.push(`${role}：${text}`);
         }
-        return lines.join("\n");
+        if (inStory) lines.push("", "---------- 以上为剧情模式 ----------");
+        return lines.join("\n").trim();
     }, [sessionId, characterName]);
 
     const handleSummarize = useCallback(async () => {

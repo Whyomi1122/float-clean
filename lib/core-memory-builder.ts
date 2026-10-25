@@ -145,6 +145,8 @@ export async function maybeRunCoreMemoryPipeline(
     characterName: string,
 ): Promise<void> {
     const config = loadMemoryConfig();
+    // 核心记忆管线已砍掉（2026-10-15）：归档/世界书人工维护为第一顺位，
+    // 其余记忆量小无需二次压缩。config 强制 autoBuildCoreEnabled=false，此处双保险。
     if (!config.autoBuildCoreEnabled) return;
 
     const counter = getCoreMemoryCounter(characterId);

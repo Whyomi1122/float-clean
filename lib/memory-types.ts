@@ -72,7 +72,7 @@ export type MemorySearchResult = {
  * Default summarization prompt template.
  * Placeholders: {{char}}, {{earliest}}, {{latest}}, {{events}}
  */
-export const DEFAULT_SUMMARIZATION_PROMPT = `你是一个记忆整理助手。根据以下事件记录，创建一段简洁的事实性总结。
+export const DEFAULT_SUMMARIZATION_PROMPT = `你是一个记忆归档整理助手。请将以下事件记录整理为一段归档式长期记忆。
 
 角色：{{char}}
 时间跨度：{{earliest}} 至 {{latest}}
@@ -81,14 +81,16 @@ export const DEFAULT_SUMMARIZATION_PROMPT = `你是一个记忆整理助手。�
 {{events}}
 
 要求：
-- 用第三人称描述{{char}}和用户之间的互动
-- 保留关键事实：提到的名字、做出的承诺、情感变化、关系里程碑
-- 保留用户分享的具体信息（生日、偏好、习惯）
-- 保留朋友圈等非聊天事件中的关键信息
-- 100-200字
-- 不要包含格式标记
+- 第三人称、按时间顺序分段叙述，每段以【时间段】开头（例：【2024年12月初 周一 上午】），时间粒度以事件密度为准
+- 每段是连贯的叙事段落，写清事件经过、人物言行与反应，不要要点罗列
+- 保留具体事实：人名、地点、物品、金额、承诺、约定，不得省略或改写
+- 保留用户分享的个人信息（生日、偏好、习惯、关系）
+- 语气客观克制，不评价、不推测、不虚构未记录的内容
+- 篇幅随事件量伸缩，不注水、不刻意删减
+- 结尾另起一段输出【关键锚点】：以「·」列表归纳物品状态、重要事实澄清、未决隐患、关系变化
+- 不输出 JSON 或其他格式标记
 
-总结：`;
+归档：`;
 
 /**
  * Default core-memory summarization prompt template.
@@ -122,7 +124,8 @@ export const DEFAULT_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手�
 
 export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
     autoSummarizeEnabled: true,
-    autoBuildCoreEnabled: true,
+    /** 核心记忆管线已砍掉（2026-10-15），强制 false；设置页不再提供开关 */
+    autoBuildCoreEnabled: false,
     vectorRecallEnabled: true,
     maxLongTermEntries: 500,
     summarizationEventInterval: 80,

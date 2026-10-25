@@ -180,7 +180,8 @@ export function loadMemoryConfig(): MemoryConfig {
     try {
         const raw = kvGet(CONFIG_KEY);
         if (!raw) return { ...DEFAULT_MEMORY_CONFIG };
-        return { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(raw) };
+        // 核心记忆管线已砍掉：无论旧配置存了什么，强制关闭
+        return { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(raw), autoBuildCoreEnabled: false };
     } catch {
         return { ...DEFAULT_MEMORY_CONFIG };
     }
