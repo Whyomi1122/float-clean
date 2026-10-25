@@ -30,7 +30,7 @@ import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding
 import { BINDING_ACCENTS } from "@/lib/ui-accent-colors";
 
 type MemoryView = "list" | "detail" | "settings";
-type MemoryTab = "short" | "shared" | "core" | "long";
+type MemoryTab = "short" | "shared" | "core" | "long" | "archive";
 type MemoryBudgetKey = "shortTermTokenBudget" | "coreMemoryTokenBudget" | "longTermTokenBudget";
 
 const MEMORY_TOKEN_BUDGET_MAX = 100000;
@@ -90,6 +90,7 @@ const MEMORY_SOURCE_OPTIONS: Array<{ key: MemorySourceKey; label: string }> = [
     { key: "vn", label: "漫卷" },
     { key: "adventure", label: "地图冒险" },
     { key: "custom_app", label: "自定义应用" },
+    { key: "ensemble", label: "群像剧本" },
 ];
 
 type MemoryEditorState = {
@@ -189,6 +190,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
     const [activeTab, setActiveTab] = useState<MemoryTab>("short");
     const [coreEntries, setCoreEntries] = useState<MemoryEntry[]>([]);
     const [longTermEntries, setLongTermEntries] = useState<MemoryEntry[]>([]);
+    /** 归档 Tab：群像杀青写入的只读归档（type=archive, sourceApp=ensemble），并列只读不进总结素材 */
+    const [archiveEntries, setArchiveEntries] = useState<MemoryEntry[]>([]);
     const [shortTermEvents, setShortTermEvents] = useState<NativeTimelineEntry[]>([]);
     const [sharedEvents, setSharedEvents] = useState<NativeTimelineEntry[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -272,12 +275,14 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
         setLoading(true);
         try {
             await hydrateChatStorage();
-            const [core, lt] = await Promise.all([
+            const [core, lt, arc] = await Promise.all([
                 loadMemoryEntriesByType(charId, "core"),
                 loadMemoryEntriesByType(charId, "long_term"),
+                loadMemoryEntriesByType(charId, "archive").catch(() => []),
             ]);
             setCoreEntries(core);
             setLongTermEntries(lt);
+            setArchiveEntries(arc);
         } catch {
             setCoreEntries([]);
             setLongTermEntries([]);
@@ -699,6 +704,37 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                         )
                     ) : activeTab === "core" ? (
                         renderMemoryEntries("core", coreEntries, "暂无核心记忆。长期记忆累计到设定条数后会自动提炼，也可以手动新增。")
+                    ) : activeTab === "archive" ? (
+                        /* ── 归档：群像杀青写入的剧情归档，并列只读，不进总结素材 ── */
+                        archiveEntries.length === 0 ? (
+                            <div className="mem-empty-card">
+                                <p>暂无归档。在群像 App 杀青剧本后，剧情归档会自动出现在这里。</p>
+                            </div>
+                        ) : (
+                            archiveEntries.map(entry => (
+                                <div
+                                    key={entry.id}
+                                    className="g-card memory-report-card"
+                                    onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+                                >
+                                    <div className="mem-report-head">
+                                        <span className="ts-11 text-secondary" style={{ letterSpacing: "1px" }}>[ DATE: {relativeTime(entry.createdAt)} ]</span>
+                                        <span
+                                            className="ts-11 font-bold px-2 py-0.5 rounded-full"
+                                            style={{ background: "rgba(192,174,142,0.18)", color: "#8a7550", letterSpacing: "1px" }}
+                                        >
+                                            ENSEMBLE
+                                        </span>
+                                    </div>
+                                    <p
+                                        className={`ts-13 leading-relaxed whitespace-pre-wrap${expandedId === entry.id ? "" : " line-clamp-3"}`}
+                                        style={{ marginTop: "6px" }}
+                                    >
+                                        {entry.content}
+                                    </p>
+                                </div>
+                            ))
+                        )
                     ) : (
                         /* ── Long-term: Summarized Memories ── */
                         renderMemoryEntries("long_term", longTermEntries, "暂无长期记忆。点击设置页的手动总结，或直接新增一条记忆。")
@@ -712,7 +748,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                         { key: "short" as const, icon: Clock, label: "短期" },
                         { key: "shared" as const, icon: Users, label: "共享事件" },
                         { key: "long" as const, icon: Archive, label: "长期" },
-                        { key: "core" as const, icon: Archive, label: "核心" },
+                        { key: "archive" as const, icon: Archive, label: "归档" },
                     ]).map(tab => (
                         <button
                             key={tab.key}

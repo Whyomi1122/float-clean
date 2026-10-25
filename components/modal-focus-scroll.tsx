@@ -27,16 +27,17 @@ export function ModalFocusScroll() {
             // 找最近的弹层内容区
             const body = el.closest<HTMLElement>('[data-ui="modal-body"], .modal-body');
             if (!body) return;
-            const scroll = (node: HTMLElement) => {
-                const r = el.getBoundingClientRect();
-                const b = node.getBoundingClientRect();
-                // 元素中心滚到容器中心
-                node.scrollBy({
-                    top: (r.top + r.height / 2) - (b.top + b.height / 2),
-                    behavior: "smooth",
-                });
-            };
-            scroll(body);
+            const r = el.getBoundingClientRect();
+            // 以「可视区」（排除键盘遮挡）为基准：把输入框滚到可视区偏上 40% 处。
+            // 之前滚到「弹层中心」，但底部弹层下半截整个被键盘盖住时，
+            // 弹层中心也在键盘后面，等于白滚。
+            const vv = window.visualViewport;
+            const visibleTop = vv ? vv.offsetTop : 0;
+            const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+            const targetY = visibleTop + (visibleBottom - visibleTop) * 0.4;
+            const delta = (r.top + r.height / 2) - targetY;
+            if (Math.abs(delta) < 8) return;
+            body.scrollBy({ top: delta, behavior: "smooth" });
         };
 
         const onFocusIn = (event: FocusEvent) => {

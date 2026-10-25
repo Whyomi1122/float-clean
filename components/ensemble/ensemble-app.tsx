@@ -498,7 +498,31 @@ function pickVoiceText(raw: string): string {
     // 行尾译文括号：全角（）优先，半角 () 兜底。非贪婪，避免误吃中间括号。
     .map((s) => (s.replace(/[（(][^）)]*[）)]\s*$/, "") || s).trim())
     .filter(Boolean);
-  return lines.join("，");
+  if (lines.length <= 1) return lines.join("，");
+
+  // 语言过滤：译文行不再读出来。以占比最多的语言为准（说的哪个语言就读哪个语言），
+  // 其余语言的行视为「给玩家看的翻译」直接丢弃——例如日语台词 + 独立一行的中文翻译，
+  // 之前会把中文也读一遍。
+  const langs = lines.map(detectVoiceLineLang);
+  const counts = new Map<string, number>();
+  for (const l of langs) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const kept = lines.filter((_, i) => langs[i] === dominant);
+  // 兜底：万一全被滤掉（理论上不可能，dominant 至少占一行）就退回全部
+  return (kept.length ? kept : lines).join("，");
+}
+
+/** 粗粒度行级语言判断：专为「台词 vs 译文行」区分服务，不做精细 NLP。 */
+function detectVoiceLineLang(s: string): "ja" | "ko" | "zh" | "latin" {
+  const kana = (s.match(/[\u3040-\u30ff]/g) ?? []).length;
+  const hangul = (s.match(/[\uac00-\ud7af]/g) ?? []).length;
+  const han = (s.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  const latin = (s.match(/[A-Za-z]/g) ?? []).length;
+  // 日语一定带假名（汉字再多重码也是假名撑语法），优先判假名
+  if (kana > 0) return "ja";
+  if (hangul > 0) return "ko";
+  if (latin > han) return "latin";
+  return "zh";
 }
 
 /** 剧本会话字体的 font-family 注册名（运行时生成，与具体剧本无关；
