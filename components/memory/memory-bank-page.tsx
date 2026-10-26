@@ -19,10 +19,11 @@ import {
     getAllCharacterIdsWithMemories,
     getMemoryCountByType,
     getLastSummarizedTimestamp,
+    setGroupLastSummarizedTimestamp,
 } from "@/lib/memory-storage";
 import { hydrateChatStorage } from "@/lib/chat-storage";
 import { loadNativeTimeline, type NativeTimelineEntry } from "@/lib/short-term-assembler";
-import { runSummarizationPipeline } from "@/lib/memory-summarizer";
+import { runSummarizationPipeline, getSummaryGroupProgress, type SummaryGroupProgress } from "@/lib/memory-summarizer";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding";
 import { BINDING_ACCENTS } from "@/lib/ui-accent-colors";
@@ -57,19 +58,24 @@ class MemoryDetailBoundary extends Component<{ children?: ReactNode }, { failed:
     }
 }
 
-type SummarizeRange = "auto" | "all" | number;
-
-const SUMMARIZE_RANGE_OPTIONS: Array<{ value: SummarizeRange; label: string; desc?: string }> = [
-    { value: "auto", label: "接着上次总结", desc: "默认方式，从上次进度继续" },
-    { value: 1, label: "最近 1 天" },
-    { value: 3, label: "最近 3 天" },
-    { value: 7, label: "最近 7 天" },
-    { value: 14, label: "最近 14 天" },
-    { value: 30, label: "最近 30 天" },
-    { value: "all", label: "全部历史" },
-];
-
 type MemorySourceKey = keyof NonNullable<MemoryConfig["shortTermAllowedSources"]>;
+
+/** 水位线 ISO → 面板展示（M月d日 HH:mm） */
+function formatWaterlineDisplay(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 水位线 ISO → datetime-local 输入值（本地时区） */
+function formatWaterlineForInput(iso: string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 /** 记忆来源开关：同时作用于短期上下文与长期总结。
  *  一个选项可绑定多个内部 key（如聊天室普通模式 = 私聊+群聊），开关时整体联动 */
@@ -251,7 +257,12 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     const [entryMenuId, setEntryMenuId] = useState<string | null>(null);
     const [memoryEditor, setMemoryEditor] = useState<MemoryEditorState | null>(null);
     const [savingMemory, setSavingMemory] = useState(false);
-    const [summarizeRangeOpen, setSummarizeRangeOpen] = useState(false);
+    const [summarizeSheetOpen, setSummarizeSheetOpen] = useState(false);
+    /** 各来源分组的水位线进度（打开面板时计算） */
+    const [groupProgress, setGroupProgress] = useState<SummaryGroupProgress[]>([]);
+    /** 正在编辑水位线的分组 key；waterlineDraft 为 datetime-local 草稿值 */
+    const [editingWaterlineKey, setEditingWaterlineKey] = useState<string | null>(null);
+    const [waterlineDraft, setWaterlineDraft] = useState("");
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     /** A1-a：设置页内的角色选择弹层 */
     const [charPickerOpen, setCharPickerOpen] = useState(false);
@@ -379,30 +390,43 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         onNotice?.(msg);
     };
 
-    const handleManualSummarize = async (range: SummarizeRange = "auto") => {
+    /** 打开总结进度面板（各组水位线 + 待总结数） */
+    const openSummarizeSheet = () => {
         if (!selectedCharId || summarizing) return;
-        setSummarizeRangeOpen(false);
+        setGroupProgress(getSummaryGroupProgress(selectedCharId, SOURCE_APP_LABELS));
+        setEditingWaterlineKey(null);
+        setSummarizeSheetOpen(true);
+    };
+
+    /** datetime-local → ISO（空串 = 清除该组水位线） */
+    const handleSaveWaterline = (groupKey: string) => {
+        if (!selectedCharId) return;
+        const ts = waterlineDraft ? new Date(waterlineDraft).toISOString() : null;
+        if (waterlineDraft && Number.isNaN(new Date(waterlineDraft).getTime())) {
+            showNotice("时间格式无效");
+            return;
+        }
+        setGroupLastSummarizedTimestamp(selectedCharId, groupKey, ts);
+        setGroupProgress(getSummaryGroupProgress(selectedCharId, SOURCE_APP_LABELS));
+        setEditingWaterlineKey(null);
+        showNotice("水位线已更新");
+    };
+
+    const handleManualSummarize = async () => {
+        if (!selectedCharId || summarizing) return;
+        // 增量总结：各组只取水位线之后的事件，绕过每组最少条数门槛
+        const pending = getSummaryGroupProgress(selectedCharId, SOURCE_APP_LABELS)
+            .reduce((sum, g) => sum + g.pendingCount, 0);
+        if (pending === 0) {
+            setSummarizeSheetOpen(false);
+            showNotice("没有待总结的新事件");
+            return;
+        }
+        setSummarizeSheetOpen(false);
         setSummarizing(true);
         showNotice("正在总结中…");
         try {
-            const sinceTimestamp = typeof range === "number"
-                ? new Date(Date.now() - range * 86400000).toISOString()
-                : undefined;
-            // 门槛交给管线内部按组判断（手动总结不设每组最少条数），这里只拦住「完全没料」
-            const timelineCount = loadNativeTimeline(
-                selectedCharId,
-                sinceTimestamp ? { afterTimestamp: sinceTimestamp } : undefined,
-            ).length;
-            if (timelineCount === 0) {
-                showNotice("所选范围内没有可总结的事件");
-                return;
-            }
-
-            const result = await runSummarizationPipeline(
-                selectedCharId,
-                selectedChar?.name ?? "",
-                range === "all" ? { force: true } : sinceTimestamp ? { sinceTimestamp } : undefined,
-            );
+            const result = await runSummarizationPipeline(selectedCharId, selectedChar?.name ?? "", { manual: true });
             if (result.success) {
                 showNotice("总结完成");
                 loadDetailData(selectedCharId);
@@ -881,7 +905,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                                 showNotice("正在总结中，请稍候…");
                                 return;
                             }
-                            setSummarizeRangeOpen(true);
+                            openSummarizeSheet();
                         }}
                         disabled={!selectedCharId}
                     >
@@ -947,35 +971,84 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     </div>
                 </div>
 
-                {summarizeRangeOpen ? (
-                    <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setSummarizeRangeOpen(false)}>
-                        <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
-                            <div className="modal-header" data-ui="modal-header">
-                                <button className="modal-header-btn modal-header-btn-muted" onClick={() => setSummarizeRangeOpen(false)}><X size={18} /></button>
-                                <h3 className="modal-title">本次总结范围</h3>
-                                <span style={{ width: 44 }} />
-                            </div>
-                            <div className="modal-body modal-body-tight" data-ui="modal-body">
-                                <p className="ts-11 text-secondary px-4 pt-1 pb-2">仅对这一次手动总结生效，不影响自动总结的间隔设置。</p>
-                                <div className="menu-group">
-                                    {SUMMARIZE_RANGE_OPTIONS.map(option => (
+                {summarizeSheetOpen ? (() => {
+                    const totalPending = groupProgress.reduce((sum, g) => sum + g.pendingCount, 0);
+                    return (
+                        <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setSummarizeSheetOpen(false)}>
+                            <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
+                                <div className="modal-header" data-ui="modal-header">
+                                    <button className="modal-header-btn modal-header-btn-muted" onClick={() => setSummarizeSheetOpen(false)}><X size={18} /></button>
+                                    <h3 className="modal-title">总结进度</h3>
+                                    <span style={{ width: 44 }} />
+                                </div>
+                                <div className="modal-body modal-body-tight" data-ui="modal-body">
+                                    <p className="ts-11 text-secondary px-4 pt-1 pb-2">每个来源独立记录上次总结到的时间。手动总结只处理水位线之后的新事件，不设最少条数限制。</p>
+                                    {groupProgress.length === 0 ? (
+                                        <p className="ts-12 text-secondary px-4 py-3">暂无可总结的记忆事件。</p>
+                                    ) : (
+                                        <div className="menu-group">
+                                            {groupProgress.map(group => (
+                                                <div key={group.key} className="menu-item items-start">
+                                                    <div className="menu-label-group flex-1">
+                                                        <span className="menu-label">{group.label}</span>
+                                                        {editingWaterlineKey === group.key ? (
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <input
+                                                                    type="datetime-local"
+                                                                    className="mem-waterline-input"
+                                                                    value={waterlineDraft}
+                                                                    onChange={e => setWaterlineDraft(e.target.value)}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    className="mem-waterline-btn"
+                                                                    onClick={() => handleSaveWaterline(group.key)}
+                                                                >保存</button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="mem-waterline-btn mem-waterline-btn-muted"
+                                                                    onClick={() => { setEditingWaterlineKey(null); setWaterlineDraft(""); }}
+                                                                >取消</button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="menu-desc text-left mt-0.5"
+                                                                onClick={() => {
+                                                                    setEditingWaterlineKey(group.key);
+                                                                    setWaterlineDraft(formatWaterlineForInput(group.lastTimestamp));
+                                                                }}
+                                                            >
+                                                                {group.lastTimestamp
+                                                                    ? `已总结至 ${formatWaterlineDisplay(group.lastTimestamp)} · 待总结 ${group.pendingCount} 条（点击调整）`
+                                                                    : `尚未总结 · 共 ${group.pendingCount} 条（点击调整）`}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="px-4 py-3">
                                         <button
-                                            key={String(option.value)}
                                             type="button"
-                                            className="menu-item w-full text-left"
-                                            onClick={() => void handleManualSummarize(option.value)}
+                                            className="w-full rounded-xl py-2.5 text-sm font-medium"
+                                            style={{
+                                                background: BINDING_ACCENTS.memory,
+                                                color: "#fff",
+                                                opacity: totalPending === 0 ? 0.5 : 1,
+                                            }}
+                                            disabled={totalPending === 0}
+                                            onClick={() => void handleManualSummarize()}
                                         >
-                                            <div className="menu-label-group">
-                                                <span className="menu-label">{option.label}</span>
-                                                {option.desc ? <span className="menu-desc">{option.desc}</span> : null}
-                                            </div>
+                                            {totalPending === 0 ? "没有待总结的新事件" : `开始总结（待总结 ${totalPending} 条）`}
                                         </button>
-                                    ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                ) : null}
+                    );
+                })() : null}
 
                 {/* Memory source filter — one entry row, full picker lives in a bottom sheet */}
                 <p className="menu-group-desc mx-2">记忆来源</p>

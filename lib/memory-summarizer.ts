@@ -78,6 +78,8 @@ export async function runSummarizationPipeline(
         force?: boolean;
         /** 手动指定总结起点（覆盖进度水位线）；force 为真时忽略 */
         sinceTimestamp?: string;
+        /** 手动触发的增量总结：绕过每组最少条数门槛，但仍按水位线增量 */
+        manual?: boolean;
     }
 ): Promise<{ success: boolean; error?: string }> {
     const config = loadMemoryConfig();
@@ -109,7 +111,7 @@ export async function runSummarizationPipeline(
         groups.get(g.key)!.entries.push(entry);
     }
 
-    const manual = Boolean(options?.force || options?.sinceTimestamp);
+    const manual = Boolean(options?.force || options?.sinceTimestamp || options?.manual);
     const promptTemplate = config.summarizationPrompt?.trim() || DEFAULT_SUMMARIZATION_PROMPT;
     let savedCount = 0;
     let lastError: string | undefined;
@@ -225,4 +227,61 @@ export async function runSummarizationPipeline(
 
     console.log(`[MemorySummarizer] Summarized ${allEntries.length} entries → ${savedCount} long-term memories (by source group)`);
     return { success: true };
+}
+
+/** 每个总结分组的进度信息（供手动总结的进度面板展示/编辑水位线）。 */
+export interface SummaryGroupProgress {
+    /** 分组 key（与水位线存储一致） */
+    key: string;
+    /** 展示名 */
+    label: string;
+    /** 该组当前水位线（上次总结到的时间），null 表示尚未总结过 */
+    lastTimestamp: string | null;
+    /** 水位线之后待总结条数 */
+    pendingCount: number;
+    /** 该组事件总数 */
+    totalCount: number;
+}
+
+/**
+ * 读取某角色各总结分组的进度（水位线 + 待总结数）。
+ * labels: 分组 key → 展示名 的映射（页面可传入来源设置里的显示名覆盖默认）。
+ */
+export function getSummaryGroupProgress(
+    characterId: string,
+    labels?: Record<string, string>,
+): SummaryGroupProgress[] {
+    const config = loadMemoryConfig();
+    const timeline = filterTimelineByAllowedSources(
+        loadNativeTimeline(characterId),
+        config.shortTermAllowedSources,
+    );
+
+    const groups = new Map<string, { label: string; entries: typeof timeline }>();
+    for (const entry of timeline) {
+        const g = resolveSummaryGroup(entry);
+        if (!groups.has(g.key)) groups.set(g.key, { label: g.label, entries: [] });
+        groups.get(g.key)!.entries.push(entry);
+    }
+
+    const progress: SummaryGroupProgress[] = [];
+    for (const [key, group] of groups) {
+        const lastTimestamp = getGroupLastSummarizedTimestamp(characterId, key);
+        const lastMs = lastTimestamp ? new Date(lastTimestamp).getTime() : NaN;
+        let pendingCount = 0;
+        for (const entry of group.entries) {
+            const ts = new Date(entry.timestamp).getTime();
+            if (Number.isNaN(lastMs) || ts > lastMs) pendingCount++;
+        }
+        progress.push({
+            key,
+            label: labels?.[key] ?? group.label,
+            lastTimestamp: lastTimestamp ?? null,
+            pendingCount,
+            totalCount: group.entries.length,
+        });
+    }
+    // 待总结多的排前面，全部为 0 时按总量排
+    progress.sort((a, b) => (b.pendingCount - a.pendingCount) || (b.totalCount - a.totalCount));
+    return progress;
 }

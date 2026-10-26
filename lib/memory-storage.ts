@@ -250,9 +250,10 @@ export function getGroupLastSummarizedTimestamp(characterId: string, groupKey: s
         || null;
 }
 
-export function setGroupLastSummarizedTimestamp(characterId: string, groupKey: string, ts: string): void {
+export function setGroupLastSummarizedTimestamp(characterId: string, groupKey: string, ts: string | null): void {
     if (typeof window === "undefined") return;
-    kvSet(groupSummaryKey(characterId, groupKey), ts);
+    // null/空 = 清除该组水位线（回落到旧全局水位线或从未总结）
+    kvSet(groupSummaryKey(characterId, groupKey), ts ?? "");
 }
 
 export function getCoreMemoryCounter(characterId: string): number {

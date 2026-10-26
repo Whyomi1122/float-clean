@@ -2584,6 +2584,33 @@
   50% { opacity: 1; transform: scale(1.1); }
 }
 
+/* 总结进度面板：水位线编辑 */
+.mem-waterline-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--c-border, #d8dce8);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--c-text, #3a3f52);
+  background: var(--c-surface, #fff);
+}
+
+.mem-waterline-btn {
+  flex-shrink: 0;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--c-accent, #5661b3);
+}
+
+.mem-waterline-btn-muted {
+  color: var(--c-text-secondary, #7a8095);
+  background: var(--c-surface-muted, #eef0f6);
+}
+
 .data-management-menu .menu-label-group > .menu-label {
   font-weight: 600;
 }
