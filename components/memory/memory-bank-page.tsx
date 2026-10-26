@@ -125,89 +125,78 @@ function MemorySettingsIcon({ icon: Icon, color }: { icon: LucideIcon; color: st
     );
 }
 
+/** 收放式行内滑杆（与聊天 App「朋友圈互动设置」同一实现）：
+ *  收起态只显示一条细轨，点击才展开可拖动滑杆，避免翻页滚动时误触 */
 function MemorySettingsSliderItem({
     icon,
     color,
     label,
     desc,
     value,
-    onOpenPicker,
+    min,
+    max,
+    step,
+    onChange,
 }: {
     icon: LucideIcon;
     color: string;
     label: string;
     desc: string;
     value: number;
-    /** 方案A防误触：行内滑块改为点击整行弹底部弹层调节 */
-    onOpenPicker: () => void;
+    min: number;
+    max: number;
+    step: number;
+    onChange: (value: number) => void;
 }) {
+    const [active, setActive] = useState(false);
+    const pct = Math.max(0, Math.min(100, Math.round(((value - min) / Math.max(1, max - min)) * 100)));
+    if (!active) {
+        return (
+            <div className="menu-item profile-slider-item">
+                <MemorySettingsIcon icon={icon} color={color} />
+                <div className="menu-label-group">
+                    <span className="menu-label">{label}</span>
+                    <span className="menu-desc">{desc}</span>
+                </div>
+                <button
+                    type="button"
+                    className="profile-slider-mini"
+                    aria-label={`${label}：${value}`}
+                    onClick={() => setActive(true)}
+                >
+                    <span className="profile-slider-mini-fill" style={{ width: `${pct}%` }} />
+                </button>
+                <span className="profile-slider-current">{value}</span>
+            </div>
+        );
+    }
     return (
-        <button type="button" className="menu-item memory-slider-item memory-slider-row" onClick={onOpenPicker}>
+        <div className="menu-item profile-slider-item is-active">
             <MemorySettingsIcon icon={icon} color={color} />
             <div className="menu-label-group">
                 <span className="menu-label">{label}</span>
                 <span className="menu-desc">{desc}</span>
             </div>
-            <div className="menu-right">
-                <span className="ui-slider-value memory-slider-current">{value}</span>
-                <ChevronRight size={16} />
-            </div>
-        </button>
-    );
-}
-
-/** 滑块小弹层（方向2）：居中小卡片 + 细滑杆，拖动只改草稿，取消回滚、确认才落库 */
-function MemorySliderSheet({
-    label,
-    value,
-    min,
-    max,
-    step,
-    onChange,
-    onDone,
-    onClose,
-}: {
-    label: string;
-    value: number;
-    min: number;
-    max: number;
-    step: number;
-    /** 仅在点「确认」时调用一次，写入并持久化 */
-    onChange: (value: number) => void;
-    onDone: () => void;
-    onClose: () => void;
-}) {
-    const [draft, setDraft] = useState(value);
-    useEffect(() => { setDraft(value); }, [value]);
-    return (
-        <div className="modal-overlay" data-ui="modal" onClick={onClose}>
-            <div className="mem-slider-modal" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
-                <h3 className="mem-slider-modal-title">{label}</h3>
-                <p className="mem-slider-modal-value">{draft}</p>
-                <input
-                    type="range"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={draft}
-                    onChange={e => setDraft(Number(e.target.value))}
-                    className="ui-slider memory-settings-slider w-full"
-                    aria-label={label}
-                />
-                <div className="flex justify-between ts-12 text-secondary mt-1">
-                    <span>{min}</span>
-                    <span>{max}</span>
-                </div>
-                <div className="mem-slider-modal-actions">
-                    <button className="ui-btn p-2.5 flex-1" onClick={onClose}>取消</button>
-                    <button
-                        className="ui-btn ui-btn-primary p-2.5 flex-1"
-                        onClick={() => { onChange(draft); onDone(); }}
-                    >
-                        确认
-                    </button>
-                </div>
-            </div>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={value}
+                autoFocus
+                onChange={event => onChange(Number(event.target.value))}
+                onBlur={() => setActive(false)}
+                onPointerUp={event => {
+                    // 松手把当前值写到底层，保证拖到极值也生效
+                    const el = event.currentTarget;
+                    const next = Number(el.value);
+                    if (next !== value) onChange(next);
+                    if (document.activeElement !== el) setActive(false);
+                }}
+                className="ui-slider profile-settings-slider"
+                aria-label={label}
+            />
+            <span className="profile-slider-current">{value}</span>
         </div>
     );
 }
@@ -266,16 +255,6 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     /** A1-a：设置页内的角色选择弹层 */
     const [charPickerOpen, setCharPickerOpen] = useState(false);
-    /** 方案A防误触：当前正在弹层调节的预算/间隔项 */
-    const [sliderSheet, setSliderSheet] = useState<null | {
-        key: "shortTermTokenBudget" | "longTermTokenBudget" | "interval";
-        label: string;
-        value: number;
-        min: number;
-        max: number;
-        step: number;
-    }>(null);
-
     const disabledSourceCount = MEMORY_SOURCE_OPTIONS
         .filter(source => source.keys.some(key => (config.shortTermAllowedSources ?? {})[key] === false)).length;
 
@@ -404,6 +383,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         if (!selectedCharId || summarizing) return;
         setSummarizeRangeOpen(false);
         setSummarizing(true);
+        showNotice("正在总结中…");
         try {
             const sinceTimestamp = typeof range === "number"
                 ? new Date(Date.now() - range * 86400000).toISOString()
@@ -896,7 +876,11 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         type="button"
                         className="menu-item"
                         onClick={() => {
-                            if (!selectedCharId || summarizing) return;
+                            if (!selectedCharId) return;
+                            if (summarizing) {
+                                showNotice("正在总结中，请稍候…");
+                                return;
+                            }
                             setSummarizeRangeOpen(true);
                         }}
                         disabled={!selectedCharId}
@@ -905,21 +889,39 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆手动总结</span>
                             <span className="menu-desc">
-                                {selectedCharId ? "将新产生的事件整理为长期记忆" : "请先选择角色"}
+                                {summarizing
+                                    ? "正在总结中…"
+                                    : selectedCharId
+                                        ? "立即把新事件整理为长期记忆"
+                                        : "请先选择角色"}
                             </span>
                         </div>
                         <div className="menu-right">
-                            <span className="menu-desc mr-1">
-                                {config.autoSummarizeEnabled ?? true ? `自动 · 每 ${config.summarizationEventInterval ?? 80} 条` : "自动总结已关"}
-                            </span>
-                            <ChevronRight size={16} />
+                            {summarizing ? (
+                                <span className="mem-summarizing-dot" aria-hidden="true" />
+                            ) : (
+                                <ChevronRight size={16} />
+                            )}
                         </div>
                     </button>
+                    <div className={config.autoSummarizeEnabled ?? true ? "" : "opacity-50"}>
+                        <MemorySettingsSliderItem
+                            icon={Clock}
+                            color={BINDING_ACCENTS.api}
+                            label="总结间隔"
+                            desc="每 N 条事件自动将新事件整理为长期记忆"
+                            value={config.summarizationEventInterval ?? 80}
+                            min={10}
+                            max={200}
+                            step={10}
+                            onChange={nextValue => saveInterval(nextValue)}
+                        />
+                    </div>
                     <div className="menu-item">
                         <MemorySettingsIcon icon={Clock} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆自动总结</span>
-                            <span className="menu-desc">每隔一定条数自动将新事件整理为长期记忆</span>
+                            <span className="menu-desc">按上面「总结间隔」的条数自动触发</span>
                         </div>
                         <div className="menu-right">
                             <Toggle checked={config.autoSummarizeEnabled ?? true} onChange={(v) => {
@@ -1069,7 +1071,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     </div>
                 ) : null}
 
-                {/* Token budget——行内只显示数值，点击弹层调节避免误触 */}
+                {/* Token budget——行内收起细轨，点击展开滑杆，防翻页误触 */}
                 <p className="menu-group-desc mx-2">控制截断量</p>
                 <div className="menu-group">
                     <MemorySettingsSliderItem
@@ -1078,14 +1080,10 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         label="短期记忆+最近上下文"
                         desc="聊天历史、朋友圈、群聊与跨应用近期事件截断量"
                         value={config.shortTermTokenBudget}
-                        onOpenPicker={() => setSliderSheet({
-                            key: "shortTermTokenBudget",
-                            label: "短期记忆+最近上下文",
-                            value: config.shortTermTokenBudget,
-                            min: MEMORY_TOKEN_BUDGET_MIN.shortTermTokenBudget,
-                            max: MEMORY_TOKEN_BUDGET_MAX,
-                            step: MEMORY_TOKEN_BUDGET_STEP.shortTermTokenBudget,
-                        })}
+                        min={MEMORY_TOKEN_BUDGET_MIN.shortTermTokenBudget}
+                        max={MEMORY_TOKEN_BUDGET_MAX}
+                        step={MEMORY_TOKEN_BUDGET_STEP.shortTermTokenBudget}
+                        onChange={nextValue => saveBudget("shortTermTokenBudget", nextValue)}
                     />
                     <MemorySettingsSliderItem
                         icon={Archive}
@@ -1093,53 +1091,12 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         label="长期记忆"
                         desc="总结记忆注入量"
                         value={config.longTermTokenBudget}
-                        onOpenPicker={() => setSliderSheet({
-                            key: "longTermTokenBudget",
-                            label: "长期记忆",
-                            value: config.longTermTokenBudget,
-                            min: MEMORY_TOKEN_BUDGET_MIN.longTermTokenBudget,
-                            max: MEMORY_TOKEN_BUDGET_MAX,
-                            step: MEMORY_TOKEN_BUDGET_STEP.longTermTokenBudget,
-                        })}
+                        min={MEMORY_TOKEN_BUDGET_MIN.longTermTokenBudget}
+                        max={MEMORY_TOKEN_BUDGET_MAX}
+                        step={MEMORY_TOKEN_BUDGET_STEP.longTermTokenBudget}
+                        onChange={nextValue => saveBudget("longTermTokenBudget", nextValue)}
                     />
                 </div>
-
-                {/* Summarization interval */}
-                <p className="menu-group-desc mx-2">自动总结间隔</p>
-                <div className="menu-group">
-                    <MemorySettingsSliderItem
-                        icon={Clock}
-                        color={BINDING_ACCENTS.api}
-                        label="总结间隔"
-                        desc="每 N 条事件自动触发总结"
-                        value={config.summarizationEventInterval ?? 80}
-                        onOpenPicker={() => setSliderSheet({
-                            key: "interval",
-                            label: "总结间隔",
-                            value: config.summarizationEventInterval ?? 80,
-                            min: 10,
-                            max: 200,
-                            step: 10,
-                        })}
-                    />
-                </div>
-
-                {sliderSheet ? (
-                    <MemorySliderSheet
-                        label={sliderSheet.label}
-                        value={sliderSheet.value}
-                        min={sliderSheet.min}
-                        max={sliderSheet.max}
-                        step={sliderSheet.step}
-                        onChange={nextValue => {
-                            if (sliderSheet.key === "interval") saveInterval(nextValue);
-                            else saveBudget(sliderSheet.key, nextValue);
-                            setSliderSheet(prev => prev ? { ...prev, value: nextValue } : prev);
-                        }}
-                        onDone={() => setSliderSheet(null)}
-                        onClose={() => setSliderSheet(null)}
-                    />
-                ) : null}
 
                 {/* Summarization Prompt Editor——默认只读锁定，点「编辑」才可改，防误触改坏 */}
                 <p className="menu-group-desc mx-2">长期记忆提示词</p>
