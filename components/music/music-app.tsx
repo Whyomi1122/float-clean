@@ -232,6 +232,14 @@ export default function MusicApp({ onClose }: Props) {
         if (info.trial) showMusicToast("VIP 歌曲，当前播放 30 秒试听", 2600);
     }, [beginMusicLoadingToast, player, showMusicToast, toMusicTrack]);
 
+    /** Play all local tracks — replace queue */
+    const handlePlayAllLocal = useCallback(() => {
+        if (tracks.length === 0) return;
+        player.setQueue(tracks);
+        player.playTrack(tracks[0]);
+        showMusicToast(`播放全部 ${tracks.length} 首`, 2000);
+    }, [player, tracks, showMusicToast]);
+
     /** Play all tracks from a playlist — replace queue */
     const handlePlayAllNetease = useCallback(async (results: NeteaseSearchResult[]) => {
         if (results.length === 0) return;
@@ -421,7 +429,15 @@ export default function MusicApp({ onClose }: Props) {
                     ) : tracks.length === 0 ? (
                         <div className="music-empty"><div className="music-empty-icon">♪</div><div className="music-empty-text">还没有音乐</div></div>
                     ) : (
-                        <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
+                        <>
+                            <div className="music-local-actions">
+                                <button className="music-playall-btn" onClick={handlePlayAllLocal}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                    播放全部({tracks.length})
+                                </button>
+                            </div>
+                            <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
+                        </>
                     )}
                 </>
             )}
