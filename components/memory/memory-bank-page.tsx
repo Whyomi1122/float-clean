@@ -251,10 +251,12 @@ type Props = {
     view: MemoryView;
     selectedCharId?: string;
     onSelectChar: (charId: string) => void;
+    /** 设置页内选角色：只更新当前角色，不切换视图（A1-a） */
+    onPickChar?: (charId: string) => void;
     onNotice?: (msg: string) => void;
 };
 
-export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }: Props) {
+export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar, onNotice }: Props) {
     const [config, setConfig] = useState<MemoryConfig>(loadMemoryConfig);
     const [characters, setCharacters] = useState<CharacterMemoryInfo[]>([]);
     const [activeTab, setActiveTab] = useState<MemoryTab>("short");
@@ -277,6 +279,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
     const [savingMemory, setSavingMemory] = useState(false);
     const [summarizeRangeOpen, setSummarizeRangeOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    /** A1-a：设置页内的角色选择弹层 */
+    const [charPickerOpen, setCharPickerOpen] = useState(false);
     /** 方案A防误触：当前正在弹层调节的预算/间隔项 */
     const [sliderSheet, setSliderSheet] = useState<null | {
         key: "shortTermTokenBudget" | "longTermTokenBudget" | "interval";
@@ -892,6 +896,17 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                 {/* 总结：手动与自动放同一组，避免同一功能重复出现 */}
                 <p className="menu-group-desc mx-2">总结</p>
                 <div className="menu-group">
+                    {/* A1-a：设置页内直接选角色，手动总结不再依赖入口传参 */}
+                    <button type="button" className="menu-item" onClick={() => setCharPickerOpen(true)}>
+                        <MemorySettingsIcon icon={Users} color={BINDING_ACCENTS.memory} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">当前角色</span>
+                            <span className="menu-desc">{selectedChar ? selectedChar.name : "未选择，点击选择"}</span>
+                        </div>
+                        <div className="menu-right">
+                            <ChevronRight size={16} />
+                        </div>
+                    </button>
                     <button
                         type="button"
                         className="menu-item"
@@ -1025,6 +1040,45 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                                         );
                                     })}
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+
+                {charPickerOpen ? (
+                    <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setCharPickerOpen(false)}>
+                        <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
+                            <div className="modal-header" data-ui="modal-header">
+                                <span style={{ width: 28 }} />
+                                <h3 className="modal-title">选择角色</h3>
+                                <button className="modal-header-btn modal-header-btn-muted" onClick={() => setCharPickerOpen(false)}><X size={18} /></button>
+                            </div>
+                            <div className="modal-body modal-body-tight" data-ui="modal-body">
+                                {characters.length === 0 ? (
+                                    <p className="ts-13 text-secondary text-center py-4">暂无角色</p>
+                                ) : (
+                                    <div className="menu-group">
+                                        {characters.map(info => (
+                                            <button
+                                                key={info.character.id}
+                                                type="button"
+                                                className="menu-item w-full text-left"
+                                                onClick={() => {
+                                                    onPickChar?.(info.character.id);
+                                                    setCharPickerOpen(false);
+                                                    showNotice(`已选择「${info.character.name}」`);
+                                                }}
+                                            >
+                                                <div className="menu-label-group">
+                                                    <span className="menu-label">{info.character.name}</span>
+                                                    {selectedCharId === info.character.id ? (
+                                                        <span className="menu-desc">当前角色</span>
+                                                    ) : null}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

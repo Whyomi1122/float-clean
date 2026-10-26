@@ -71,6 +71,14 @@ export function PhoneResourcesApp({ onClose, onNotice, initialPage }: { onClose:
         setMemoryView("detail");
     };
 
+    /** 设置页内选角色：只更新 ID/名字，不切换视图（A1-a：设置页不依赖入口传参） */
+    const handlePickChar = (charId: string) => {
+        const chars = loadCharacters();
+        const char = chars.find(c => c.id === charId);
+        setMemoryCharId(charId);
+        setMemoryCharName(char?.name ?? "");
+    };
+
     const title = currentPage === "main" ? "资源库"
         : currentPage === "memory"
             ? (memoryView === "settings" ? "记忆设置"
@@ -131,6 +139,7 @@ export function PhoneResourcesApp({ onClose, onNotice, initialPage }: { onClose:
                         view={memoryView}
                         selectedCharId={memoryCharId}
                         onSelectChar={handleSelectChar}
+                        onPickChar={handlePickChar}
                         onNotice={onNotice}
                     />
                 )}
