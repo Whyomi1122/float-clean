@@ -432,8 +432,8 @@ export default function MusicApp({ onClose }: Props) {
                         <>
                             <div className="music-local-actions">
                                 <button className="music-playall-btn" onClick={handlePlayAllLocal}>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                                    播放全部({tracks.length})
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                    播放全部<span className="music-playall-count">({tracks.length})</span>
                                 </button>
                             </div>
                             <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
