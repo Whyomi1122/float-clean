@@ -120,11 +120,9 @@ export default function MultiFloatBall({ hidden }: Props) {
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
 
-    // ── API 快切 ──
-    type Draft = { configId: string; model: string } | null;
+    // ── API 快切(点击即时生效并持久化) ──
     const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
     const [currentApiId, setCurrentApiId] = useState<string | null>(null);
-    const [draft, setDraft] = useState<Draft>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [modelCache, setModelCache] = useState<Record<string, string[]>>({});
     const [modelLoading, setModelLoading] = useState<string | null>(null);
@@ -139,7 +137,7 @@ export default function MultiFloatBall({ hidden }: Props) {
     }, []);
 
     useEffect(() => {
-        if (panelOpen && tab === "api") { refreshApi(); setDraft(null); }
+        if (panelOpen && tab === "api") refreshApi();
     }, [panelOpen, tab, refreshApi]);
 
     const toggleExpand = async (id: string) => {
@@ -161,30 +159,19 @@ export default function MultiFloatBall({ hidden }: Props) {
         }
     };
 
-    const selectModel = (cfg: ApiConfig, model: string) => {
-        // 立即把该配置的默认模型写进配置存储,等「同步设置」时一起生效
+    /** 切换到某节点+模型:立即写盘并生效,无草稿态 */
+    const applySelection = (cfg: ApiConfig, model: string) => {
         try {
             const updated = apiConfigs.map(c => c.id === cfg.id ? { ...c, defaultModel: model } : c);
             saveApiConfigs(updated);
-            setApiConfigs(updated);
-            setDraft({ configId: cfg.id, model });
-            showToast(`已选 ${cfg.name} · ${model},点「同步设置」生效`);
-        } catch {
-            showToast("保存失败,请重试");
-        }
-    };
-
-    const syncSettings = () => {
-        if (!draft) return;
-        try {
             const binding = loadBindingConfig();
-            binding.globalDefaults = { ...binding.globalDefaults, apiConfigId: draft.configId };
+            binding.globalDefaults = { ...binding.globalDefaults, apiConfigId: cfg.id };
             saveBindingConfig(binding, true);
-            setCurrentApiId(draft.configId);
-            setDraft(null);
-            showToast("已同步,API 切换生效 ✓");
+            setApiConfigs(updated);
+            setCurrentApiId(cfg.id);
+            showToast(`已切换 ${cfg.name} · ${model} ✓`);
         } catch {
-            showToast("同步失败,请重试");
+            showToast("切换失败,请重试");
         }
     };
 
@@ -347,20 +334,19 @@ export default function MultiFloatBall({ hidden }: Props) {
                                     {apiConfigs.length === 0 && <div className="mfb-api-empty">还没有 API 配置,去设置里添加</div>}
                                     {apiConfigs.map(cfg => {
                                         const isCurrent = cfg.id === currentApiId;
-                                        const isDraft = draft?.configId === cfg.id;
                                         return (
-                                            <div key={cfg.id} className={`mfb-api-node ${isCurrent || isDraft ? "mfb-api-node-on" : ""}`}>
+                                            <div key={cfg.id} className={`mfb-api-node ${isCurrent ? "mfb-api-node-on" : ""}`}>
                                                 <div className="mfb-api-node-head">
                                                     {/* 点名称 = 直接选中该节点(用其当前默认模型) */}
                                                     <button
                                                         className="mfb-api-select"
                                                         onClick={() => {
                                                             if (!cfg.defaultModel) { showToast("该节点还没设置模型,点 MODEL ▾ 选一个"); setExpandedId(cfg.id); return; }
-                                                            if (cfg.id === currentApiId && !draft) { showToast("已经在用这个节点啦"); return; }
-                                                            selectModel(cfg, cfg.defaultModel);
+                                                            if (isCurrent) { showToast("已经在用这个节点啦"); return; }
+                                                            applySelection(cfg, cfg.defaultModel);
                                                         }}
                                                     >
-                                                        <span className={`mfb-dot ${isDraft || isCurrent ? "mfb-dot-solid" : "mfb-dot-hollow"}`} />
+                                                        <span className={`mfb-dot ${isCurrent ? "mfb-dot-solid" : "mfb-dot-hollow"}`} />
                                                         <span className="mfb-api-text">
                                                             <span className="mfb-api-name">{cfg.name}</span>
                                                             <span className="mfb-api-model">{cfg.defaultModel || "未设置模型"}</span>
@@ -378,8 +364,8 @@ export default function MultiFloatBall({ hidden }: Props) {
                                                         {(modelCache[cfg.id] ?? []).map(m => (
                                                             <button
                                                                 key={m}
-                                                                className={`mfb-model-item ${m === (draft?.configId === cfg.id ? draft.model : cfg.defaultModel) ? "mfb-model-on" : ""}`}
-                                                                onClick={() => selectModel(cfg, m)}
+                                                                className={`mfb-model-item ${m === cfg.defaultModel && isCurrent ? "mfb-model-on" : ""}`}
+                                                                onClick={() => applySelection(cfg, m)}
                                                             >
                                                                 <span className="mfb-model-dot" />
                                                                 {m}
@@ -393,11 +379,8 @@ export default function MultiFloatBall({ hidden }: Props) {
                                 </div>
                                 <div className="mfb-api-foot">
                                     <span className="mfb-api-current">
-                                        {draft
-                                            ? <>已切 {apiConfigs.find(c => c.id === draft.configId)?.name} · {draft.model}</>
-                                            : <>当前 {apiConfigs.find(c => c.id === currentApiId)?.name ?? "—"}</>}
+                                        当前生效 {apiConfigs.find(c => c.id === currentApiId)?.name ?? "—"} · {apiConfigs.find(c => c.id === currentApiId)?.defaultModel ?? "—"}
                                     </span>
-                                    <button className="mfb-sync-btn" disabled={!draft} onClick={syncSettings}>同步设置</button>
                                 </div>
                             </div>
                         )}
