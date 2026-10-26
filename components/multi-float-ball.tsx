@@ -361,8 +361,10 @@ export default function MultiFloatBall({ hidden }: Props) {
                                                         }}
                                                     >
                                                         <span className={`mfb-dot ${isDraft || isCurrent ? "mfb-dot-solid" : "mfb-dot-hollow"}`} />
-                                                        <span className="mfb-api-name">{cfg.name}</span>
-                                                        <span className="mfb-api-model">{cfg.defaultModel || "未设置模型"}</span>
+                                                        <span className="mfb-api-text">
+                                                            <span className="mfb-api-name">{cfg.name}</span>
+                                                            <span className="mfb-api-model">{cfg.defaultModel || "未设置模型"}</span>
+                                                        </span>
                                                     </button>
                                                     {/* MODEL ▾ 只负责展开/收起模型列表 */}
                                                     <button className="mfb-api-chev" onClick={() => toggleExpand(cfg.id)}>

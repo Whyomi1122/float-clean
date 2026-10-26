@@ -456,24 +456,47 @@
 
 .mfb-api-chev {
     flex-shrink: 0;
-    padding: 7px 10px;
+    padding: 6px 9px;
     border: none;
-    border-radius: 10px;
-    background: rgba(160, 194, 230, 0.14);
-    color: #5b7d9e;
-    font-size: 10px;
+    border-radius: 8px;
+    background: rgba(160, 194, 230, 0.13);
+    color: #6f8fae;
+    font-size: 9.5px;
     cursor: pointer;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
 }
 
-.mfb-api-chev:active { background: rgba(160, 194, 230, 0.28); }
+.mfb-api-chev:active { background: rgba(160, 194, 230, 0.26); }
 
 .mfb-api-node-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px 6px 6px;
+    padding: 9px 9px 9px 12px;
 }
+
+.mfb-api-select {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+}
+
+.mfb-api-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.mfb-api-select:active .mfb-api-name { color: #6e9cc9; }
 
 .mfb-dot {
     width: 9px;
@@ -489,23 +512,17 @@
     color: #2c3440;
     font-size: 13px;
     font-weight: 600;
-    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .mfb-api-model {
     color: #7c93ac;
-    font-size: 11px;
+    font-size: 10.5px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    min-width: 0;
-    flex: 1;
-}
-
-.mfb-api-chev {
-    color: #7c93ac;
-    font-size: 10px;
-    flex-shrink: 0;
 }
 
 .mfb-model-list {
