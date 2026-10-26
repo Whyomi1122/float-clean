@@ -744,7 +744,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <AlertCircle size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "指令", onClick: () => onOpenRichModal("system_instruction") },
-        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={offlineMode ? "var(--c-icon-active)" : "var(--c-text)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" /><line x1="3" y1="3" x2="21" y2="21" /></svg>, label: "线下", active: offlineMode, onClick: onToggleOfflineMode },
+        // 线下模式入口已移除（连同线下聊天页一起隐藏）
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -867,7 +867,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
             {showPlusMenu && (
                 <div className="chat-plus-menu">
                     {plusMenuItems.map((item, i) => (
-                        <div key={`${item.label}-${i}`} onClick={item.onClick} className="chat-plus-menu-item flex flex-col items-center gap-1.5 cursor-pointer" {...(item.active ? { "data-active": "" } : {})}>
+                        <div key={`${item.label}-${i}`} onClick={item.onClick} className="chat-plus-menu-item flex flex-col items-center gap-1.5 cursor-pointer" {...(("active" in item && item.active) ? { "data-active": "" } : {})}>
                             <div className="chat-plus-icon-box">
                                 {item.icon}
                             </div>
@@ -6562,7 +6562,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onToggleStoryMode={(enabled) => {
                         if (enabled !== theaterMode) toggleTheaterMode();
                     }}
-                    storyModeLocked={!isStoryDeliverySession}
+                    storyModeLocked={false}
                     onSend={(text) => {
                         const sent = sendSystemInstruction(text);
                         if (sent) setRichModal(null);

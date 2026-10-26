@@ -396,14 +396,11 @@ export function SystemInstructionModal({ onSend, onClose, onSwitchTab, tab, stor
                 {tab === "story_mode" ? (
                     <>
                         <p className="ts-12 text-[var(--c-icon)] leading-relaxed px-1">
-                            {storyModeLocked
-                                ? "番外指令模式仅在剧情模式的会话中可用。"
-                                : "开启后，输入的发言以「旁白/指令」的口吻被角色接收，用于推动番外剧情，不作为角色对话的日常回复。"}
+                            开启后，输入的发言以「旁白/指令」的口吻被角色接收，用于推动番外剧情，不作为角色对话的日常回复。
                         </p>
                         <button
                             type="button"
                             className="menu-item w-full"
-                            disabled={storyModeLocked}
                             onClick={() => onToggleStoryMode?.(!storyModeEnabled)}
                             aria-pressed={Boolean(storyModeEnabled)}
                         >
@@ -412,7 +409,7 @@ export function SystemInstructionModal({ onSend, onClose, onSwitchTab, tab, stor
                                 <span className="menu-desc">{storyModeEnabled ? "已开启" : "已关闭"}</span>
                             </div>
                             <div className="menu-right">
-                                <Toggle checked={Boolean(storyModeEnabled) && !storyModeLocked} onChange={(v) => onToggleStoryMode?.(v)} />
+                                <Toggle checked={Boolean(storyModeEnabled)} onChange={(v) => onToggleStoryMode?.(v)} />
                             </div>
                         </button>
                         <div className="flex gap-3 w-full">

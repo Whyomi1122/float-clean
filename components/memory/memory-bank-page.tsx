@@ -419,15 +419,13 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
             const sinceTimestamp = typeof range === "number"
                 ? new Date(Date.now() - range * 86400000).toISOString()
                 : undefined;
-            const afterTimestamp = range === "all"
-                ? undefined
-                : sinceTimestamp ?? getLastSummarizedTimestamp(selectedCharId) ?? undefined;
+            // 门槛交给管线内部按组判断（手动总结不设每组最少条数），这里只拦住「完全没料」
             const timelineCount = loadNativeTimeline(
                 selectedCharId,
-                afterTimestamp ? { afterTimestamp } : undefined,
+                sinceTimestamp ? { afterTimestamp: sinceTimestamp } : undefined,
             ).length;
-            if (timelineCount < 4) {
-                showNotice("所选范围内事件不足 4 条");
+            if (timelineCount === 0) {
+                showNotice("所选范围内没有可总结的事件");
                 return;
             }
 
