@@ -156,7 +156,7 @@ function MemorySettingsSliderItem({
     );
 }
 
-/** 底部弹层滑块：大滑块 + 数值 + 完成按钮（气泡确认防误触），拖动过程只改本地草稿，确认后才落库 */
+/** 滑块小弹层（方向2）：居中小卡片 + 细滑杆，拖动只改草稿，取消回滚、确认才落库 */
 function MemorySliderSheet({
     label,
     value,
@@ -172,55 +172,40 @@ function MemorySliderSheet({
     min: number;
     max: number;
     step: number;
+    /** 仅在点「确认」时调用一次，写入并持久化 */
     onChange: (value: number) => void;
     onDone: () => void;
     onClose: () => void;
 }) {
     const [draft, setDraft] = useState(value);
-    const [confirmOpen, setConfirmOpen] = useState(false);
     useEffect(() => { setDraft(value); }, [value]);
     return (
-        <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={onClose}>
-            <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
-                <div className="modal-header" data-ui="modal-header">
-                    <span style={{ width: 28 }} />
-                    <h3 className="modal-title">{label}</h3>
-                    <button className="modal-header-btn modal-header-btn-muted" onClick={onClose}><X size={18} /></button>
+        <div className="modal-overlay" data-ui="modal" onClick={onClose}>
+            <div className="mem-slider-modal" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
+                <h3 className="mem-slider-modal-title">{label}</h3>
+                <p className="mem-slider-modal-value">{draft}</p>
+                <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={draft}
+                    onChange={e => setDraft(Number(e.target.value))}
+                    className="ui-slider memory-settings-slider w-full"
+                    aria-label={label}
+                />
+                <div className="flex justify-between ts-12 text-secondary mt-1">
+                    <span>{min}</span>
+                    <span>{max}</span>
                 </div>
-                <div className="modal-body modal-body-tight" data-ui="modal-body">
-                    <p className="text-center ts-28 font-medium mb-2" style={{ fontVariantNumeric: "tabular-nums" }}>{draft}</p>
-                    <input
-                        type="range"
-                        min={min}
-                        max={max}
-                        step={step}
-                        value={draft}
-                        onChange={e => { const next = Number(e.target.value); setDraft(next); onChange(next); }}
-                        className="ui-slider memory-settings-slider w-full"
-                        aria-label={label}
-                    />
-                    <div className="flex justify-between ts-12 text-secondary mt-1">
-                        <span>{min}</span>
-                        <span>{max}</span>
-                    </div>
-                    {/* 气泡确认：就在按钮旁边问，不用挪窝（仅滑块弹层使用） */}
-                    <div className="relative mt-4">
-                        <button className="ui-btn ui-btn-primary p-2.5 w-full" onClick={() => setConfirmOpen(prev => !prev)}>完成</button>
-                        {confirmOpen && (
-                            <div className="mem-bubble-confirm" onClick={event => event.stopPropagation()}>
-                                <p className="mem-bubble-confirm-text">确定保存该数值吗？</p>
-                                <div className="mem-bubble-confirm-actions">
-                                    <button className="mem-bubble-btn" onClick={() => setConfirmOpen(false)}>取消</button>
-                                    <button
-                                        className="mem-bubble-btn is-primary"
-                                        onClick={() => { setConfirmOpen(false); onDone(); }}
-                                    >
-                                        确定
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                <div className="mem-slider-modal-actions">
+                    <button className="ui-btn p-2.5 flex-1" onClick={onClose}>取消</button>
+                    <button
+                        className="ui-btn ui-btn-primary p-2.5 flex-1"
+                        onClick={() => { onChange(draft); onDone(); }}
+                    >
+                        确认
+                    </button>
                 </div>
             </div>
         </div>
