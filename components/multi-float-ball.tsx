@@ -1,7 +1,6 @@
 "use client";
 
 // 多功能悬浮球 —— 统一入口(音乐 / API 快切 / 未来更多)
-// 与旧版 music-float 互不影响,通过 localStorage "ai_phone_float_mode" 切换("ball" | "legacy")
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadApiConfigs, saveApiConfigs, loadBindingConfig, saveBindingConfig, loadUserIdentities } from "@/lib/settings-storage";
@@ -17,18 +16,15 @@ import {
 import type { MusicTrack } from "@/lib/music-storage";
 import "./../styles/multi-float.css";
 
-type Mode = "ball" | "legacy";
-
 type Props = {
     hidden: boolean;
-    onSwitchMode?: (mode: Mode) => void;
 };
 
 const POS_KEY = "ai_phone_float_ball_pos";
 const LISTEN_USER_KEY = "ai_phone_float_listen_user";
 const LISTEN_CHAR_KEY = "ai_phone_float_listen_char";
 
-export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
+export default function MultiFloatBall({ hidden }: Props) {
     const controls = useMusicControlsOptional();
     const player = useMusicPlayerOptional();
     const playlist = player?.queue ?? [];
@@ -60,21 +56,22 @@ export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
         setPos({ x: window.innerWidth - 62, y: Math.round(window.innerHeight * 0.28) });
     }, []);
 
-    // ── 拖拽逻辑 ──
+    // ── 拖拽逻辑(松手时按总位移判定点击,避免触屏抖动误判) ──
     const ballRef = useRef<HTMLDivElement>(null);
-    const dragState = useRef({ dragging: false, moved: false, startX: 0, startY: 0, origX: 0, origY: 0, lastX: 0, lastT: 0, vx: 0 });
+    const dragState = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, lastX: 0, lastT: 0, vx: 0 });
 
     const onPointerDown = (e: React.PointerEvent) => {
         if (!pos) return;
-        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-        dragState.current = { dragging: true, moved: false, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y, lastX: e.clientX, lastT: performance.now(), vx: 0 };
+        ballRef.current?.setPointerCapture?.(e.pointerId);
+        dragState.current = { active: true, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y, lastX: e.clientX, lastT: performance.now(), vx: 0 };
     };
     const onPointerMove = (e: React.PointerEvent) => {
         const d = dragState.current;
-        if (!d.dragging || !pos) return;
+        if (!d.active || !pos) return;
         const dx = e.clientX - d.startX;
         const dy = e.clientY - d.startY;
-        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) d.moved = true;
+        // 位移超过阈值才算拖动,轻微抖动不触发
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         const now = performance.now();
         if (now - d.lastT > 16) { d.vx = (e.clientX - d.lastX) / (now - d.lastT); d.lastX = e.clientX; d.lastT = now; }
         const w = 48, h = 48;
@@ -84,8 +81,9 @@ export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
     };
     const onPointerUp = (e: React.PointerEvent) => {
         const d = dragState.current;
-        d.dragging = false;
-        if (!pos) return;
+        if (!d.active || !pos) { d.active = false; return; }
+        d.active = false;
+        const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
         // 保存位置
         localStorage.setItem(POS_KEY, JSON.stringify(pos));
         // 甩向左边缘 → 消失
@@ -93,10 +91,13 @@ export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
             setDismissed(true);
             return;
         }
-        // 未移动 → 视为点击,展开面板
-        if (!d.moved) {
+        // 位移小于 8px → 视为点击,展开面板
+        if (dist < 8) {
             setPanelOpen(true);
         }
+    };
+    const onPointerCancel = () => {
+        dragState.current.active = false;
     };
 
     // ── 一起听占位 ──
@@ -224,6 +225,7 @@ export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
                     onPointerDown={onPointerDown}
                     onPointerMove={onPointerMove}
                     onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerCancel}
                 >
                     <svg className="mfb-ring" viewBox="0 0 48 48">
                         <circle className="mfb-ring-bg" cx="24" cy="24" r={ringR} />
@@ -251,15 +253,6 @@ export default function MultiFloatBall({ hidden, onSwitchMode }: Props) {
                             <button className={`mfb-tab ${tab === "music" ? "mfb-tab-on" : ""}`} onClick={() => setTab("music")}>音乐</button>
                             <button className={`mfb-tab ${tab === "api" ? "mfb-tab-on" : ""}`} onClick={() => setTab("api")}>API</button>
                             <div className="mfb-head-right">
-                                <button
-                                    className="mfb-icon-btn"
-                                    title="切换回旧版音乐挂件"
-                                    onClick={() => {
-                                        localStorage.setItem("ai_phone_float_mode", "legacy");
-                                        onSwitchMode?.("legacy");
-                                        setPanelOpen(false);
-                                    }}
-                                >⚙</button>
                                 <button className="mfb-icon-btn" onClick={() => setPanelOpen(false)}>✕</button>
                             </div>
                         </div>
