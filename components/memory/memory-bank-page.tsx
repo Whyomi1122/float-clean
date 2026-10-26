@@ -22,7 +22,7 @@ import {
     setGroupLastSummarizedTimestamp,
 } from "@/lib/memory-storage";
 import { hydrateChatStorage } from "@/lib/chat-storage";
-import { loadNativeTimeline, type NativeTimelineEntry } from "@/lib/short-term-assembler";
+import { loadNativeTimeline, filterTimelineByAllowedSources, type NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { runSummarizationPipeline, getSummaryGroupProgress, type SummaryGroupProgress } from "@/lib/memory-summarizer";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding";
@@ -244,6 +244,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     /** 归档 Tab：群像杀青写入的只读归档（type=archive, sourceApp=ensemble），并列只读不进总结素材 */
     const [archiveEntries, setArchiveEntries] = useState<MemoryEntry[]>([]);
     const [shortTermEvents, setShortTermEvents] = useState<NativeTimelineEntry[]>([]);
+    /** 短期页的来源筛选：all = 全部（跨 App 时间顺序），否则按来源 key 过滤 */
+    const [shortTermSourceFilter, setShortTermSourceFilter] = useState<string>("all");
     const [sharedEvents, setSharedEvents] = useState<NativeTimelineEntry[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -339,11 +341,14 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         }
         // Native timeline is sync (localStorage) — no await needed.
         // 只取最近一段（全量可能几万条），防止解析+渲染把 iOS Safari 内存顶爆
-        const timeline = loadNativeTimeline(charId).slice(-MEMORY_TIMELINE_ENTRY_CAP);
+        // 注意：先按记忆来源设置过滤（关掉的 App 不再出现在短期页），再截取尾部
+        const timeline = filterTimelineByAllowedSources(loadNativeTimeline(charId))
+            .slice(-MEMORY_TIMELINE_ENTRY_CAP);
         setShortTermEvents(timeline.filter(e =>
             !(e.sourceApp === "moments" && e.postAuthorType === "user")
             && !(e.sourceApp === "interview_magazine" && e.sourceDetail === "interview_shared_issue")
         ));
+        setShortTermSourceFilter("all");
         setSharedEvents(timeline.filter(e =>
             (e.sourceApp === "moments" && e.postAuthorType === "user") ||
             (e.sourceApp === "chat" && e.sourceDetail === "group") ||
@@ -710,8 +715,47 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     ) : activeTab === "short" ? (
                         /* ── Short-term: card view ── */
                         <>
+                            {/* 来源筛选：从当前事件里动态取出现过的来源（跨 App 混排，默认「全部」） */}
+                            {(() => {
+                                const presentKeys: Array<{ key: string; label: string }> = [];
+                                const seen = new Set<string>();
+                                for (const entry of shortTermEvents) {
+                                    const key = entry.sourceApp === "chat" && entry.sourceDetail === "group"
+                                        ? "group_chat"
+                                        : entry.sourceApp;
+                                    if (seen.has(key)) continue;
+                                    seen.add(key);
+                                    presentKeys.push({ key, label: SOURCE_APP_LABELS[key] ?? key });
+                                }
+                                if (presentKeys.length <= 1) return null;
+                                return (
+                                    <div className="mem-source-filter">
+                                        <button
+                                            key="all"
+                                            type="button"
+                                            className={`mem-source-chip${shortTermSourceFilter === "all" ? " mem-source-chip-active" : ""}`}
+                                            onClick={() => setShortTermSourceFilter("all")}
+                                        >全部</button>
+                                        {presentKeys.map(({ key, label }) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                className={`mem-source-chip${shortTermSourceFilter === key ? " mem-source-chip-active" : ""}`}
+                                                onClick={() => setShortTermSourceFilter(key)}
+                                            >{label}</button>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                             <MemoryTimeline
-                                events={shortTermEvents}
+                                events={shortTermSourceFilter === "all"
+                                    ? shortTermEvents
+                                    : shortTermEvents.filter(entry => {
+                                        const key = entry.sourceApp === "chat" && entry.sourceDetail === "group"
+                                            ? "group_chat"
+                                            : entry.sourceApp;
+                                        return key === shortTermSourceFilter;
+                                    })}
                                 userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
                             />
                         </>

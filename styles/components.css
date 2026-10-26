@@ -2611,6 +2611,33 @@
   background: var(--c-surface-muted, #eef0f6);
 }
 
+/* 短期页来源筛选 chips */
+.mem-source-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 16px 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mem-source-filter::-webkit-scrollbar { display: none; }
+
+.mem-source-chip {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--c-text-secondary, #7a8095);
+  background: var(--c-surface-muted, #eef0f6);
+  transition: background 0.15s, color 0.15s;
+}
+
+.mem-source-chip-active {
+  color: #fff;
+  background: var(--c-accent, #5661b3);
+  font-weight: 600;
+}
+
 .data-management-menu .menu-label-group > .menu-label {
   font-weight: 600;
 }
