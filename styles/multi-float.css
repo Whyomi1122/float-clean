@@ -454,16 +454,25 @@
 
 .mfb-api-node-on { border-color: rgba(110, 156, 201, 0.55); }
 
+.mfb-api-chev {
+    flex-shrink: 0;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(160, 194, 230, 0.14);
+    color: #5b7d9e;
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+}
+
+.mfb-api-chev:active { background: rgba(160, 194, 230, 0.28); }
+
 .mfb-api-node-head {
-    width: 100%;
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 11px 12px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
+    gap: 8px;
+    padding: 6px 8px 6px 6px;
 }
 
 .mfb-dot {

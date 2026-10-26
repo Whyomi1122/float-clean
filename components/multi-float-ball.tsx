@@ -350,12 +350,25 @@ export default function MultiFloatBall({ hidden }: Props) {
                                         const isDraft = draft?.configId === cfg.id;
                                         return (
                                             <div key={cfg.id} className={`mfb-api-node ${isCurrent || isDraft ? "mfb-api-node-on" : ""}`}>
-                                                <button className="mfb-api-node-head" onClick={() => toggleExpand(cfg.id)}>
-                                                    <span className={`mfb-dot ${isDraft ? "mfb-dot-solid" : isCurrent ? "mfb-dot-solid" : "mfb-dot-hollow"}`} />
-                                                    <span className="mfb-api-name">{cfg.name}</span>
-                                                    <span className="mfb-api-model">{cfg.defaultModel || "未设置模型"}</span>
-                                                    <span className="mfb-api-chev">{expandedId === cfg.id ? "▴" : "MODEL ▾"}</span>
-                                                </button>
+                                                <div className="mfb-api-node-head">
+                                                    {/* 点名称 = 直接选中该节点(用其当前默认模型) */}
+                                                    <button
+                                                        className="mfb-api-select"
+                                                        onClick={() => {
+                                                            if (!cfg.defaultModel) { showToast("该节点还没设置模型,点 MODEL ▾ 选一个"); setExpandedId(cfg.id); return; }
+                                                            if (cfg.id === currentApiId && !draft) { showToast("已经在用这个节点啦"); return; }
+                                                            selectModel(cfg, cfg.defaultModel);
+                                                        }}
+                                                    >
+                                                        <span className={`mfb-dot ${isDraft || isCurrent ? "mfb-dot-solid" : "mfb-dot-hollow"}`} />
+                                                        <span className="mfb-api-name">{cfg.name}</span>
+                                                        <span className="mfb-api-model">{cfg.defaultModel || "未设置模型"}</span>
+                                                    </button>
+                                                    {/* MODEL ▾ 只负责展开/收起模型列表 */}
+                                                    <button className="mfb-api-chev" onClick={() => toggleExpand(cfg.id)}>
+                                                        {expandedId === cfg.id ? "▴" : "MODEL ▾"}
+                                                    </button>
+                                                </div>
                                                 {expandedId === cfg.id && (
                                                     <div className="mfb-model-list">
                                                         {modelLoading === cfg.id && <div className="mfb-model-status">拉取模型列表中…</div>}
