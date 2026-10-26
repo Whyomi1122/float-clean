@@ -1,0 +1,628 @@
+/* ═══ 多功能悬浮球 Multi Float Ball ═══ */
+
+.mfb-ball {
+    position: fixed;
+    z-index: 9600;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45));
+}
+
+.mfb-ball:active { cursor: grabbing; }
+
+.mfb-cover {
+    position: absolute;
+    inset: 4px;
+    width: calc(100% - 8px);
+    height: calc(100% - 8px);
+    border-radius: 50%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.mfb-playing .mfb-cover { animation: mfb-spin 8s linear infinite; }
+
+@keyframes mfb-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.mfb-cover-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2a2a30, #17171c);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 17px;
+}
+
+/* 进度环 */
+.mfb-ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    pointer-events: none;
+}
+
+.mfb-ring-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.16);
+    stroke-width: 2.5;
+}
+
+.mfb-ring-fg {
+    fill: none;
+    stroke: #f2527d;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.4s linear;
+}
+
+/* 甩出后的恢复把手 */
+.mfb-restore {
+    position: fixed;
+    left: 0;
+    top: 45%;
+    z-index: 9600;
+    width: 20px;
+    height: 44px;
+    border-radius: 0 10px 10px 0;
+    border: none;
+    background: rgba(40, 40, 46, 0.85);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* ── 面板 ── */
+
+.mfb-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 9700;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: mfb-fade 0.18s ease;
+}
+
+@keyframes mfb-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.mfb-panel {
+    position: relative;
+    width: min(340px, 88vw);
+    max-height: 76vh;
+    display: flex;
+    flex-direction: column;
+    background: rgba(28, 28, 32, 0.92);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    animation: mfb-pop 0.22s ease;
+}
+
+@keyframes mfb-pop {
+    from { transform: scale(0.94); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* 顶栏 tab */
+.mfb-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 14px 8px;
+}
+
+.mfb-tab {
+    padding: 6px 16px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.mfb-tab-on {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-weight: 600;
+}
+
+.mfb-head-right {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+}
+
+.mfb-icon-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* toast */
+.mfb-toast {
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 7px 16px;
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 主体 */
+.mfb-body {
+    padding: 4px 14px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ── 一起听入口 ── */
+.mfb-listen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 14px 0 10px;
+    cursor: pointer;
+}
+
+.mfb-avatar-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.mfb-avatar {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+}
+
+.mfb-avatar-sm { width: 34px; height: 34px; }
+
+.mfb-avatar-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #35353d, #202026);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 15px;
+}
+
+.mfb-avatar-name {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 11px;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mfb-heart {
+    font-size: 20px;
+    color: #f2527d;
+    animation: mfb-heartbeat 1.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(242, 82, 125, 0.45));
+}
+
+@keyframes mfb-heartbeat {
+    0%, 100% { transform: scale(1); }
+    12% { transform: scale(1.28); }
+    24% { transform: scale(1); }
+    36% { transform: scale(1.18); }
+    48% { transform: scale(1); }
+}
+
+/* ── 播放卡片 ── */
+.mfb-player {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mfb-player-idle {
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 96px;
+}
+
+.mfb-player-idle-text { color: rgba(255, 255, 255, 0.7); font-size: 13px; }
+.mfb-player-idle-sub { color: rgba(255, 255, 255, 0.35); font-size: 11px; }
+
+.mfb-player-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mfb-player-cover {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.mfb-player-meta { min-width: 0; }
+
+.mfb-player-title {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mfb-player-artist {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mfb-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.mfb-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: #f2527d;
+    transition: width 0.4s linear;
+}
+
+.mfb-time {
+    display: flex;
+    justify-content: space-between;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.mfb-ctrls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+}
+
+.mfb-ctrl {
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mfb-ctrl-main {
+    width: 48px;
+    height: 48px;
+    background: #fff;
+    color: #17171c;
+    font-size: 17px;
+}
+
+/* ── 播放列表 ── */
+.mfb-queue-title {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    padding: 2px 4px 6px;
+}
+
+.mfb-queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.mfb-queue-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.mfb-queue-item:active { background: rgba(255, 255, 255, 0.06); }
+
+.mfb-queue-on { background: rgba(242, 82, 125, 0.14); color: #fff; }
+
+.mfb-queue-idx {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    width: 16px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.mfb-queue-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mfb-queue-artist {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    flex-shrink: 0;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── API Tab ── */
+.mfb-api-label {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    padding: 4px 2px 2px;
+}
+
+.mfb-api-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mfb-api-empty {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 12px;
+    text-align: center;
+    padding: 24px 0;
+}
+
+.mfb-api-node {
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    overflow: hidden;
+}
+
+.mfb-api-node-on { border-color: rgba(242, 82, 125, 0.4); }
+
+.mfb-api-node-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+}
+
+.mfb-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.mfb-dot-solid { background: #fff; }
+.mfb-dot-hollow { background: transparent; border: 1.5px solid rgba(255, 255, 255, 0.4); }
+
+.mfb-api-name {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.mfb-api-model {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+}
+
+.mfb-api-chev {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.mfb-model-list {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 8px 8px 30px;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.mfb-model-status {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    padding: 8px 4px;
+}
+
+.mfb-model-err { color: #ff8a9d; }
+
+.mfb-model-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.mfb-model-item:active { background: rgba(255, 255, 255, 0.06); }
+
+.mfb-model-on { color: #fff; font-weight: 600; }
+
+.mfb-model-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+    flex-shrink: 0;
+}
+
+.mfb-model-on .mfb-model-dot { background: #f2527d; }
+
+.mfb-api-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.mfb-api-current {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.mfb-sync-btn {
+    flex-shrink: 0;
+    padding: 8px 18px;
+    border: none;
+    border-radius: 999px;
+    background: #fff;
+    color: #17171c;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.mfb-sync-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* ── 头像选择弹层 ── */
+.mfb-picker-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 22px;
+}
+
+.mfb-picker {
+    width: 78%;
+    max-height: 70%;
+    background: #232329;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mfb-picker-title {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    text-align: center;
+    padding: 12px 0 8px;
+}
+
+.mfb-picker-list {
+    overflow-y: auto;
+    padding: 0 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.mfb-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 10px;
+    background: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.mfb-picker-item:active { background: rgba(255, 255, 255, 0.07); }
+.mfb-picker-on { background: rgba(242, 82, 125, 0.14); color: #fff; }
