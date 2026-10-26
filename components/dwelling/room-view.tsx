@@ -329,15 +329,17 @@ export function RoomView({
 
             {/* 家具标注（长按可拖动微调位置） */}
             {markers.map(({ f, m, h, len }) => {
-                const lineY = m.lineY;
                 const isDragging = drag?.id === f.id;
                 const x = isDragging ? drag.x : m.x;
                 const y = isDragging ? drag.y : m.y;
-                const anchorY = isDragging ? y : (lineY != null ? lineY / (stageSize?.h || 1) : y);
-                const shifted = !isDragging && lineY != null && Math.abs(lineY - y * (stageSize?.h || 1)) > 1;
+                // 标签线纵向偏移（px）：标签被顶部安全区顶开时 lineY != 真实 y
+                const stageH = stageSize?.h || 0;
+                const realY = y * stageH;
+                const lineY = isDragging ? realY : (typeof m.lineY === "number" ? m.lineY : realY);
+                const dy = lineY - realY;
+                const shifted = !isDragging && stageH > 0 && Math.abs(dy) > 1;
                 return (
                     <div key={f.id} className="dw2-mk" data-h={h} data-drag={isDragging ? "true" : undefined}
-                        data-shifted={shifted ? "true" : undefined}
                         style={{ left: `${x * 100}%`, top: `${y * 100}%`, "--mklen": `${len}px` } as React.CSSProperties}>
                         <button className="dw2-pt" aria-label={f.label}
                             onClick={() => handleMarkerTap(f.id)}
@@ -346,13 +348,15 @@ export function RoomView({
                             onPointerUp={handlePtUp}
                             onPointerCancel={handlePtCancel}
                             onContextMenu={e => e.preventDefault()} />
-                        {/* 标签被安全区顶开时，用竖直细线连回真实位置 */}
+                        {/* 标签被安全区顶开时，从真实位置垂一条细线连到标签线 */}
                         {shifted && (
-                            <span className="dw2-drop"
-                                style={{ height: `${Math.abs(lineY - y * (stageSize?.h || 1))}px`, top: anchorY < y ? `${(anchorY - y) * 100 / (stageSize?.h || 1)}%` : 0, transform: anchorY > y ? "none" : undefined }} />
+                            <span className="dw2-drop" style={{
+                                top: `${Math.min(0, dy)}px`,
+                                height: `${Math.abs(dy)}px`,
+                            }} />
                         )}
-                        <span className="dw2-hln" style={shifted ? { top: `${(anchorY - y) * 100}%` } : undefined} />
-                        <span className="dw2-lbl" style={shifted ? { top: `calc(${(anchorY - y) * 100}% - 11px)` } : undefined} onClick={() => handleMarkerTap(f.id)}>
+                        <span className="dw2-hln" style={shifted ? { top: `${dy}px` } : undefined} />
+                        <span className="dw2-lbl" style={shifted ? { top: `${dy - 11}px` } : undefined} onClick={() => handleMarkerTap(f.id)}>
                             <span className="dw2-zh">{f.label}<i>{String(f.items.length).padStart(2, "0")}</i></span>
                             {f.en && <span className="dw2-en">{f.en}</span>}
                         </span>

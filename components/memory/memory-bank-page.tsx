@@ -303,7 +303,7 @@ function buildMemoryExportText(characterName: string, entries: MemoryEntry[]): s
     const earliest = sortedAll[0]?.createdAt;
     const latest = sortedAll[sortedAll.length - 1]?.createdAt;
 
-    lines.push(`----长期记忆 · ${characterName} · 至 ${fmtFull(latest)}----`);
+    lines.push(`─────  长期记忆 · ${characterName} · 至 ${fmtFull(latest)}  ─────`);
     lines.push(entries.length === 0
         ? "【暂无可导出的长期记忆】"
         : `【共 ${entries.length} 条，覆盖 ${fmtShort(earliest)} 至 ${fmtShort(latest)}。以下按来源分节，可直接用于复盘修订。】`);
@@ -313,7 +313,7 @@ function buildMemoryExportText(characterName: string, entries: MemoryEntry[]): s
         const label = SOURCE_APP_LABELS[sourceKey] ?? (sourceKey === "manual" ? "手动记录" : sourceKey);
         group.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
         const groupLatest = group[group.length - 1]?.createdAt;
-        lines.push(`-----${label} · 至 ${fmtShort(groupLatest)}-----`);
+        lines.push(`─────  ${label} · 至 ${fmtShort(groupLatest)}  ─────`);
         for (const entry of group) {
             lines.push(`［${fmtShort(entry.createdAt)}］`);
             lines.push(entry.content.trim());
@@ -342,7 +342,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
 
     for (const raw of lines) {
         const line = raw.trimEnd();
-        const sectionMatch = line.match(/^-{3,}\s*([^·\-]+?)\s*·\s*至\s*(.+?)\s*-{3,}$/);
+        const sectionMatch = line.match(/^[─\-]{3,}\s*([^·─\-]+?)\s*·\s*至\s*(.+?)\s*[─\-]{3,}$/);
         if (sectionMatch) {
             flush();
             const label = sectionMatch[1].trim();
@@ -350,7 +350,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
             currentSource = key ?? (label === "手动记录" ? "manual" : undefined);
             continue;
         }
-        if (/^----*长期记忆/.test(line)) continue;
+        if (/^[─\-]{3,}\s*长期记忆/.test(line)) continue;
         if (/^【.*】$/.test(line.trim())) continue; // 说明行
         const timeMatch = line.match(/^［(.+?)］$/);
         if (timeMatch) {
@@ -941,6 +941,8 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         return (
             <div className="flex flex-col absolute inset-0 overflow-hidden" style={{ padding: "0 16px" }}>
                 {/* Content */}
+                {/* 顶部安全区：详情页没有自己的顶栏，给全局悬浮按钮（音乐球等）留出空间 */}
+                <div style={{ height: 56, flexShrink: 0 }} />
                 <div className="memory-detail-scroll flex-1 overflow-y-auto flex flex-col gap-2 min-h-0">
                     <MemoryDetailBoundary>
                     {loading ? (
