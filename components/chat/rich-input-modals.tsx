@@ -398,20 +398,26 @@ export function SystemInstructionModal({ onSend, onClose, onSwitchTab, tab, stor
                         <p className="ts-12 text-[var(--c-icon)] leading-relaxed px-1">
                             开启后，输入的发言以「旁白/指令」的口吻被角色接收，用于推动番外剧情，不作为角色对话的日常回复。
                         </p>
-                        <button
-                            type="button"
-                            className="menu-item w-full"
+                        {/* B1 修复：原来外层 button 内嵌 Toggle，两层点击处理器互相抵消导致开关无反应。
+                            改为整行 div 一个点击源，Toggle 仅作视觉指示。 */}
+                        <div
+                            role="switch"
+                            aria-checked={Boolean(storyModeEnabled)}
+                            className="menu-item w-full cursor-pointer select-none"
                             onClick={() => onToggleStoryMode?.(!storyModeEnabled)}
-                            aria-pressed={Boolean(storyModeEnabled)}
                         >
                             <div className="menu-label-group">
                                 <span className="menu-label">番外指令模式</span>
                                 <span className="menu-desc">{storyModeEnabled ? "已开启" : "已关闭"}</span>
                             </div>
                             <div className="menu-right">
-                                <Toggle checked={Boolean(storyModeEnabled)} onChange={(v) => onToggleStoryMode?.(v)} />
+                                <Toggle
+                                    checked={Boolean(storyModeEnabled)}
+                                    onChange={() => {}}
+                                    aria-hidden="true"
+                                />
                             </div>
-                        </button>
+                        </div>
                         <div className="flex gap-3 w-full">
                             <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">关闭</button>
                         </div>

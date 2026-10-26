@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.26-2",
+    version: "2026.10.26-3",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.26-3",
+            title: "番外指令模式开关修复",
+            items: [
+                "修复番外指令模式开关点击无反应的问题（button 嵌套导致的非法结构）",
+            ],
+        },
         {
             version: "2026.10.26-2",
             title: "滑杆弹层重做",
