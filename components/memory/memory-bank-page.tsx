@@ -268,7 +268,105 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     const [editingWaterlineKey, setEditingWaterlineKey] = useState<string | null>(null);
     const [waterlineDraft, setWaterlineDraft] = useState("");
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
-    /** A1-a：设置页内的角色选择弹层 */
+    /** 归档式导出：整个角色长期记忆 → 纯文字 txt
+ *  结构：
+ *    ----长期记忆 · 至 2026.10.17 SAT 19:15----
+ *    【说明】
+ *    -----聊天室普通模式 · 至 2026.10.15 21:20-----
+ *    【内容】
+ */
+function buildMemoryExportText(characterName: string, entries: MemoryEntry[]): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const WEEK = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    const fmtFull = (iso?: string) => {
+        const d = iso ? new Date(iso) : new Date();
+        const dt = Number.isNaN(d.getTime()) ? new Date() : d;
+        return `${dt.getFullYear()}.${pad(dt.getMonth() + 1)}.${pad(dt.getDate())} ${WEEK[dt.getDay()]} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    };
+    const fmtShort = (iso?: string) => {
+        if (!iso) return "未知时间";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return "未知时间";
+        return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    // 按来源分组，组内按时间正序
+    const bySource = new Map<string, MemoryEntry[]>();
+    for (const entry of entries) {
+        const key = entry.sourceApp || "manual";
+        if (!bySource.has(key)) bySource.set(key, []);
+        bySource.get(key)!.push(entry);
+    }
+
+    const lines: string[] = [];
+    const sortedAll = [...entries].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+    const earliest = sortedAll[0]?.createdAt;
+    const latest = sortedAll[sortedAll.length - 1]?.createdAt;
+
+    lines.push(`----长期记忆 · ${characterName} · 至 ${fmtFull(latest)}----`);
+    lines.push(entries.length === 0
+        ? "【暂无可导出的长期记忆】"
+        : `【共 ${entries.length} 条，覆盖 ${fmtShort(earliest)} 至 ${fmtShort(latest)}。以下按来源分节，可直接用于复盘修订。】`);
+    lines.push("");
+
+    for (const [sourceKey, group] of bySource) {
+        const label = SOURCE_APP_LABELS[sourceKey] ?? (sourceKey === "manual" ? "手动记录" : sourceKey);
+        group.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+        const groupLatest = group[group.length - 1]?.createdAt;
+        lines.push(`-----${label} · 至 ${fmtShort(groupLatest)}-----`);
+        for (const entry of group) {
+            lines.push(`［${fmtShort(entry.createdAt)}］`);
+            lines.push(entry.content.trim());
+            lines.push("");
+        }
+    }
+    return lines.join("\n");
+}
+
+/** 解析导出的 txt，切回长期记忆条目（导入时补 id/characterId/时间） */
+function parseMemoryExportText(text: string): Array<{ content: string; createdAt?: string; sourceApp?: string }> {
+    const result: Array<{ content: string; createdAt?: string; sourceApp?: string }> = [];
+    const lines = text.split(/\r?\n/);
+    const labelToKey = new Map<string, string>();
+    for (const [key, label] of Object.entries(SOURCE_APP_LABELS)) labelToKey.set(label, key);
+
+    let currentSource: string | undefined;
+    let currentTime: string | undefined;
+    let buffer: string[] = [];
+
+    const flush = () => {
+        const content = buffer.join("\n").trim();
+        if (content) result.push({ content, createdAt: currentTime, sourceApp: currentSource });
+        buffer = [];
+    };
+
+    for (const raw of lines) {
+        const line = raw.trimEnd();
+        const sectionMatch = line.match(/^-{3,}\s*([^·\-]+?)\s*·\s*至\s*(.+?)\s*-{3,}$/);
+        if (sectionMatch) {
+            flush();
+            const label = sectionMatch[1].trim();
+            const key = labelToKey.get(label);
+            currentSource = key ?? (label === "手动记录" ? "manual" : undefined);
+            continue;
+        }
+        if (/^----*长期记忆/.test(line)) continue;
+        if (/^【.*】$/.test(line.trim())) continue; // 说明行
+        const timeMatch = line.match(/^［(.+?)］$/);
+        if (timeMatch) {
+            flush();
+            const d = new Date(timeMatch[1].replace(/(\d+)\.(\d+)\.(\d+)\s+(\d+):(\d+)/, "$1-$2-$3T$4:$5"));
+            currentTime = Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+            continue;
+        }
+        buffer.push(raw);
+    }
+    flush();
+    return result;
+}
+
+/** 导出/导入分组分隔：让上面两个函数在被引用前定义 */
+
     const [charPickerOpen, setCharPickerOpen] = useState(false);
 
     // ── 短期记录编辑/删除 ──
@@ -469,26 +567,18 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         showNotice("已删除");
     };
 
-    /** 导出当前角色长期记忆为 JSON 文件 */
+    /** 导出当前角色长期记忆为纯文字 txt（按来源分节，供外部 AI 复盘） */
     const handleExportMemories = async () => {
         if (!selectedCharId) return;
         try {
             const entries = await loadMemoryEntries(selectedCharId);
-            const payload = {
-                format: "float-memory-export",
-                version: 1,
-                exportedAt: new Date().toISOString(),
-                characterId: selectedCharId,
-                characterName: selectedChar?.name ?? "",
-                count: entries.length,
-                memories: entries,
-            };
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const text = buildMemoryExportText(selectedChar?.name ?? "未知角色", entries);
+            const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             const stamp = new Date().toISOString().slice(0, 10);
             a.href = url;
-            a.download = `记忆-${selectedChar?.name ?? selectedCharId}-${stamp}.json`;
+            a.download = `记忆-${selectedChar?.name ?? selectedCharId}-${stamp}.txt`;
             a.click();
             URL.revokeObjectURL(url);
             showNotice(`已导出 ${entries.length} 条长期记忆`);
@@ -498,20 +588,34 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         }
     };
 
-    /** 导入 JSON 替换当前角色长期记忆（先自动备份旧数据） */
+    /** 导入 txt / JSON，替换当前角色长期记忆（先自动备份旧数据） */
     const handleImportFile = async (file: File) => {
         if (!selectedCharId || importing) return;
         setImporting(true);
         try {
             const raw = await file.text();
-            const parsed = JSON.parse(raw) as { memories?: unknown };
-            const list = Array.isArray(parsed) ? parsed : parsed?.memories;
-            if (!Array.isArray(list) || list.length === 0) {
+            const now = new Date().toISOString();
+
+            // 支持两种来源：导出的归档 txt，或旧版 JSON
+            let list: Array<Record<string, unknown>>;
+            const trimmed = raw.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                const parsed = JSON.parse(trimmed) as { memories?: unknown };
+                const arr = Array.isArray(parsed) ? parsed : parsed?.memories;
+                list = Array.isArray(arr) ? (arr as Array<Record<string, unknown>>) : [];
+            } else {
+                list = parseMemoryExportText(raw).map(item => ({
+                    content: item.content,
+                    createdAt: item.createdAt,
+                    sourceApp: item.sourceApp,
+                })) as Array<Record<string, unknown>>;
+            }
+
+            if (list.length === 0) {
                 showNotice("文件里没有可导入的记忆");
                 return;
             }
-            const now = new Date().toISOString();
-            const incoming = (list as Array<Record<string, unknown>>)
+            const incoming = list
                 .filter(item => item && typeof item === "object" && typeof item.content === "string")
                 .map(item => ({
                     ...item,
@@ -524,22 +628,14 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                 return;
             }
 
-            // 导入前自动备份现有数据（下载一份）
+            // 导入前自动备份现有数据（同样导出为 txt）
             const existing = await loadMemoryEntries(selectedCharId);
             if (existing.length > 0) {
-                const backup = {
-                    format: "float-memory-export",
-                    version: 1,
-                    exportedAt: now,
-                    characterId: selectedCharId,
-                    characterName: selectedChar?.name ?? "",
-                    count: existing.length,
-                    memories: existing,
-                };
-                const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+                const backupText = buildMemoryExportText(selectedChar?.name ?? "未知角色", existing);
+                const url = URL.createObjectURL(new Blob([backupText], { type: "text/plain;charset=utf-8" }));
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `记忆备份-${selectedChar?.name ?? selectedCharId}-${now.slice(0, 19).replace(/[:T]/g, "-")}.json`;
+                a.download = `记忆备份-${selectedChar?.name ?? selectedCharId}-${now.slice(0, 19).replace(/[:T]/g, "-")}.txt`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
@@ -1305,7 +1401,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         <MemorySettingsIcon icon={Download} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">导出记忆</span>
-                            <span className="menu-desc">下载当前角色的长期记忆为 JSON，可交给外部 AI 复盘修订</span>
+                            <span className="menu-desc">下载当前角色的长期记忆为 txt 归档文字，可交给外部 AI 复盘修订</span>
                         </div>
                         <div className="menu-right"><ChevronRight size={16} /></div>
                     </button>
@@ -1313,7 +1409,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                         <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">导入记忆</span>
-                            <span className="menu-desc">用 JSON 覆盖当前角色的长期记忆，导入前会自动备份现有数据</span>
+                            <span className="menu-desc">导入 txt 或 JSON 覆盖当前角色的长期记忆，导入前会自动备份现有数据</span>
                         </div>
                         <div className="menu-right">
                             {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
@@ -1323,7 +1419,7 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     <input
                         ref={importFileInputRef}
                         type="file"
-                        accept="application/json,.json"
+                        accept=".txt,.json,text/plain,application/json"
                         style={{ display: "none" }}
                         onChange={event => {
                             const file = event.target.files?.[0];

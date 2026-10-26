@@ -469,8 +469,8 @@
 .dw2-mk { position: absolute; width: 0; height: 0; z-index: 20; }
 .dw2-pt {
   position: absolute;
-  left: -17px; top: -17px;
-  width: 34px; height: 34px;
+  left: -22px; top: -22px;
+  width: 44px; height: 44px;
   background: transparent;
   border: none;
   padding: 0;
@@ -491,7 +491,7 @@
 .dw2-pt::before {
   content: "";
   position: absolute;
-  left: 11px; top: 11px;
+  left: 16px; top: 16px;
   width: 12px; height: 12px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.75);
@@ -509,11 +509,19 @@
 }
 /* 引线：从标注点水平引出一条直线，标签在末端 */
 .dw2-hln { position: absolute; background: var(--dw-line-strong); pointer-events: none; height: 1px; width: var(--mklen, 38px); top: -0.5px; }
-.dw2-mk[data-h="right"] .dw2-hln { left: 14px; }
-.dw2-mk[data-h="left"] .dw2-hln { right: 14px; }
-.dw2-lbl { position: absolute; white-space: nowrap; cursor: pointer; top: -11px; }
-.dw2-mk[data-h="right"] .dw2-lbl { left: calc(var(--mklen, 38px) + 20px); }
-.dw2-mk[data-h="left"] .dw2-lbl { right: calc(var(--mklen, 38px) + 20px); text-align: right; }
+.dw2-mk[data-h="right"] .dw2-hln { left: 22px; }
+.dw2-mk[data-h="left"] .dw2-hln { right: 22px; }
+.dw2-lbl { position: absolute; white-space: nowrap; cursor: pointer; top: -11px; padding: 7px 5px; margin: -7px -5px; }
+.dw2-mk[data-h="right"] .dw2-lbl { left: calc(var(--mklen, 38px) + 26px); }
+.dw2-mk[data-h="left"] .dw2-lbl { right: calc(var(--mklen, 38px) + 26px); text-align: right; }
+/* 标签被顶部安全区顶开时，从真实位置垂下的连接线 */
+.dw2-drop {
+  position: absolute;
+  left: -0.5px;
+  width: 1px;
+  background: linear-gradient(180deg, var(--dw-line-strong), transparent);
+  pointer-events: none;
+}
 .dw2-zh {
   position: relative;
   z-index: 2;
@@ -531,15 +539,22 @@
 }
 .dw2-en {
   position: absolute;
-  top: 13px;
+  top: 12px;
   z-index: 1;
+  max-width: 46vw;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--dw-ghost);
-  font-family: var(--dw-latin);
-  font-size: 14px;
-  letter-spacing: 4px;
+  font-family: var(--dw-serif);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  line-height: 1;
+  opacity: 0.82;
 }
 .dw2-mk[data-h="right"] .dw2-en { left: 0; }
 .dw2-mk[data-h="left"] .dw2-en { right: 0; }
+.dw2-mk[data-h="left"] .dw2-en { margin-top: 1px; }
 
 /* ── bottom quote + meta ── */
 .dw2-bottom {

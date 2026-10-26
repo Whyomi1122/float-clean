@@ -28,6 +28,10 @@ type RoomViewProps = {
 
 /** 与 dwelling-engine 的 clamp 范围保持一致：避开顶部玻璃栏区和底部引言区 */
 const MK_X_MIN = 0.08, MK_X_MAX = 0.92, MK_Y_MIN = 0.24, MK_Y_MAX = 0.82;
+/** 顶部玻璃栏（标题 + 角色 + 房间 Tab + 批量条）占用的实际高度，标注不得落入此区域 */
+const TOP_SAFE_PX = 210;
+/** 标签单行高度（中文 + 幽灵英文），用于纵向避让 */
+const LBL_H = 34;
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_TOLERANCE = 10;
 
@@ -89,10 +93,16 @@ export function RoomView({
         });
         if (!stageSize) return base;
         // 标签避让：引线始终是水平直线，冲突时先换方向、再加长引线错开
+        // 关键：把「顶部玻璃栏区」和「底部引言区」当作硬边界，标签不得进入
         const placed: Array<{ x1: number; x2: number; y: number }> = [];
+        const topLimit = TOP_SAFE_PX;
+        const bottomLimit = stageSize.h - 108;
         const rectFor = (mk: typeof base[number], h: "left" | "right", len: number) => {
             const px = mk.m.x * stageSize.w;
-            const labelW = mk.f.label.length * 17 + 40;
+            // 中文标签宽 + 右侧计数 + 幽灵英文宽（取较大者），保证英文不越界穿模
+            const zhW = mk.f.label.length * 17 + 34;
+            const enW = (mk.f.en ? mk.f.en.length * 11 + 10 : 0);
+            const labelW = Math.max(zhW, enW);
             const x1 = h === "right" ? px + 20 + len : px - 20 - len - labelW;
             return { x1, x2: x1 + labelW };
         };
@@ -100,21 +110,39 @@ export function RoomView({
         for (const mk of sorted) {
             const py = mk.m.y * stageSize.h;
             const flip = mk.h === "right" ? "left" as const : "right" as const;
-            const attempts: Array<{ h: "left" | "right"; len: number }> = [
-                { h: mk.h, len: 38 }, { h: flip, len: 38 },
-                { h: mk.h, len: 104 }, { h: flip, len: 104 },
+            // 标签在 py 上下各 LBL_H/2 的范围内，因此需要把引线点抬到安全区之外
+            const yMargin = LBL_H / 2;
+            // 顶部被玻璃栏压住时，把引线点整体下移到安全线以下（仍指向附近真实位置）
+            let lineY = py;
+            if (lineY - yMargin < topLimit) lineY = topLimit + yMargin;
+            if (lineY + yMargin > bottomLimit) lineY = Math.max(topLimit + yMargin, bottomLimit - yMargin);
+            const attempts: Array<{ h: "left" | "right"; len: number; dy: number }> = [
+                { h: mk.h, len: 38, dy: 0 },
+                { h: flip, len: 38, dy: 0 },
+                { h: mk.h, len: 104, dy: 0 },
+                { h: flip, len: 104, dy: 0 },
+                { h: mk.h, len: 38, dy: LBL_H + 6 },
+                { h: mk.h, len: 38, dy: -(LBL_H + 6) },
+                { h: flip, len: 38, dy: LBL_H + 6 },
+                { h: flip, len: 38, dy: -(LBL_H + 6) },
             ];
             let done = false;
             for (const at of attempts) {
+                const ty = lineY + at.dy;
+                if (ty - yMargin < topLimit || ty + yMargin > bottomLimit) continue;
                 const { x1, x2 } = rectFor(mk, at.h, at.len);
                 if (x1 < 8 || x2 > stageSize.w - 8) continue;
-                if (placed.some(p => !(x2 < p.x1 || x1 > p.x2) && Math.abs(py - p.y) < 36)) continue;
+                if (placed.some(p => !(x2 < p.x1 || x1 > p.x2) && Math.abs(p.y - ty) < LBL_H)) continue;
                 mk.h = at.h; mk.len = at.len;
-                placed.push({ x1, x2, y: py });
+                mk.m.lineY = ty;
+                placed.push({ x1, x2, y: ty });
                 done = true;
                 break;
             }
-            if (!done) placed.push({ ...rectFor(mk, mk.h, mk.len), y: py });
+            if (!done) {
+                mk.m.lineY = lineY;
+                placed.push({ ...rectFor(mk, mk.h, mk.len), y: lineY });
+            }
         }
         return base;
     }, [room, stageSize]);
@@ -301,11 +329,15 @@ export function RoomView({
 
             {/* 家具标注（长按可拖动微调位置） */}
             {markers.map(({ f, m, h, len }) => {
+                const lineY = m.lineY;
                 const isDragging = drag?.id === f.id;
                 const x = isDragging ? drag.x : m.x;
                 const y = isDragging ? drag.y : m.y;
+                const anchorY = isDragging ? y : (lineY != null ? lineY / (stageSize?.h || 1) : y);
+                const shifted = !isDragging && lineY != null && Math.abs(lineY - y * (stageSize?.h || 1)) > 1;
                 return (
                     <div key={f.id} className="dw2-mk" data-h={h} data-drag={isDragging ? "true" : undefined}
+                        data-shifted={shifted ? "true" : undefined}
                         style={{ left: `${x * 100}%`, top: `${y * 100}%`, "--mklen": `${len}px` } as React.CSSProperties}>
                         <button className="dw2-pt" aria-label={f.label}
                             onClick={() => handleMarkerTap(f.id)}
@@ -314,8 +346,13 @@ export function RoomView({
                             onPointerUp={handlePtUp}
                             onPointerCancel={handlePtCancel}
                             onContextMenu={e => e.preventDefault()} />
-                        <span className="dw2-hln" />
-                        <span className="dw2-lbl" onClick={() => handleMarkerTap(f.id)}>
+                        {/* 标签被安全区顶开时，用竖直细线连回真实位置 */}
+                        {shifted && (
+                            <span className="dw2-drop"
+                                style={{ height: `${Math.abs(lineY - y * (stageSize?.h || 1))}px`, top: anchorY < y ? `${(anchorY - y) * 100 / (stageSize?.h || 1)}%` : 0, transform: anchorY > y ? "none" : undefined }} />
+                        )}
+                        <span className="dw2-hln" style={shifted ? { top: `${(anchorY - y) * 100}%` } : undefined} />
+                        <span className="dw2-lbl" style={shifted ? { top: `calc(${(anchorY - y) * 100}% - 11px)` } : undefined} onClick={() => handleMarkerTap(f.id)}>
                             <span className="dw2-zh">{f.label}<i>{String(f.items.length).padStart(2, "0")}</i></span>
                             {f.en && <span className="dw2-en">{f.en}</span>}
                         </span>

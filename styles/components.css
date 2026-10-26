@@ -2616,7 +2616,9 @@
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding: 8px 16px 4px;
+  /* 顶部给详情页的悬浮按钮（搜索/设置）留安全区，避免 chips 被盖住 */
+  padding: 52px 16px 8px;
+  margin-top: -44px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }

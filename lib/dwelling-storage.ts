@@ -13,7 +13,12 @@ export type DwellingFurnitureItem = {
     preview: string;
 };
 
-export type DwellingMarker = { x: number; y: number };
+export type DwellingMarker = {
+    x: number;
+    y: number;
+    /** 运行时计算出的标签线纵向位置，不持久化 */
+    lineY?: number;
+};
 
 export type DwellingFurniture = {
     id: string;
