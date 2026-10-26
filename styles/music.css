@@ -2559,20 +2559,20 @@
     background: var(--c-music-panel);
 }
 
-/* Coral primary actions */
+/* Blue primary actions (INS 灰蓝) */
 .music-settings-btn-primary,
 .music-settings-btn-primary:active:not(:disabled) {
-    background: linear-gradient(120deg, #ff5468, #ff7a5c);
+    background: linear-gradient(120deg, #a5c4e4, #7fa8d4);
     color: #fff;
     border: none;
-    box-shadow: 0 6px 18px rgba(255, 84, 104, 0.28);
+    box-shadow: 0 6px 18px rgba(127, 168, 212, 0.3);
 }
 
 .music-playlist-play-all {
-    background: linear-gradient(120deg, #ff5468, #ff7a5c);
+    background: linear-gradient(120deg, #a5c4e4, #7fa8d4);
     color: #fff;
     font-weight: 600;
-    box-shadow: 0 8px 20px rgba(255, 84, 104, 0.28);
+    box-shadow: 0 8px 20px rgba(127, 168, 212, 0.3);
 }
 
 .music-playlist-play-all i {
