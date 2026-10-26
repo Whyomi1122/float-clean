@@ -329,6 +329,93 @@
     transform: scale(0.9);
 }
 
+/* ── Import action sheet ── */
+
+.music-sheet-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    background: var(--c-music-overlay);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: music-fade-in 0.18s ease;
+}
+
+.music-sheet {
+    width: 100%;
+    max-width: 420px;
+    background: var(--c-music-panel);
+    border-radius: 20px 20px 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: music-sheet-up 0.22s ease;
+}
+
+@keyframes music-sheet-up {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes music-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.music-sheet-title {
+    text-align: center;
+    color: var(--c-music-text);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.music-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--c-music-surface);
+    border: 1px solid var(--c-music-surface-solid);
+    color: var(--c-music-text);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.music-sheet-item:active {
+    background: var(--c-music-accent-dim);
+}
+
+.music-sheet-cancel {
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--c-music-text);
+    opacity: 0.7;
+}
+
+/* ── Import progress toast ── */
+
+.music-import-toast {
+    position: absolute;
+    top: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    background: var(--c-music-panel);
+    border: 1px solid var(--c-music-surface-solid);
+    border-radius: 999px;
+    padding: 10px 20px;
+    color: var(--c-music-text);
+    font-size: 13px;
+    white-space: nowrap;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
 /* ── Empty State ── */
 
 .music-empty {

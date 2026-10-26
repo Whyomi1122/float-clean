@@ -48,7 +48,10 @@ export default function MusicApp({ onClose }: Props) {
     const [playlistsLoading, setPlaylistsLoading] = useState(true);
     const [musicToast, setMusicToast] = useState<string | null>(null);
     const [pendingPlayTrackId, setPendingPlayTrackId] = useState<string | null>(null);
+    const [showImportSheet, setShowImportSheet] = useState(false);
+    const [importing, setImporting] = useState<{ done: number; total: number } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
     const musicToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const musicLoadingFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [bgCfg, setBgCfg] = useState<MusicBgConfig>(() => loadMusicBg());
@@ -148,23 +151,38 @@ export default function MusicApp({ onClose }: Props) {
         if (musicLoadingFallbackRef.current) clearTimeout(musicLoadingFallbackRef.current);
     }, []);
 
-    // ── Upload handler ──
+    // ── Upload handler (batch, with progress) ──
     const handleUpload = async (files: FileList | null) => {
         if (!files || files.length === 0) return;
+        const audioExts = ["mp3", "m4a", "aac", "ogg", "wav", "flac", "wma", "opus", "webm"];
+        // filter audio files first so progress total is accurate
+        const audioFiles = Array.from(files).filter(f => {
+            const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+            return f.type.startsWith("audio/") || audioExts.includes(ext);
+        });
+        if (audioFiles.length === 0) { showMusicToast("未找到可导入的音频文件", 2200); return; }
+        setImporting({ done: 0, total: audioFiles.length });
         const newTracks: MusicTrack[] = [];
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-            const audioExts = ["mp3", "m4a", "aac", "ogg", "wav", "flac", "wma", "opus", "webm"];
-            if (!file.type.startsWith("audio/") && !audioExts.includes(ext)) continue;
-            const { title, artist } = parseFilename(file.name);
-            const duration = await getAudioDuration(file);
-            const track: MusicTrack = { id: generateTrackId(), title, artist, duration, liked: false, addedAt: new Date().toISOString() };
-            await saveTrack(track, file);
-            newTracks.push(track);
+        for (let i = 0; i < audioFiles.length; i++) {
+            const file = audioFiles[i];
+            try {
+                const { title, artist } = parseFilename(file.name);
+                const duration = await getAudioDuration(file);
+                const track: MusicTrack = { id: generateTrackId(), title, artist, duration, liked: false, addedAt: new Date().toISOString() };
+                await saveTrack(track, file);
+                newTracks.push(track);
+            } catch { /* skip broken file */ }
+            setImporting({ done: i + 1, total: audioFiles.length });
         }
-        if (newTracks.length > 0) setTracks(prev => [...newTracks, ...prev]);
+        setImporting(null);
+        if (newTracks.length > 0) {
+            setTracks(prev => [...newTracks, ...prev]);
+            showMusicToast(`已导入 ${newTracks.length} 首歌曲`, 2200);
+        } else {
+            showMusicToast("导入失败", 2200);
+        }
         if (fileInputRef.current) fileInputRef.current.value = "";
+        if (folderInputRef.current) folderInputRef.current.value = "";
     };
 
     const handlePlay = (track: MusicTrack) => {
@@ -370,6 +388,32 @@ export default function MusicApp({ onClose }: Props) {
                 <>
                     {/* Header Action: Upload Area inside the tab - Removed inline version */}
                     <input ref={fileInputRef} type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" multiple hidden onChange={(e) => handleUpload(e.target.files)} />
+                    <input ref={folderInputRef} type="file" hidden multiple onChange={(e) => handleUpload(e.target.files)} {...{ webkitdirectory: "", directory: "" }} />
+
+                    {/* Import action sheet */}
+                    {showImportSheet && (
+                        <div className="music-sheet-mask" onClick={() => setShowImportSheet(false)}>
+                            <div className="music-sheet" onClick={(e) => e.stopPropagation()}>
+                                <div className="music-sheet-title">导入本地音乐</div>
+                                <button className="music-sheet-item" onClick={() => { setShowImportSheet(false); fileInputRef.current?.click(); }}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /></svg>
+                                    多选文件导入
+                                </button>
+                                <button className="music-sheet-item" onClick={() => { setShowImportSheet(false); folderInputRef.current?.click(); }}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /><path d="M2 11h20" /></svg>
+                                    导入整个文件夹
+                                </button>
+                                <button className="music-sheet-item music-sheet-cancel" onClick={() => setShowImportSheet(false)}>取消</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Importing progress overlay */}
+                    {importing && (
+                        <div className="music-import-toast">
+                            正在导入 {importing.done}/{importing.total}...
+                        </div>
+                    )}
 
                     {/* Song list */}
                     {loading ? (
@@ -402,7 +446,7 @@ export default function MusicApp({ onClose }: Props) {
                     </button>
                     <button
                         className="music-fab-add"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => setShowImportSheet(true)}
                         title="添加本地音乐"
                         style={{ bottom: player.currentTrack ? "calc(146px + env(safe-area-inset-bottom, 0px))" : "calc(90px + env(safe-area-inset-bottom, 0px))" }}
                     >
