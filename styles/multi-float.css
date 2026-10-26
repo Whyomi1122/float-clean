@@ -1,4 +1,4 @@
-/* ═══ 多功能悬浮球 Multi Float Ball ═══ */
+/* ═══ 多功能悬浮球 Multi Float Ball — INS 灰蓝浅色 ═══ */
 
 .mfb-ball {
     position: fixed;
@@ -10,7 +10,7 @@
     cursor: grab;
     user-select: none;
     -webkit-user-select: none;
-    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45));
+    filter: drop-shadow(0 4px 14px rgba(44, 52, 64, 0.25));
 }
 
 .mfb-ball:active { cursor: grabbing; }
@@ -36,8 +36,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #2a2a30, #17171c);
-    color: rgba(255, 255, 255, 0.55);
+    background: linear-gradient(135deg, #cfdcea, #eef2f7);
+    color: #7c93ac;
     font-size: 17px;
 }
 
@@ -52,14 +52,14 @@
 }
 
 .mfb-ring-bg {
-    fill: none;
-    stroke: rgba(255, 255, 255, 0.16);
+    fill: rgba(255, 255, 255, 0.75);
+    stroke: rgba(44, 52, 64, 0.15);
     stroke-width: 2.5;
 }
 
 .mfb-ring-fg {
     fill: none;
-    stroke: #f2527d;
+    stroke: #6e9cc9;
     stroke-width: 2.5;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.4s linear;
@@ -74,11 +74,13 @@
     width: 20px;
     height: 44px;
     border-radius: 0 10px 10px 0;
-    border: none;
-    background: rgba(40, 40, 46, 0.85);
-    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(210, 216, 224, 0.8);
+    border-left: none;
+    background: rgba(255, 255, 255, 0.85);
+    color: #7c93ac;
     font-size: 12px;
     cursor: pointer;
+    box-shadow: 2px 2px 10px rgba(44, 52, 64, 0.1);
 }
 
 /* ── 面板 ── */
@@ -87,7 +89,7 @@
     position: fixed;
     inset: 0;
     z-index: 9700;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(30, 40, 55, 0.16);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -105,12 +107,12 @@
     max-height: 76vh;
     display: flex;
     flex-direction: column;
-    background: rgba(28, 28, 32, 0.92);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
     border-radius: 22px;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 18px 60px rgba(44, 52, 64, 0.18);
     overflow: hidden;
     animation: mfb-pop 0.22s ease;
 }
@@ -133,16 +135,17 @@
     border-radius: 999px;
     border: 1px solid transparent;
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: #7c93ac;
     font-size: 13px;
     cursor: pointer;
 }
 
 .mfb-tab-on {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(160, 194, 230, 0.5);
+    color: #2c3440;
     font-weight: 600;
+    box-shadow: 0 2px 10px rgba(44, 52, 64, 0.08);
 }
 
 .mfb-head-right {
@@ -156,8 +159,8 @@
     height: 28px;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.65);
+    background: rgba(44, 52, 64, 0.06);
+    color: #4a5560;
     font-size: 12px;
     cursor: pointer;
 }
@@ -169,8 +172,8 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
-    background: rgba(0, 0, 0, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(44, 52, 64, 0.85);
+    border: none;
     border-radius: 999px;
     padding: 7px 16px;
     color: #fff;
@@ -216,7 +219,8 @@
     height: 54px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(255, 255, 255, 0.14);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 14px rgba(44, 52, 64, 0.14);
 }
 
 .mfb-avatar-sm { width: 34px; height: 34px; }
@@ -225,13 +229,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #35353d, #202026);
-    color: rgba(255, 255, 255, 0.55);
+    background: linear-gradient(135deg, #dfe7f0, #cdd8e4);
+    color: #7c93ac;
     font-size: 15px;
 }
 
 .mfb-avatar-name {
-    color: rgba(255, 255, 255, 0.75);
+    color: #4a5560;
     font-size: 11px;
     max-width: 64px;
     overflow: hidden;
@@ -241,9 +245,9 @@
 
 .mfb-heart {
     font-size: 20px;
-    color: #f2527d;
+    color: #f09cb0;
     animation: mfb-heartbeat 1.4s ease-in-out infinite;
-    filter: drop-shadow(0 0 8px rgba(242, 82, 125, 0.45));
+    filter: drop-shadow(0 0 8px rgba(240, 156, 176, 0.45));
 }
 
 @keyframes mfb-heartbeat {
@@ -256,8 +260,8 @@
 
 /* ── 播放卡片 ── */
 .mfb-player {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(210, 216, 224, 0.6);
     border-radius: 16px;
     padding: 14px;
     display: flex;
@@ -272,8 +276,8 @@
     min-height: 96px;
 }
 
-.mfb-player-idle-text { color: rgba(255, 255, 255, 0.7); font-size: 13px; }
-.mfb-player-idle-sub { color: rgba(255, 255, 255, 0.35); font-size: 11px; }
+.mfb-player-idle-text { color: #4a5560; font-size: 13px; }
+.mfb-player-idle-sub { color: #7c93ac; font-size: 11px; }
 
 .mfb-player-top {
     display: flex;
@@ -287,12 +291,13 @@
     border-radius: 12px;
     object-fit: cover;
     flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(44, 52, 64, 0.14);
 }
 
 .mfb-player-meta { min-width: 0; }
 
 .mfb-player-title {
-    color: #fff;
+    color: #2c3440;
     font-size: 15px;
     font-weight: 600;
     overflow: hidden;
@@ -301,7 +306,7 @@
 }
 
 .mfb-player-artist {
-    color: rgba(255, 255, 255, 0.45);
+    color: #7c93ac;
     font-size: 12px;
     margin-top: 3px;
     overflow: hidden;
@@ -312,21 +317,21 @@
 .mfb-progress {
     height: 4px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(44, 52, 64, 0.1);
     overflow: hidden;
 }
 
 .mfb-progress-fill {
     height: 100%;
     border-radius: 999px;
-    background: #f2527d;
+    background: #6e9cc9;
     transition: width 0.4s linear;
 }
 
 .mfb-time {
     display: flex;
     justify-content: space-between;
-    color: rgba(255, 255, 255, 0.35);
+    color: #7c93ac;
     font-size: 10px;
     font-variant-numeric: tabular-nums;
 }
@@ -341,11 +346,11 @@
 .mfb-ctrl {
     width: 38px;
     height: 38px;
-    border: none;
+    border: 1px solid rgba(210, 216, 224, 0.6);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 14px;
+    background: rgba(255, 255, 255, 0.8);
+    color: #4a5560;
+    font-size: 13px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -355,14 +360,15 @@
 .mfb-ctrl-main {
     width: 48px;
     height: 48px;
-    background: #fff;
-    color: #17171c;
-    font-size: 17px;
+    background: #2c3440;
+    border-color: #2c3440;
+    color: #fff;
+    font-size: 16px;
 }
 
 /* ── 播放列表 ── */
 .mfb-queue-title {
-    color: rgba(255, 255, 255, 0.4);
+    color: #7c93ac;
     font-size: 11px;
     padding: 2px 4px 6px;
 }
@@ -383,18 +389,18 @@
     border: none;
     border-radius: 10px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.75);
+    color: #4a5560;
     font-size: 13px;
     cursor: pointer;
     text-align: left;
 }
 
-.mfb-queue-item:active { background: rgba(255, 255, 255, 0.06); }
+.mfb-queue-item:active { background: rgba(160, 194, 230, 0.16); }
 
-.mfb-queue-on { background: rgba(242, 82, 125, 0.14); color: #fff; }
+.mfb-queue-on { background: rgba(160, 194, 230, 0.22); color: #2c3440; font-weight: 600; }
 
 .mfb-queue-idx {
-    color: rgba(255, 255, 255, 0.3);
+    color: #9aa7b5;
     font-size: 11px;
     width: 16px;
     flex-shrink: 0;
@@ -409,7 +415,7 @@
 
 .mfb-queue-artist {
     margin-left: auto;
-    color: rgba(255, 255, 255, 0.3);
+    color: #9aa7b5;
     font-size: 11px;
     flex-shrink: 0;
     max-width: 80px;
@@ -420,7 +426,7 @@
 
 /* ── API Tab ── */
 .mfb-api-label {
-    color: rgba(255, 255, 255, 0.35);
+    color: #7c93ac;
     font-size: 11px;
     letter-spacing: 0.14em;
     padding: 4px 2px 2px;
@@ -433,7 +439,7 @@
 }
 
 .mfb-api-empty {
-    color: rgba(255, 255, 255, 0.35);
+    color: #7c93ac;
     font-size: 12px;
     text-align: center;
     padding: 24px 0;
@@ -441,12 +447,12 @@
 
 .mfb-api-node {
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(210, 216, 224, 0.6);
     overflow: hidden;
 }
 
-.mfb-api-node-on { border-color: rgba(242, 82, 125, 0.4); }
+.mfb-api-node-on { border-color: rgba(110, 156, 201, 0.55); }
 
 .mfb-api-node-head {
     width: 100%;
@@ -467,18 +473,18 @@
     flex-shrink: 0;
 }
 
-.mfb-dot-solid { background: #fff; }
-.mfb-dot-hollow { background: transparent; border: 1.5px solid rgba(255, 255, 255, 0.4); }
+.mfb-dot-solid { background: #6e9cc9; }
+.mfb-dot-hollow { background: transparent; border: 1.5px solid #b6c5d5; }
 
 .mfb-api-name {
-    color: #fff;
+    color: #2c3440;
     font-size: 13px;
     font-weight: 600;
     flex-shrink: 0;
 }
 
 .mfb-api-model {
-    color: rgba(255, 255, 255, 0.4);
+    color: #7c93ac;
     font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -488,7 +494,7 @@
 }
 
 .mfb-api-chev {
-    color: rgba(255, 255, 255, 0.45);
+    color: #7c93ac;
     font-size: 10px;
     flex-shrink: 0;
 }
@@ -503,12 +509,12 @@
 }
 
 .mfb-model-status {
-    color: rgba(255, 255, 255, 0.4);
+    color: #7c93ac;
     font-size: 12px;
     padding: 8px 4px;
 }
 
-.mfb-model-err { color: #ff8a9d; }
+.mfb-model-err { color: #d97a8c; }
 
 .mfb-model-item {
     display: flex;
@@ -518,25 +524,25 @@
     border: none;
     border-radius: 8px;
     background: none;
-    color: rgba(255, 255, 255, 0.7);
+    color: #4a5560;
     font-size: 12px;
     cursor: pointer;
     text-align: left;
 }
 
-.mfb-model-item:active { background: rgba(255, 255, 255, 0.06); }
+.mfb-model-item:active { background: rgba(160, 194, 230, 0.16); }
 
-.mfb-model-on { color: #fff; font-weight: 600; }
+.mfb-model-on { color: #2c3440; font-weight: 600; }
 
 .mfb-model-dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.35);
+    background: #b6c5d5;
     flex-shrink: 0;
 }
 
-.mfb-model-on .mfb-model-dot { background: #f2527d; }
+.mfb-model-on .mfb-model-dot { background: #6e9cc9; }
 
 .mfb-api-foot {
     display: flex;
@@ -547,7 +553,7 @@
 
 .mfb-api-current {
     flex: 1;
-    color: rgba(255, 255, 255, 0.5);
+    color: #7c93ac;
     font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -560,16 +566,18 @@
     padding: 8px 18px;
     border: none;
     border-radius: 999px;
-    background: #fff;
-    color: #17171c;
+    background: #2c3440;
+    color: #fff;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    box-shadow: 0 6px 16px rgba(44, 52, 64, 0.22);
 }
 
 .mfb-sync-btn:disabled {
     opacity: 0.35;
     cursor: default;
+    box-shadow: none;
 }
 
 /* ── 头像选择弹层 ── */
@@ -577,7 +585,7 @@
     position: absolute;
     inset: 0;
     z-index: 30;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(30, 40, 55, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -587,16 +595,17 @@
 .mfb-picker {
     width: 78%;
     max-height: 70%;
-    background: #232329;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid rgba(210, 216, 224, 0.7);
     border-radius: 16px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-shadow: 0 16px 44px rgba(44, 52, 64, 0.18);
 }
 
 .mfb-picker-title {
-    color: rgba(255, 255, 255, 0.55);
+    color: #7c93ac;
     font-size: 12px;
     text-align: center;
     padding: 12px 0 8px;
@@ -618,11 +627,11 @@
     border: none;
     border-radius: 10px;
     background: none;
-    color: rgba(255, 255, 255, 0.8);
+    color: #4a5560;
     font-size: 13px;
     cursor: pointer;
     text-align: left;
 }
 
-.mfb-picker-item:active { background: rgba(255, 255, 255, 0.07); }
-.mfb-picker-on { background: rgba(242, 82, 125, 0.14); color: #fff; }
+.mfb-picker-item:active { background: rgba(160, 194, 230, 0.16); }
+.mfb-picker-on { background: rgba(160, 194, 230, 0.22); color: #2c3440; font-weight: 600; }
