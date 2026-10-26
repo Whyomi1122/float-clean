@@ -99,8 +99,27 @@ export async function loadMemoryEntriesByType(
     return entries.filter(entry => entry.type === type);
 }
 
-export async function deleteMemoryEntry(id: string): Promise<void> {
+/** 批量写入（导入用，单个事务，按 id upsert） */
+export async function saveMemoryEntries(entries: MemoryEntry[]): Promise<void> {
+    if (entries.length === 0) return;
     const db = await openDb();
+    if (!db) return;
+    try {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        for (const entry of entries) {
+            store.put(entry);
+        }
+        await new Promise<void>((res, rej) => {
+            tx.oncomplete = () => res();
+            tx.onerror = () => rej(tx.error);
+        });
+    } finally {
+        db.close();
+    }
+}
+
+export async function deleteMemoryEntry(id: string): Promise<void> {    const db = await openDb();
     if (!db) return;
     try {
         const tx = db.transaction(STORE_NAME, "readwrite");

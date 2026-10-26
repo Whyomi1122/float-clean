@@ -910,6 +910,162 @@ export function filterTimelineByAllowedSources(
     });
 }
 
+// ── Short-term user edits (hide / override) ──────────────────────────────
+// 短期时间线是各 App 数据实时组装的派生数据，用户级别的「删除」与「编辑」
+// 不能动源数据，因此用 localStorage 存隐藏 id 列表与文本覆盖表。
+
+const ST_HIDDEN_KEY_PREFIX = "ai_phone_mem_shortterm_hidden_v1:";
+const ST_EDIT_KEY_PREFIX = "ai_phone_mem_shortterm_edit_v1:";
+
+function readJsonList(key: string): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = window.localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeJsonList(key: string, list: string[]): void {
+    if (typeof window === "undefined") return;
+    if (list.length > 0) window.localStorage.setItem(key, JSON.stringify(list));
+    else window.localStorage.removeItem(key);
+}
+
+function readJsonMap(key: string): Record<string, string> {
+    if (typeof window === "undefined") return {};
+    try {
+        const raw = window.localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === "object"
+            ? Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === "string")) as Record<string, string>
+            : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeJsonMap(key: string, map: Record<string, string>): void {
+    if (typeof window === "undefined") return;
+    const keys = Object.keys(map);
+    if (keys.length > 0) window.localStorage.setItem(key, JSON.stringify(map));
+    else window.localStorage.removeItem(key);
+}
+
+/** 用户隐藏（= 从短期页删除）的条目 id 列表 */
+export function getShortTermHiddenIds(characterId: string): string[] {
+    return readJsonList(ST_HIDDEN_KEY_PREFIX + characterId);
+}
+
+/** 设置/取消隐藏某条短期记录（hidden=true 为删除展示） */
+export function setShortTermEntryHidden(characterId: string, entryId: string, hidden: boolean): void {
+    const list = getShortTermHiddenIds(characterId);
+    const next = hidden
+        ? Array.from(new Set([...list, entryId]))
+        : list.filter(id => id !== entryId);
+    writeJsonList(ST_HIDDEN_KEY_PREFIX + characterId, next);
+}
+
+/** 用户编辑覆盖表：entryId → 新 content（完整内容，含格式前缀） */
+export function getShortTermEditOverrides(characterId: string): Record<string, string> {
+    return readJsonMap(ST_EDIT_KEY_PREFIX + characterId);
+}
+
+/** 设置/清除某条的文本覆盖（content=null 清除） */
+export function setShortTermEntryOverride(characterId: string, entryId: string, content: string | null): void {
+    const map = readJsonMap(ST_EDIT_KEY_PREFIX + characterId);
+    if (content === null) delete map[entryId];
+    else map[entryId] = content;
+    writeJsonMap(ST_EDIT_KEY_PREFIX + characterId, map);
+}
+
+/**
+ * 对组装好的时间线应用用户编辑：剔除隐藏条目、覆盖被编辑的文本。
+ * 在展示与总结取数入口处调用（loadNativeTimeline 返回后）。
+ */
+export function applyShortTermUserEdits(characterId: string, entries: NativeTimelineEntry[]): NativeTimelineEntry[] {
+    const hidden = new Set(getShortTermHiddenIds(characterId));
+    const overrides = getShortTermEditOverrides(characterId);
+    const hiddenIds = Object.keys(hidden).length;
+    if (hidden.size === 0 && Object.keys(overrides).length === 0) return entries;
+    return entries
+        .filter(entry => !hidden.has(entry.id))
+        .map(entry => {
+            const override = overrides[entry.id];
+            // 朋友圈条目带 momentsMeta 时展示走 meta 而非 content；一旦用户编辑过，
+            // 丢弃 meta 让展示回落到 content（用户编辑后的文本）
+            return override !== undefined ? { ...entry, content: override, momentsMeta: undefined } : entry;
+        });
+}
+
+/** 提取某条短期记录的「消息正文」（供编辑弹层预填，不含格式前缀） */
+export function getTimelineEntryMessageText(evt: NativeTimelineEntry): string {
+    const content = evt.content;
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "system") {
+        const m = content.match(/^\[私聊(?: [^\]]+)?\] ([\s\S]*)$/);
+        return m ? m[1] : content;
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "chat_offline") {
+        return content.replace(/^\[(?:事件|线下)(?: [^\]]+)?\]\s*/, "");
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail !== "group") {
+        const m = content.match(/^\[私聊(?: [^\]]+)?\] .+?: ([\s\S]*)$/);
+        if (m) return m[1];
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "group") {
+        const m = content.match(/^\[群聊「.+?」(?: [^\]]+)?\] .+?: ([\s\S]*)$/);
+        if (m) return m[1];
+    }
+    if (evt.sourceApp === "moments") {
+        if (evt.momentsMeta) return evt.momentsMeta.content;
+        const m = content.match(/^\[朋友圈(?: [^\]]+)?\] .+?发了一条动态[：:]"([\s\S]*?)"(?:[\s\S]*)$/);
+        if (m) return m[1];
+    }
+    const stripped = content.replace(/^\[[^\]]+\]\s*/, "");
+    return stripped || content;
+}
+
+/** 用编辑后的消息正文重建完整 content（保留 [私聊…] 发送者: 等格式前缀与内心独白） */
+export function rebuildTimelineEntryContent(evt: NativeTimelineEntry, editedText: string): string {
+    const text = editedText.trim();
+    const content = evt.content;
+    // 拆分末尾内心独白（仅私聊消息支持）
+    const innerMatch = text.match(/\n?[（(]内心[：:]([\s\S]+?)[）)]\s*$/);
+    const main = innerMatch ? text.slice(0, innerMatch.index ?? 0).trim() : text;
+    const inner = innerMatch ? `（内心：${innerMatch[1].trim()}）` : null;
+
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "system") {
+        const m = content.match(/^(\[私聊(?: [^\]]+)?\] )([\s\S]*)$/);
+        return m ? m[1] + main : main;
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "chat_offline") {
+        const m = content.match(/^(\[(?:事件|线下)(?: [^\]]+)?\]\s*)/);
+        return (m ? m[1] : "") + main;
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail !== "group") {
+        const m = content.match(/^(\[私聊(?: [^\]]+)?\] .+?: )([\s\S]*)$/);
+        if (m) return m[1] + main + (inner ? "\n" + inner : "");
+    }
+    if (evt.sourceApp === "chat" && evt.sourceDetail === "group") {
+        const m = content.match(/^(\[群聊「.+?」(?: [^\]]+)?\] .+?: )([\s\S]*)$/);
+        if (m) return m[1] + main;
+    }
+    if (evt.sourceApp === "moments") {
+        // 只替换动态正文引号内的部分，保留位置/照片/评论等尾注
+        const m2 = content.match(/^([\s\S]*?发了一条动态[：:]" )([\s\S]*?)("(?:[\s\S]*)?)$/);
+        if (m2) return m2[1] + main + m2[3];
+    }
+    if (evt.sourceApp === "custom_app") {
+        const m = content.match(/^(\[[^\]]+\]\s*)/);
+        return (m ? m[1] : "") + main;
+    }
+    const m = content.match(/^(\[(?:事件|剧情|漫卷|梦境|跑团游戏|小游戏|日记|便签墙|小红书|查手机|访谈|共创|小剧场)(?: [^\]]+)?\]\s*)/);
+    if (m) return m[1] + main;
+    return main;
+}
+
 /**
  * Unified interface for all modules to get short-term memory context.
  *

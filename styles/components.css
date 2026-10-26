@@ -2638,6 +2638,31 @@
   font-weight: 600;
 }
 
+/* 短期记录行内编辑/删除按钮 */
+.mem-tl-entry-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.mem-tl-entry-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  color: var(--c-text-secondary, #7a8095);
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+}
+.mem-tl-entry-actions button:active {
+  opacity: 1;
+  background: var(--c-surface-muted, #eef0f6);
+}
+.mem-tl-system .mem-tl-entry-actions { justify-content: center; }
+
 .data-management-menu .menu-label-group > .menu-label {
   font-weight: 600;
 }

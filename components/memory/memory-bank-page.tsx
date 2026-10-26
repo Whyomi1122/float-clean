@@ -1,7 +1,7 @@
 "use client";
 
-import { Component, useState, useEffect, useCallback, type CSSProperties, type ReactNode } from "react";
-import { Trash2, Zap, Clock, Users, Archive, AlertCircle, Search, FileText, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter, type LucideIcon } from "lucide-react";
+import { Component, useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
+import { Trash2, Zap, Clock, Users, Archive, AlertCircle, Search, FileText, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter, Download, Upload, type LucideIcon } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { MemoryTimeline } from "./memory-timeline";
 import { Toggle } from "@/components/ui/form";
@@ -13,7 +13,9 @@ import {
     loadMemoryConfig,
     saveMemoryConfig,
     loadMemoryEntriesByType,
+    loadMemoryEntries,
     saveMemoryEntry,
+    saveMemoryEntries,
     deleteMemoryEntry,
     deleteCharacterMemoriesByType,
     getAllCharacterIdsWithMemories,
@@ -22,7 +24,7 @@ import {
     setGroupLastSummarizedTimestamp,
 } from "@/lib/memory-storage";
 import { hydrateChatStorage } from "@/lib/chat-storage";
-import { loadNativeTimeline, filterTimelineByAllowedSources, type NativeTimelineEntry } from "@/lib/short-term-assembler";
+import { loadNativeTimeline, filterTimelineByAllowedSources, applyShortTermUserEdits, setShortTermEntryHidden, setShortTermEntryOverride, getTimelineEntryMessageText, rebuildTimelineEntryContent, type NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { runSummarizationPipeline, getSummaryGroupProgress, type SummaryGroupProgress } from "@/lib/memory-summarizer";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding";
@@ -268,6 +270,17 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     /** A1-a：设置页内的角色选择弹层 */
     const [charPickerOpen, setCharPickerOpen] = useState(false);
+
+    // ── 短期记录编辑/删除 ──
+    /** 正在编辑的短期条目（原始条目，用于重建格式前缀） */
+    const [editShortTermEntry, setEditShortTermEntry] = useState<NativeTimelineEntry | null>(null);
+    const [editShortTermText, setEditShortTermText] = useState("");
+    /** 待确认删除的短期条目 id */
+    const [confirmDeleteShortTermId, setConfirmDeleteShortTermId] = useState<string | null>(null);
+
+    // ── 导出/导入 ──
+    const importFileInputRef = useRef<HTMLInputElement | null>(null);
+    const [importing, setImporting] = useState(false);
     const disabledSourceCount = MEMORY_SOURCE_OPTIONS
         .filter(source => source.keys.some(key => (config.shortTermAllowedSources ?? {})[key] === false)).length;
 
@@ -341,9 +354,12 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         }
         // Native timeline is sync (localStorage) — no await needed.
         // 只取最近一段（全量可能几万条），防止解析+渲染把 iOS Safari 内存顶爆
-        // 注意：先按记忆来源设置过滤（关掉的 App 不再出现在短期页），再截取尾部
-        const timeline = filterTimelineByAllowedSources(loadNativeTimeline(charId))
-            .slice(-MEMORY_TIMELINE_ENTRY_CAP);
+        // 注意：先按记忆来源设置过滤（关掉的 App 不再出现在短期页），再应用用户
+        // 编辑（隐藏/覆盖），最后截取尾部
+        const timeline = applyShortTermUserEdits(
+            charId,
+            filterTimelineByAllowedSources(loadNativeTimeline(charId)),
+        ).slice(-MEMORY_TIMELINE_ENTRY_CAP);
         setShortTermEvents(timeline.filter(e =>
             !(e.sourceApp === "moments" && e.postAuthorType === "user")
             && !(e.sourceApp === "interview_magazine" && e.sourceDetail === "interview_shared_issue")
@@ -415,6 +431,129 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
         setGroupProgress(getSummaryGroupProgress(selectedCharId, SOURCE_APP_LABELS));
         setEditingWaterlineKey(null);
         showNotice("水位线已更新");
+    };
+
+    /** 打开短期记录编辑弹层 */
+    const openEditShortTerm = (entryId: string) => {
+        const entry = shortTermEvents.find(e => e.id === entryId);
+        if (!entry) return;
+        setEditShortTermEntry(entry);
+        setEditShortTermText(getTimelineEntryMessageText(entry));
+    };
+
+    /** 保存短期记录编辑：写入文本覆盖，然后重新加载 */
+    const handleSaveShortTermEdit = () => {
+        if (!selectedCharId || !editShortTermEntry) return;
+        const text = editShortTermText.trim();
+        if (!text) {
+            showNotice("内容不能为空");
+            return;
+        }
+        const original = getTimelineEntryMessageText(editShortTermEntry);
+        if (text === original) {
+            setEditShortTermEntry(null);
+            return;
+        }
+        setShortTermEntryOverride(selectedCharId, editShortTermEntry.id, rebuildTimelineEntryContent(editShortTermEntry, text));
+        setEditShortTermEntry(null);
+        loadDetailData(selectedCharId);
+        showNotice("已保存");
+    };
+
+    /** 确认后隐藏（删除）某条短期记录 */
+    const handleDeleteShortTerm = () => {
+        if (!selectedCharId || !confirmDeleteShortTermId) return;
+        setShortTermEntryHidden(selectedCharId, confirmDeleteShortTermId, true);
+        setConfirmDeleteShortTermId(null);
+        loadDetailData(selectedCharId);
+        showNotice("已删除");
+    };
+
+    /** 导出当前角色长期记忆为 JSON 文件 */
+    const handleExportMemories = async () => {
+        if (!selectedCharId) return;
+        try {
+            const entries = await loadMemoryEntries(selectedCharId);
+            const payload = {
+                format: "float-memory-export",
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                characterId: selectedCharId,
+                characterName: selectedChar?.name ?? "",
+                count: entries.length,
+                memories: entries,
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `记忆-${selectedChar?.name ?? selectedCharId}-${stamp}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotice(`已导出 ${entries.length} 条长期记忆`);
+        } catch (err) {
+            console.error("[MemoryBank] Export failed:", err);
+            showNotice("导出失败: " + String(err));
+        }
+    };
+
+    /** 导入 JSON 替换当前角色长期记忆（先自动备份旧数据） */
+    const handleImportFile = async (file: File) => {
+        if (!selectedCharId || importing) return;
+        setImporting(true);
+        try {
+            const raw = await file.text();
+            const parsed = JSON.parse(raw) as { memories?: unknown };
+            const list = Array.isArray(parsed) ? parsed : parsed?.memories;
+            if (!Array.isArray(list) || list.length === 0) {
+                showNotice("文件里没有可导入的记忆");
+                return;
+            }
+            const now = new Date().toISOString();
+            const incoming = (list as Array<Record<string, unknown>>)
+                .filter(item => item && typeof item === "object" && typeof item.content === "string")
+                .map(item => ({
+                    ...item,
+                    id: typeof item.id === "string" && item.id ? item.id : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                    characterId: selectedCharId,
+                    createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
+                })) as never[];
+            if (incoming.length === 0) {
+                showNotice("文件里没有有效的记忆条目");
+                return;
+            }
+
+            // 导入前自动备份现有数据（下载一份）
+            const existing = await loadMemoryEntries(selectedCharId);
+            if (existing.length > 0) {
+                const backup = {
+                    format: "float-memory-export",
+                    version: 1,
+                    exportedAt: now,
+                    characterId: selectedCharId,
+                    characterName: selectedChar?.name ?? "",
+                    count: existing.length,
+                    memories: existing,
+                };
+                const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `记忆备份-${selectedChar?.name ?? selectedCharId}-${now.slice(0, 19).replace(/[:T]/g, "-")}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            await saveMemoryEntries(incoming);
+            loadDetailData(selectedCharId);
+            showNotice(`已导入 ${incoming.length} 条（旧数据已备份下载）`);
+        } catch (err) {
+            console.error("[MemoryBank] Import failed:", err);
+            showNotice("导入失败: " + String(err));
+        } finally {
+            setImporting(false);
+            if (importFileInputRef.current) importFileInputRef.current.value = "";
+        }
     };
 
     const handleManualSummarize = async () => {
@@ -715,6 +854,53 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     ) : activeTab === "short" ? (
                         /* ── Short-term: card view ── */
                         <>
+                            {/* 短期记录编辑弹层 */}
+                            {editShortTermEntry ? (
+                                <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setEditShortTermEntry(null)}>
+                                    <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
+                                        <div className="modal-header" data-ui="modal-header">
+                                            <button className="modal-header-btn modal-header-btn-muted" onClick={() => setEditShortTermEntry(null)}><X size={18} /></button>
+                                            <h3 className="modal-title">编辑记录</h3>
+                                            <button
+                                                className="modal-header-btn"
+                                                onClick={handleSaveShortTermEdit}
+                                                disabled={!editShortTermText.trim()}
+                                            >
+                                                <Check size={18} />
+                                            </button>
+                                        </div>
+                                        <div className="modal-body modal-body-tight" data-ui="modal-body">
+                                            <p className="ts-11 text-secondary px-4 pt-1 pb-2">只修改这条记录显示的内容；对话格式（发送者、群名等）会自动保留。</p>
+                                            <textarea
+                                                className="w-full resize-none rounded-xl px-3 py-2 ts-13 leading-relaxed"
+                                                rows={8}
+                                                value={editShortTermText}
+                                                onChange={e => setEditShortTermText(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {/* 短期记录删除确认 */}
+                            {confirmDeleteShortTermId ? (
+                                <div className="modal-overlay" data-ui="modal" onClick={() => setConfirmDeleteShortTermId(null)}>
+                                    <div className="modal-card" data-ui="modal-card" onClick={event => event.stopPropagation()}>
+                                        <h3 className="modal-title">删除这条记录？</h3>
+                                        <p className="ts-12 text-secondary mt-2">该记录将不再出现在短期记忆和后续总结中，原始 App 内容不受影响。</p>
+                                        <div className="flex gap-2 mt-4">
+                                            <button type="button" className="flex-1 rounded-xl py-2.5 ts-13" onClick={() => setConfirmDeleteShortTermId(null)}>取消</button>
+                                            <button
+                                                type="button"
+                                                className="flex-1 rounded-xl py-2.5 ts-13 font-medium"
+                                                style={{ background: "#e5484d", color: "#fff" }}
+                                                onClick={handleDeleteShortTerm}
+                                            >删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
                             {/* 来源筛选：从当前事件里动态取出现过的来源（跨 App 混排，默认「全部」） */}
                             {(() => {
                                 const presentKeys: Array<{ key: string; label: string }> = [];
@@ -757,6 +943,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                                         return key === shortTermSourceFilter;
                                     })}
                                 userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
+                                onEditEntry={openEditShortTerm}
+                                onDeleteEntry={id => setConfirmDeleteShortTermId(id)}
                             />
                         </>
                     ) : activeTab === "shared" ? (
@@ -1110,8 +1298,41 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
                     </button>
                 </div>
 
-                {sourcePickerOpen ? (
-                    <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setSourcePickerOpen(false)}>
+                {/* 数据管理：导出/导入长期记忆（供外部 AI 复盘后回填） */}
+                <p className="menu-group-desc mx-2">数据管理</p>
+                <div className="menu-group">
+                    <button type="button" className="menu-item" onClick={() => void handleExportMemories()} disabled={!selectedCharId}>
+                        <MemorySettingsIcon icon={Download} color={BINDING_ACCENTS.memory} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">导出记忆</span>
+                            <span className="menu-desc">下载当前角色的长期记忆为 JSON，可交给外部 AI 复盘修订</span>
+                        </div>
+                        <div className="menu-right"><ChevronRight size={16} /></div>
+                    </button>
+                    <button type="button" className="menu-item" onClick={() => importFileInputRef.current?.click()} disabled={!selectedCharId || importing}>
+                        <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">导入记忆</span>
+                            <span className="menu-desc">用 JSON 覆盖当前角色的长期记忆，导入前会自动备份现有数据</span>
+                        </div>
+                        <div className="menu-right">
+                            {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
+                            <ChevronRight size={16} />
+                        </div>
+                    </button>
+                    <input
+                        ref={importFileInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        style={{ display: "none" }}
+                        onChange={event => {
+                            const file = event.target.files?.[0];
+                            if (file) void handleImportFile(file);
+                        }}
+                    />
+                </div>
+
+                {sourcePickerOpen ? (                    <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setSourcePickerOpen(false)}>
                         <div className="modal-sheet memory-source-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>
                             <div className="modal-header" data-ui="modal-header">
                                 <span style={{ width: 28 }} />

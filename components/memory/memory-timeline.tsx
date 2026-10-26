@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { Edit3, Trash2 } from "lucide-react";
 import type { NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import { findStickerByName } from "@/lib/sticker-data";
@@ -425,7 +426,22 @@ function formatClusterDate(cluster: TimelineCluster): string {
    Inline detail — renders the former modal content inside cards
    ================================================================ */
 
-function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
+/** 每条记录行内的小操作按钮（编辑/删除），仅短期页提供回调时显示 */
+function EntryActions({ id, onEditEntry, onDeleteEntry }: { id: string; onEditEntry?: (id: string) => void; onDeleteEntry?: (id: string) => void }) {
+    if (!onEditEntry && !onDeleteEntry) return null;
+    return (
+        <span className="mem-tl-entry-actions" onClick={(event) => event.stopPropagation()}>
+            {onEditEntry && (
+                <button type="button" aria-label="编辑" onClick={() => onEditEntry(id)}><Edit3 size={12} /></button>
+            )}
+            {onDeleteEntry && (
+                <button type="button" aria-label="删除" onClick={() => onDeleteEntry(id)}><Trash2 size={12} /></button>
+            )}
+        </span>
+    );
+}
+
+function ClusterDetail({ cluster, onEditEntry, onDeleteEntry }: { cluster: TimelineCluster; onEditEntry?: (id: string) => void; onDeleteEntry?: (id: string) => void }) {
     return (
         <div className="mem-tl-card-detail" onClick={(event) => event.stopPropagation()}>
             {(() => {
@@ -455,6 +471,7 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
                                         return (
                                             <div key={entry.id} className="mem-tl-system">
                                                 <span>{entry.message}</span>
+                                                <EntryActions id={entry.id} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
                                             </div>
                                         );
                                     }
@@ -470,6 +487,7 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
                                                     {e.sender}
                                                     {e.type === "group" && <span className="mem-tl-bubble-group">{e.groupName}</span>}
                                                     <span className="mem-tl-bubble-ts">{fmtTime(e.timestamp)}</span>
+                                                    <EntryActions id={e.id} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
                                                 </span>
                                                 <div className="chat-music-share-card">
                                                     <div className="chat-music-share-body">
@@ -497,6 +515,7 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
                                                 {e.sender}
                                                 {e.type === "group" && <span className="mem-tl-bubble-group">{e.groupName}</span>}
                                                 <span className="mem-tl-bubble-ts">{fmtTime(e.timestamp)}</span>
+                                                <EntryActions id={e.id} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
                                             </span>
                                             <div className="mem-tl-bubble-body">
                                                 <p className="mem-tl-bubble-text">{renderWithStickers(e.message)}</p>
@@ -528,6 +547,7 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
                                         <div className="mem-tl-moment-head">
                                             <span className="mem-tl-moment-author">{entry.author}</span>
                                             <span className="mem-tl-bubble-ts">{fmtTime(entry.timestamp)}</span>
+                                            <EntryActions id={entry.id} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
                                         </div>
                                         <p className="mem-tl-moment-text">{entry.content}</p>
                                         {entry.location && <span className="mem-tl-moment-loc">{entry.location}</span>}
@@ -598,12 +618,16 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
 type Props = {
     events: NativeTimelineEntry[];
     userName: string;
+    /** 提供后每条记录显示编辑按钮（短期页用） */
+    onEditEntry?: (id: string) => void;
+    /** 提供后每条记录显示删除按钮（短期页用） */
+    onDeleteEntry?: (id: string) => void;
 };
 
 // 每批渲染的簇数：全部一次性渲染会在重数据账号上把 DOM 撑爆
 const CLUSTER_PAGE_SIZE = 30;
 
-export function MemoryTimeline({ events, userName }: Props) {
+export function MemoryTimeline({ events, userName, onEditEntry, onDeleteEntry }: Props) {
     const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(CLUSTER_PAGE_SIZE);
 
@@ -652,7 +676,7 @@ export function MemoryTimeline({ events, userName }: Props) {
                                 <span className="mem-tl-card-count">{cluster.entryCount} 条记录</span>
                             </div>
                             {expanded ? (
-                                <ClusterDetail cluster={cluster} />
+                                <ClusterDetail cluster={cluster} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
                             ) : (
                                 <div className="mem-tl-card-excerpts">
                                     {cluster.excerpts.length > 0 ? cluster.excerpts.map((ex, i) => (
