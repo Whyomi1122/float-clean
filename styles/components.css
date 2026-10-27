@@ -1282,9 +1282,13 @@
   overflow-x: auto;
   overflow-y: hidden;
   /* 上下间距全部交给滚动容器的 padding-top:16 + gap:12，
-     这里不再自带留白 —— 否则 chips→卡片 会和 卡片→卡片 对不上 */
+     这里不再自带留白 —— 否则 chips→卡片 会和 卡片→卡片 对不上。
+     flex-shrink:0 必须保留：父级是 flex-col 滚动容器，
+     默认 shrink 会把这条 overflow:hidden 的 chips 行压成 0 高（整行消失）。 */
   padding: 0 2px;
   margin-bottom: 0;
+  flex: 0 0 auto;
+  min-height: 30px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
@@ -5252,6 +5256,8 @@
   gap: 12px;
   /* 上下间距交给滚动容器（padding-top:16 / gap:12），这里不再自带 */
   padding: 0;
+  /* 父级 flex-col 滚动容器里不能被压缩，否则 chips 行会被挤没 */
+  flex: 0 0 auto;
 }
 
 /* Card */
