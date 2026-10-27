@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 // iOS 收起键盘的部分路径（切后台回来、字典收起、工具栏变化等）不会触发
 // visualViewport resize，偏移会永远卡在键盘高度上，整个通话界面停在上移
@@ -14,29 +14,23 @@ function hasEditableFocus(): boolean {
     return el instanceof HTMLElement && el.isContentEditable;
 }
 
-export function useCallKeyboardOffsetStyle(): CSSProperties {
+export function useCallKeyboardOffsetStyle(): { style: CSSProperties; offset: number } {
     const [offset, setOffset] = useState(0);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
 
-        const isAndroidMobile =
-            /Android/i.test(navigator.userAgent) &&
-            window.matchMedia("(max-width: 500px) and (hover: none) and (pointer: coarse)").matches;
-
-        if (isAndroidMobile) {
-            setOffset(0);
-            return;
-        }
-
         const viewport = window.visualViewport;
+        if (!viewport) return;
+
         const update = () => {
-            if (!viewport || !hasEditableFocus()) {
+            if (!hasEditableFocus()) {
                 setOffset(0);
                 return;
             }
             const next = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
-            setOffset(next);
+            // 小于 80px 视为噪音（地址栏收缩等），避免布局抖动
+            setOffset(next < 80 ? 0 : next);
         };
 
         // focus 切换到另一个输入框时 focusout 先于 focusin，延迟分批重算，
@@ -66,5 +60,8 @@ export function useCallKeyboardOffsetStyle(): CSSProperties {
         };
     }, []);
 
-    return useMemo(() => ({ "--call-keyboard-offset": `${offset}px` } as CSSProperties), [offset]);
+    return {
+        style: { "--call-keyboard-offset": `${offset}px` } as CSSProperties,
+        offset,
+    };
 }

@@ -5336,16 +5336,13 @@
 }
 
 /* 键盘弹出时头像区与名字让位，给字幕和输入框腾空间 */
-.call-keyboard-shift[data-keyboard] .voicecall-avatar-wrap {
+.call-keyboard-shift[data-keyboard] .voicecall-avatar-stage {
   padding-top: 6px;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
 }
 .call-keyboard-shift[data-keyboard] .voicecall-avatar {
   width: 74px;
   height: 74px;
-}
-.call-keyboard-shift[data-keyboard] .voicecall-name {
-  margin-bottom: 2px;
 }
 
 .videocall-text-input-panel {

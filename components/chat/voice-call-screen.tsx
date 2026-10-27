@@ -75,7 +75,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const androidTextInputOnlyRef = useRef(isAndroidBrowser() && !holdToTalkRef.current);
     const androidTextInputOnly = androidTextInputOnlyRef.current;
     const playCallAudio = iosDevice ? playAudioBlob : playAudioBlobViaMediaElement;
-    const keyboardOffsetStyle = useCallKeyboardOffsetStyle();
+    const { style: keyboardOffsetStyle, offset: kbOffset } = useCallKeyboardOffsetStyle();
     const [callState, setCallState] = useState<CallState>("CONNECTING");
     const hasConnectedRef = useRef(false);
     const [callDuration, setCallDuration] = useState(0);
@@ -650,6 +650,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     return (
         <div
             className="absolute inset-0 z-[100] flex flex-col text-white overflow-hidden call-bg-default call-keyboard-shift"
+            data-keyboard={kbOffset > 0 ? "" : undefined}
             style={bgImageResolved ? { ...keyboardOffsetStyle, background: `url(${bgImageResolved}) center/cover no-repeat` } : keyboardOffsetStyle}
         >
             {/* Dark overlay for readability */}
@@ -689,7 +690,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 </div>
 
                 {/* Center: Avatar + connecting ring */}
-                <div className="flex-none flex justify-center items-center pt-[30px] pb-5">
+                <div className="flex-none flex justify-center items-center pt-[30px] pb-5 voicecall-avatar-stage">
                     <div className="relative flex items-center justify-center">
                         <div
                             className="voicecall-avatar"

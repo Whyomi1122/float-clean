@@ -5895,9 +5895,20 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         "data-multi-select": "",
                         ...(isMultiSelected ? { "data-selected": "" } : {}),
                     } : {};
+                    // 剧情对话段分界线：段的头一条上画「起」、末一条下画「止」，
+                    // 让「剧情带进来的聊天」和普通聊天在时间线上一眼分开
+                    const segStart = !!msg.deliverySessionId && !projectedMessages[idx - 1]?.deliverySessionId;
+                    const segEnd = !!msg.deliverySessionId && !projectedMessages[idx + 1]?.deliverySessionId;
 
                     return (
                         <div key={msg.id} className="flex flex-col gap-4" {...(hiddenEmpty ? { style: { display: "none" } } : {})} {...(isEmptyBubble && renderMsg.reasoningText && !showTime ? { "data-reasoning-only": "" } : {})}>
+                            {segStart && (
+                                <div className="flex items-center gap-3 px-6 select-none" data-story-segment="start">
+                                    <span className="h-px flex-1 bg-[var(--c-border)]" />
+                                    <span className="text-[11px] tracking-widest text-[var(--c-text-tertiary)]">剧情对话 · 起</span>
+                                    <span className="h-px flex-1 bg-[var(--c-border)]" />
+                                </div>
+                            )}
                             {showTime && (
                                 <div className="flex justify-center w-full">
                                     <span className="chat-sys-msg py-[2px] px-2 rounded select-none">
@@ -6193,6 +6204,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     <div className="chat-thought-sig">
                                         — {session.isGroup ? (msg.senderName || "群成员") : (character?.name || "TA")}
                                     </div>
+                                </div>
+                            )}
+                            {segEnd && (
+                                <div className="flex items-center gap-3 px-6 select-none" data-story-segment="end">
+                                    <span className="h-px flex-1 bg-[var(--c-border)]" />
+                                    <span className="text-[11px] tracking-widest text-[var(--c-text-tertiary)]">剧情对话 · 止</span>
+                                    <span className="h-px flex-1 bg-[var(--c-border)]" />
                                 </div>
                             )}
                         </div>

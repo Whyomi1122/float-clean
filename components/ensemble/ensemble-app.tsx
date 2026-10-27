@@ -1429,13 +1429,14 @@ export function EnsembleApp({
     target: { kind: "direct"; characterId: string } | { kind: "group"; participantIds: string[] },
     contentOverride?: string,
     lineOverride?: DeliverableLine | null,
+    translationOverride?: string,
   ) => {
     if (!currentScript) return;
     const line = lineOverride !== undefined ? lineOverride : deliverLine;
     // 双语划分：翻译不单独成句，跟着说出的那句话一起走 ——
     // 「原文\n译文」合成一条微信消息，和聊天室里 AI 双语回复的样式一致
-    const rawContent =
-      contentOverride ?? (line ? (line.translation ? `${line.text}\n${line.translation}` : line.text) : turn.content);
+    const translation = translationOverride ?? line?.translation;
+    const rawContent = contentOverride ?? (line ? (translation ? `${line.text}\n${translation}` : line.text) : turn.content);
     // 最后一道保险：即便台词来源有污染，投出去的一定是干净的微信格式
     const content = sanitizeChatLine(rawContent);
     if (!content) {
@@ -5223,6 +5224,7 @@ ${lastSpeakerNote}
                           },
                           deliverLine?.text ?? undefined,
                           deliverLine,
+                          deliverLine?.translation ?? undefined,
                         );
                       }}
                     >
@@ -5250,6 +5252,7 @@ ${lastSpeakerNote}
                               },
                               deliverLine?.text ?? undefined,
                               deliverLine,
+                              deliverLine?.translation ?? undefined,
                             );
                           }}
                         >
