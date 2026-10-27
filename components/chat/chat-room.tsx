@@ -95,6 +95,7 @@ import {
     formatTranscriptAsNarration,
     loadSessionTranscript,
     loadDeliverySessions,
+    tagMessagesForOpenDeliverySession,
 } from "@/lib/ensemble-delivery";
 import { appendEnsembleTurn } from "@/lib/ensemble-storage";
 
@@ -1141,6 +1142,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const [t] = loadSessionTranscript(target.id);
         if (t && t.messages.length > 0) markDeliverySessionOpened(target.id);
     }, [session.id]);
+
+    // 投递后新产生的消息（用户回复、AI 回复）也要归入这段剧情对话，
+    // 否则「返回剧情」时收集不到，剧情里只带上第一句
+    useEffect(() => {
+        tagMessagesForOpenDeliverySession(session.id);
+    }, [session.id, messages.length]);
 
     /**
      * 【返回剧情】：结束当前这段剧情对话，把整段打包写进剧本。
@@ -5494,16 +5501,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         {session.isGroup
                             ? `${session.groupName || "群聊"}(${(session.participantIds?.length || 0) + (session.isSpectator ? 0 : 1)})`
                             : (session.alias || character?.name || `User_${session.contactId.slice(-4)}`)}
-                        {openStorySession && (
+                        {(isGenerating || isOfflineGenerating) ? (
+                            <span className="chat-typing-indicator">
+                                {offlineMode ? "线下生成中" : "对方正在输入"}<span className="chat-typing-dots"><i/><i/><i/></span>
+                            </span>
+                        ) : openStorySession && (
                             <span
                                 className="chat-typing-indicator"
                                 style={{ color: "#C0AE8E" }}
                             >剧情模式</span>
-                        )}
-                        {(isGenerating || isOfflineGenerating) && (
-                            <span className="chat-typing-indicator">
-                                {offlineMode ? "线下生成中" : "对方正在输入"}<span className="chat-typing-dots"><i/><i/><i/></span>
-                            </span>
                         )}
                     </span>
                     <span className="page-header-right">

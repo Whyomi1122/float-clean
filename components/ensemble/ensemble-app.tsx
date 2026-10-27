@@ -1217,7 +1217,7 @@ type EnsembleView = "personas" | "scripts" | "create" | "workspace";
  * 投递到聊天室必须只剩对白 —— 用户明确要求「格式都是线上的微信格式」。
  */
 /** 投递候选：一句真正能发出去的台词 + 这一句属于谁。 */
-type DeliverableLine = { text: string; speaker: string | null };
+type DeliverableLine = { text: string; speaker: string | null; translation?: string };
 
 /** [旁白] [动作] [心理] [叙述] [对白] 这类块标记。 */
 const BLOCK_TAG_RE = /^\[(旁白|动作|心理|描写|叙述|场景|说明|环境|内心|画外音|系统|对白|台词)\]\s*[:：]?\s*/;
@@ -1253,6 +1253,19 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
   let inNonDialogueBlock = false;
   /** 当前所处的台词块（[对白]）—— 只有它里面的内容才算台词。 */
   let inDialogueBlock = false;
+  /**
+   * 双语配对：剧本是「韩语原文行在前、中文译文行在后」的格式。
+   * 韩语行开一条新候选，紧随的中文行作为译文并入同一条；
+   * 配完对之后再来的中文行（既不是原文也不是译文）＝ 叙述/动作，丢弃。
+   * 这正是图里「他没有出声，拿过桌上的圆珠笔……」被当成台词的根因 ——
+   * 它跟在译文后面、又没打 [动作] 标签，旧逻辑按「对白块内全收」放行了。
+   */
+  const HANGUL_RE = /[\uac00-\ud7af\u1100-\u11ff]/;
+  let pending: DeliverableLine | null = null;
+  const flushPending = () => {
+    if (pending) out.push(pending);
+    pending = null;
+  };
 
   for (const rawLine of raw.split(/\r?\n/)) {
     let line = rawLine.trim();
@@ -1269,11 +1282,14 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
       line = line.slice(tag[0].length).trim();
       // 「［对白］:」单独一行时后面才是台词，这行本身没内容
       if (!line) continue;
+      // 进了非台词块，之前挂着的候选先落袋
+      if (inNonDialogueBlock) flushPending();
     }
 
-    // 2) 「角色名：」单独一行 → 记录说话人并跳过
+    // 2) 「角色名：」单独一行 → 换人说话，之前的候选先落袋
     const header = matchSpeakerHeader(line);
     if (header) {
+      flushPending();
       speaker = header;
       continue;
     }
@@ -1288,6 +1304,7 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     // 5) 行内还带块标记（「[动作]:他……」跟内容在同一行）
     const inlineTag = line.match(NON_DIALOGUE_TAG_RE);
     if (inlineTag) {
+      flushPending();
       inNonDialogueBlock = true;
       inDialogueBlock = false;
       continue;
@@ -1296,6 +1313,7 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     // 6) 行首的人名 + 内容：「金成帝：门好好反锁了吗。」
     const named = line.match(/^([^\s：:\[\]【】（）()]{1,16})\s*(?:[（(][^）)]{0,20}[)）])?\s*[：:]\s*(.+)$/);
     if (named) {
+      flushPending();
       speaker = named[1].trim();
       line = named[2].trim();
     }
@@ -1304,17 +1322,31 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     if (!line) continue;
     if (/^[（(［\[【].*[)）］\]】]$/.test(line) && !/["“”「」『』]/.test(line)) continue;
 
-    // 8) ⚠️ 不在 [对白] 块里、也没有引号包着 —— 这多半是叙述/动作，
-    //    不能当台词投出去。
-    //    之前这里不管三七二十一全收，所以「窗外的夜雨渐渐密了起来……」
-    //    「他坐进车里拉起手刹……」都被当成台词了。
-    if (!inDialogueBlock && !/["“”「」『』]/.test(line)) continue;
-
-    // 9) 洗掉残留的括号表演、心理块和包住台词的引号
+    // 8) 洗掉残留的括号表演、心理块和包住台词的引号
     const cleaned = sanitizeChatLine(line);
     if (!/[\u4e00-\u9fa5a-zA-Z0-9가-힣]/.test(cleaned)) continue;
+
+    // 9) 双语配对（只对台词块生效）
+    if (inDialogueBlock) {
+      if (HANGUL_RE.test(cleaned)) {
+        // 韩语原文行 → 开新候选
+        flushPending();
+        pending = { text: cleaned, speaker };
+      } else if (pending && !pending.translation) {
+        // 紧跟原文的中文行 → 译文，并入同一条
+        pending.translation = cleaned;
+      } else {
+        // 没有挂着的原文、或已经配过译文 → 是叙述/动作，不是台词
+        flushPending();
+      }
+      continue;
+    }
+    // 对白块外维持旧规则：无引号的行多半是叙述/动作，不能当台词
+    if (!/["“”「」『』]/.test(line)) continue;
+    flushPending();
     out.push({ text: cleaned, speaker });
   }
+  flushPending();
 
   // 一句都抽不出来就退回原文，至少别让用户无从下手
   if (out.length > 0) return out;
@@ -1400,8 +1432,12 @@ export function EnsembleApp({
   ) => {
     if (!currentScript) return;
     const line = lineOverride !== undefined ? lineOverride : deliverLine;
+    // 双语划分：翻译不单独成句，跟着说出的那句话一起走 ——
+    // 「原文\n译文」合成一条微信消息，和聊天室里 AI 双语回复的样式一致
+    const rawContent =
+      contentOverride ?? (line ? (line.translation ? `${line.text}\n${line.translation}` : line.text) : turn.content);
     // 最后一道保险：即便台词来源有污染，投出去的一定是干净的微信格式
-    const content = sanitizeChatLine(contentOverride ?? line?.text ?? turn.content);
+    const content = sanitizeChatLine(rawContent);
     if (!content) {
       setToast("这一句洗完之后是空的，换一句吧");
       return;
@@ -5138,6 +5174,11 @@ ${lastSpeakerNote}
                             <span className="block text-[13px] leading-relaxed text-black/80 whitespace-pre-wrap break-words">
                               {line.text}
                             </span>
+                            {line.translation && (
+                              <span className="block text-[12px] leading-relaxed text-black/45 whitespace-pre-wrap break-words">
+                                {line.translation}
+                              </span>
+                            )}
                           </span>
                         </button>
                       );
@@ -5163,7 +5204,9 @@ ${lastSpeakerNote}
                       {resolveSpeaker(deliverPicker.member, deliverLine).name} · 将发送这一句
                     </div>
                     <div className="text-[13px] leading-relaxed text-black/80 max-h-[110px] overflow-y-auto whitespace-pre-wrap">
-                      {deliverLine?.text}
+                      {deliverLine?.translation
+                        ? `${deliverLine.text}\n${deliverLine.translation}`
+                        : deliverLine?.text}
                     </div>
                   </div>
                   <div className="bg-white rounded-[16px] p-2">

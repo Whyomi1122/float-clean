@@ -1323,7 +1323,8 @@
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 2px;
+  /* 与页头保持呼吸感：整体下移一点，上下留白均衡 */
+  padding: 12px 2px 4px;
   margin-bottom: -2px;
   min-height: 40px;
   scrollbar-width: none;

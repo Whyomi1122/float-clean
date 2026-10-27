@@ -5130,10 +5130,10 @@
 .voicecall-subtitle-mask > :first-child {
   margin-top: auto;
 }
-/* In text-input mode the input bar floats over the bottom of this area; reserve
-   space so the newest message isn't hidden behind it. */
+/* Text-input mode: the input bar is now a flex sibling (not an overlay), so no
+   reserved padding is needed — the mask simply loses height. */
 .voicecall-subtitle-mask[data-text-input] {
-  padding-bottom: 56px;
+  padding-bottom: 4px;
 }
 
 /* ── Voice call avatar ── */
@@ -5328,10 +5328,24 @@
   white-space: nowrap;
 }
 
+/* 键盘弹出：不再整体 translateY（会把顶栏/头像/底栏一起顶飞），
+   改为收缩根容器高度，让中间弹性区被压缩，顶栏与底栏原地不动。 */
 .call-keyboard-shift {
-  transform: translateY(calc(var(--call-keyboard-offset, 0px) * -1));
-  transition: transform 180ms ease;
-  will-change: transform;
+  height: calc(100% - var(--call-keyboard-offset, 0px));
+  transition: height 180ms ease;
+}
+
+/* 键盘弹出时头像区与名字让位，给字幕和输入框腾空间 */
+.call-keyboard-shift[data-keyboard] .voicecall-avatar-wrap {
+  padding-top: 6px;
+  padding-bottom: 2px;
+}
+.call-keyboard-shift[data-keyboard] .voicecall-avatar {
+  width: 74px;
+  height: 74px;
+}
+.call-keyboard-shift[data-keyboard] .voicecall-name {
+  margin-bottom: 2px;
 }
 
 .videocall-text-input-panel {
@@ -5352,13 +5366,15 @@
   bottom: calc(max(30px, env(safe-area-inset-bottom, 0px)) + 92px);
 }
 
+/* 通话页输入框：作为 flex 列里的普通块，紧贴底栏上方，不再用绝对定位 + 写死 bottom */
 .voicecall-text-input-panel {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
-  width: auto;
-  padding: 0;
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  padding: 0 18px 6px;
+  flex-shrink: 0;
 }
 
 .gcall-root[data-text-input] .gcall-text-input-panel {

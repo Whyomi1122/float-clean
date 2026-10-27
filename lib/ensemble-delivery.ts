@@ -317,6 +317,30 @@ export function closeDeliverySession(params: {
     return { session: ended, transcript };
 }
 
+/**
+ * 投递后的新消息（用户回复、AI 回复）不会自动带上 session 标记，
+ * 导致「返回剧情」时收集不到。这里给所有开着 session 的会话补标：
+ * 凡是投递时刻之后产生的、还没归属的消息，都归入这段剧情对话。
+ */
+export function tagMessagesForOpenDeliverySession(chatSessionId: string): void {
+    try {
+        const open = loadDeliverySessions().find(
+            s => !s.endedAt && s.chatSessionId === chatSessionId,
+        );
+        if (!open) return;
+        const messages = loadChatMessages(chatSessionId);
+        for (const m of messages) {
+            if (m.deliverySessionId) continue;
+            const at = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+            if (at >= open.startedAt) {
+                updateChatMessage(m.id, { deliverySessionId: open.id });
+            }
+        }
+    } catch {
+        // 补标失败不阻断聊天
+    }
+}
+
 /** 一段（或全部）未归入对话段里的聊天，供归档面板展开查看。 */
 export function loadSessionTranscript(deliverySessionId?: string): {
     session: DeliverySession;

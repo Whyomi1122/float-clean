@@ -658,8 +658,6 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 {...(bgImageResolved ? { "data-has-image": "" } : {})}
             />
 
-            <CallVolumeControl />
-
             {onMinimize && callState !== "ENDED" && (
                 <button
                     type="button"
@@ -768,17 +766,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     >
                         <button
                             type="button"
-                            onClick={handleRegenerate}
-                            className="call-regenerate-btn"
-                            disabled={callState !== "IDLE"}
-                            aria-label="让对方重新回复"
-                            title="让对方重新回复"
+                            onClick={handleInputModeToggle}
+                            className="call-text-input-close-btn"
+                            aria-label="切换到语音输入"
+                            title="切换到语音输入"
                         >
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M23 4v6h-6" />
-                                <path d="M1 20v-6h6" />
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
+                            <span className="ui-call-input-text-icon">Aa</span>
                         </button>
                         <div className="call-text-input-shell">
                             <input
@@ -872,6 +865,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     <line x1="23" y1="1" x2="1" y2="23" />
                                 </svg>
                             </button>
+
+                            <CallVolumeControl />
                         </>
                     ) : androidTextInputOnly ? (
                         <button
@@ -944,6 +939,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     <line x1="23" y1="1" x2="1" y2="23" />
                                 </svg>
                             </button>
+
+                            {/* Speaker (volume) control */}
+                            <CallVolumeControl />
                         </>
                     ) : callState === "CONNECTING" && initiator === "character" ? (
                         /* Incoming call: accept + decline */
