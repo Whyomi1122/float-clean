@@ -808,26 +808,19 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
                 {/* Bottom controls */}
                 <div
-                    className="flex justify-center items-center gap-[40px] p-5"
+                    className="relative flex justify-center items-center gap-[34px] p-5"
                     style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
-                            {/* 输入方式切换（按住说话模式不需要持续开麦，静音位改放 Aa 切换） */}
+                            {/* 输入方式 Aa：靠左独立，不占通话三键的位置 */}
                             <button
                                 onClick={handleInputModeToggle}
-                                className="ui-call-btn ui-call-btn-muted"
+                                className="ui-call-btn ui-call-btn-muted absolute left-5"
                                 aria-label={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
+                                title={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
                             >
-                                {inputMode === "voice" ? (
-                                    <span className="ui-call-input-text-icon">Aa</span>
-                                ) : (
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                        <line x1="12" y1="19" x2="12" y2="22" />
-                                    </svg>
-                                )}
+                                <span className="ui-call-input-text-icon">Aa</span>
                             </button>
 
                             {/* 按住说话主按钮（文字模式下点按切回语音） */}
@@ -867,7 +860,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 </svg>
                             </button>
 
-                            <CallVolumeControl />
+                            <CallVolumeControl inBottomBar />
                         </>
                     ) : androidTextInputOnly ? (
                         <button
@@ -942,7 +935,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             </button>
 
                             {/* Speaker (volume) control */}
-                            <CallVolumeControl />
+                            <CallVolumeControl inBottomBar />
                         </>
                     ) : callState === "CONNECTING" && initiator === "character" ? (
                         /* Incoming call: accept + decline */

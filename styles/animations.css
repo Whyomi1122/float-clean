@@ -101,8 +101,18 @@
 }
 
 @keyframes voicecall-avatar-pulse {
-  0%, 100% { box-shadow: 0 0 0 8px rgba(255,255,255,0.15), 0 0 0 16px rgba(255,255,255,0.08); }
-  50% { box-shadow: 0 0 0 12px rgba(255,255,255,0.2), 0 0 0 24px rgba(255,255,255,0.1); }
+  0%, 100% {
+    box-shadow:
+      0 0 0 8px rgba(255,255,255,0.08),
+      0 0 34px 8px rgba(120,180,255,0.26),
+      0 12px 34px rgba(0,0,0,0.34);
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(255,255,255,0.1),
+      0 0 46px 14px rgba(120,180,255,0.38),
+      0 12px 34px rgba(0,0,0,0.34);
+  }
 }
 
 @keyframes voicecall-mic-pulse {

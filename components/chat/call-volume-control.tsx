@@ -10,7 +10,7 @@ import { getTtsVolume, setTtsVolume } from "@/lib/tts-service";
  * call screens without touching their top-bar markup. Collapsed to a small icon by
  * default; tapping reveals a slider that auto-hides after a few idle seconds.
  */
-export function CallVolumeControl() {
+export function CallVolumeControl({ inBottomBar = false }: { inBottomBar?: boolean }) {
   const [open, setOpen] = useState(false);
   const [volume, setVolume] = useState(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,7 +49,10 @@ export function CallVolumeControl() {
   const muted = volume <= 0.001;
 
   return (
-    <div className={`call-volume${open ? " is-open" : ""}`} data-ui="call-volume">
+    <div
+      className={`call-volume${inBottomBar ? " in-bottom-bar" : ""}${open ? " is-open" : ""}`}
+      data-ui="call-volume"
+    >
       <button
         type="button"
         className="call-volume-btn"

@@ -5142,17 +5142,24 @@
   height: 120px;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid rgba(255,255,255,0.3);
+  border: 1px solid rgba(255,255,255,0.22);
   background: #333;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 4px rgba(255,255,255,0.1);
-  transition: box-shadow 0.3s ease;
+  /* 弥散光晕，替代两道硬描边 */
+  box-shadow:
+    0 0 0 6px rgba(255,255,255,0.06),
+    0 0 26px 4px rgba(120,180,255,0.16),
+    0 12px 34px rgba(0,0,0,0.34);
+  transition: width 180ms ease, height 180ms ease, box-shadow 420ms ease;
 }
 .voicecall-avatar[data-speaking] {
-  box-shadow: 0 0 0 8px rgba(255,255,255,0.15), 0 0 0 16px rgba(255,255,255,0.08);
-  animation: voicecall-avatar-pulse 1s ease-in-out infinite;
+  box-shadow:
+    0 0 0 8px rgba(255,255,255,0.08),
+    0 0 38px 10px rgba(120,180,255,0.3),
+    0 12px 34px rgba(0,0,0,0.34);
+  animation: voicecall-avatar-pulse 2.4s ease-in-out infinite;
 }
 
 /* ── Call background ── */
@@ -5210,7 +5217,9 @@
 }
 .call-subtitle[data-role="user"] {
   align-self: flex-end;
-  background: color-mix(in srgb, var(--c-success) 70%, transparent);
+  /* 与通话主题同族：主题蓝玻璃感，替代突兀的纯绿 */
+  background: color-mix(in srgb, var(--c-primary, #3d7bff) 34%, rgba(255, 255, 255, 0.14));
+  border: 1px solid color-mix(in srgb, var(--c-primary, #3d7bff) 38%, transparent);
 }
 .call-subtitle[data-role="assistant"] {
   align-self: flex-start;
@@ -5219,7 +5228,7 @@
 .call-subtitle[data-interim] {
   align-self: flex-end;
   opacity: 0.7;
-  background: color-mix(in srgb, var(--c-success) 50%, transparent);
+  background: color-mix(in srgb, var(--c-primary, #3d7bff) 22%, rgba(255, 255, 255, 0.1));
 }
 
 .call-text-input-panel {
@@ -5238,29 +5247,6 @@
 .call-text-input-row .call-text-input-shell {
   flex: 1;
   width: auto;
-}
-
-.call-regenerate-btn {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(20, 20, 24, 0.34);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.call-regenerate-btn:disabled {
-  opacity: 0.36;
-  cursor: default;
 }
 
 /* ── 左上角返回键（缩小通话为悬浮窗） ── */
@@ -5329,20 +5315,25 @@
 }
 
 /* 键盘弹出：不再整体 translateY（会把顶栏/头像/底栏一起顶飞），
-   改为收缩根容器高度，让中间弹性区被压缩，顶栏与底栏原地不动。 */
+   改为抬升容器底边，中间弹性区被压缩，顶栏与底栏原地不动。
+   （根容器是 absolute inset-0，已有 top/bottom，用 height 会冲突） */
 .call-keyboard-shift {
-  height: calc(100% - var(--call-keyboard-offset, 0px));
-  transition: height 180ms ease;
+  bottom: var(--call-keyboard-offset, 0px) !important;
+  transition: bottom 180ms ease;
 }
 
-/* 键盘弹出时头像区与名字让位，给字幕和输入框腾空间 */
+/* 键盘弹出时顶栏与头像让位，给字幕和输入框腾空间 */
+.call-keyboard-shift[data-keyboard] .gcall-topbar {
+  padding-top: 14px;
+  padding-bottom: 4px;
+}
 .call-keyboard-shift[data-keyboard] .voicecall-avatar-stage {
-  padding-top: 6px;
+  padding-top: 4px;
   padding-bottom: 4px;
 }
 .call-keyboard-shift[data-keyboard] .voicecall-avatar {
-  width: 74px;
-  height: 74px;
+  width: 62px;
+  height: 62px;
 }
 
 .videocall-text-input-panel {
@@ -6619,6 +6610,51 @@
 .call-volume-btn svg {
   width: 15px;
   height: 15px;
+}
+
+/* 底栏内嵌变体：不再是左上角浮层，而是与静音/挂断同行的 56px 圆钮。
+   滑杆向上浮出，不撑开底栏高度。 */
+.call-volume.in-bottom-bar {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  padding: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  overflow: visible;
+}
+.call-volume.in-bottom-bar .call-volume-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  transition: background 160ms ease, transform 160ms ease;
+}
+.call-volume.in-bottom-bar .call-volume-btn:active {
+  background: rgba(255, 255, 255, 0.24);
+  transform: scale(0.94);
+}
+.call-volume.in-bottom-bar .call-volume-btn svg {
+  width: 22px;
+  height: 22px;
+}
+.call-volume.in-bottom-bar .call-volume-slider {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 14px);
+  transform: translateX(-50%);
+  width: 120px;
+  padding: 6px 12px;
+  box-sizing: content-box;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.34);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 
 /* ── 支付卡片（微信扫码付 / 支付宝 等无法直接打开的 scheme）── */
