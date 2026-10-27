@@ -918,7 +918,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="ts-12 leading-[1.7]">
+                                    <div className="mem-report-text ts-12 leading-[1.7]">
                                         {expandedId === entry.id
                                             ? entry.content
                                             : entry.content.length > 100

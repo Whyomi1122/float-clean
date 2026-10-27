@@ -1280,6 +1280,82 @@
   border-color: var(--c-text);
 }
 
+/* ══════════════════════════════════════════
+   记忆 App · 长期/归档 卡片补充
+   ══════════════════════════════════════════ */
+
+/* 工具条与下方第一张卡片、卡片之间的节奏间距 */
+.mem-entry-toolbar {
+  margin-bottom: 2px;
+}
+
+/* 长期记忆卡片头部（DATE + AUTO/MANUAL + 菜单按钮） */
+.memory-report-card {
+  cursor: pointer;
+}
+.memory-report-card.is-menu-open { overflow: visible; }
+
+.mem-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+.mem-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 卡片正文：保留归档里的分段与换行，避免挤成一坨 */
+.mem-report-text {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  line-height: 1.75;
+}
+
+/* 短期页来源筛选 chips：上下等距，与卡片间距视觉均匀 */
+.mem-source-filter {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px;
+  margin-bottom: -2px;
+  min-height: 40px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mem-source-filter::-webkit-scrollbar { display: none; }
+
+.mem-source-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid var(--c-card-border, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  background: var(--c-card, #fff);
+  color: var(--c-text, #555);
+  font-size: calc(12.5px * var(--app-text-scale, 1));
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mem-source-chip:active { opacity: 0.75; }
+
+.mem-source-chip-active {
+  background: var(--c-accent, #5661b3);
+  border-color: var(--c-accent, #5661b3);
+  color: #fff;
+  font-weight: 600;
+}
+
 .page-menu {
   flex-shrink: 0;
   padding: 20px var(--ui-padding) 0;
@@ -5332,15 +5408,14 @@
 }
 
 .mem-empty-card {
-  min-height: 180px;
   border: 1px dashed var(--c-panel-border);
   border-radius: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 28px 22px;
+  gap: 12px;
+  padding: 20px 20px;
   text-align: center;
   color: var(--c-text);
   font-size: calc(13px*var(--app-text-scale,1));
@@ -5465,7 +5540,8 @@
   min-height: 220px;
   resize: none;
   font-size: calc(14px*var(--app-text-scale,1));
-  line-height: 1.7;
+  line-height: 1.9;
+  white-space: pre-wrap;
 }
 
 .mem-edit-footer {
