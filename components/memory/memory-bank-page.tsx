@@ -940,8 +940,8 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
     if (view === "detail" && selectedChar) {
         return (
             <div className="flex flex-col absolute inset-0 overflow-hidden" style={{ padding: "0 16px" }}>
-                {/* Content */}
-                <div className="memory-detail-scroll flex-1 overflow-y-auto flex flex-col gap-2 min-h-0">
+                {/* Content —— gap-3(12px) 统一所有直接子元素（chips/时间线/工具条/分组）的纵向间距 */}
+                <div className="memory-detail-scroll flex-1 overflow-y-auto flex flex-col gap-3 min-h-0">
                     <MemoryDetailBoundary>
                     {loading ? (
                         <p className="text-center ts-14 mt-10 text-secondary">

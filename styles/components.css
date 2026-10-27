@@ -1215,6 +1215,8 @@
 .memory-detail-scroll {
   --memory-detail-tabbar-height: var(--chat-tabbar-height, calc(68px + env(safe-area-inset-bottom, 0px)));
   --memory-detail-bottom-reserve: calc(var(--memory-detail-tabbar-height) + 56px);
+  /* 页头下方统一 16px 呼吸，第一张卡片/chips 不再贴顶 */
+  padding-top: 16px;
   padding-bottom: 18px;
   scroll-padding-bottom: calc(var(--memory-detail-bottom-reserve) + 18px);
 }
@@ -1244,11 +1246,6 @@
 /* ══════════════════════════════════════════
    记忆 App · 长期/归档 卡片补充
    ══════════════════════════════════════════ */
-
-/* 工具条与下方第一张卡片、卡片之间的节奏间距 */
-.mem-entry-toolbar {
-  margin-bottom: 2px;
-}
 
 /* 长期记忆卡片头部（DATE + AUTO/MANUAL + 菜单按钮） */
 .memory-report-card {
@@ -1284,10 +1281,10 @@
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  /* 与页头保持呼吸感：上下留白均衡，贴住下方卡片不至于离得太远 */
-  padding: 12px 2px 10px;
+  /* 上下间距全部交给滚动容器的 padding-top:16 + gap:12，
+     这里不再自带留白 —— 否则 chips→卡片 会和 卡片→卡片 对不上 */
+  padding: 0 2px;
   margin-bottom: 0;
-  min-height: 40px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
@@ -2617,8 +2614,11 @@
 }
 
 /* 长期记忆按来源 app 分组：组头小字，组内沿用卡片间距 */
-.mem-source-group + .mem-source-group {
-  margin-top: 18px;
+/* 分组间距交给滚动容器 gap:12，多卡分组内部同距 */
+.mem-source-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .mem-source-group-head {
@@ -5250,8 +5250,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* 顶部不再额外加高：与上方 chips 行由滚动容器 gap-2 统一控制间距 */
-  padding: 2px 0 0;
+  /* 上下间距交给滚动容器（padding-top:16 / gap:12），这里不再自带 */
+  padding: 0;
 }
 
 /* Card */
@@ -5298,7 +5298,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 2px 12px;
+  /* 上下间距交给滚动容器（padding-top:16 / gap:12） */
+  padding: 0 2px;
 }
 
 .mem-entry-add-btn,
