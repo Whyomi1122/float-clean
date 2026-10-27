@@ -89,6 +89,7 @@ export function RoomView({
                 f, m,
                 h: m.x <= 0.55 ? "right" as const : "left" as const,
                 len: 38,
+                lineY: 0 as number | undefined,
             };
         });
         if (!stageSize) return base;

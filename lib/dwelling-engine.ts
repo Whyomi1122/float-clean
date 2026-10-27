@@ -139,15 +139,23 @@ export function resolveFurnitureMarker(f: DwellingFurniture): DwellingMarker {
     return POSITION_MARKERS[f.position] ?? POSITION_MARKERS.center;
 }
 
+/** 副标题（幽灵小字）：韩文原样保留，拉丁字母才转大写；长度按字符数截断 */
+function sanitizeSubtitle(v: unknown): string | undefined {
+    if (typeof v !== "string") return undefined;
+    const s = v.trim().slice(0, 12);
+    if (!s) return undefined;
+    // 含韩文/中文时不转大写，避免破坏字形；纯拉丁则大写统一排版
+    const hasCjk = /[\uAC00-\uD7A3\u3131-\u318E\u4E00-\u9FFF]/.test(s);
+    return hasCjk ? s : s.toUpperCase();
+}
+
 function sanitizeLayoutExtras(rooms: DwellingLayout["rooms"]): void {
     for (const room of rooms) {
-        if (typeof room.en === "string") room.en = room.en.trim().toUpperCase().slice(0, 24) || undefined;
-        else room.en = undefined;
+        room.en = sanitizeSubtitle(room.en);
         if (typeof room.imagePrompt === "string") room.imagePrompt = room.imagePrompt.trim() || undefined;
         else room.imagePrompt = undefined;
         for (const f of room.furniture) {
-            if (typeof f.en === "string") f.en = f.en.trim().toUpperCase().slice(0, 24) || undefined;
-            else f.en = undefined;
+            f.en = sanitizeSubtitle(f.en);
             const m = f.marker as unknown;
             if (m && typeof m === "object"
                 && Number.isFinite((m as DwellingMarker).x) && Number.isFinite((m as DwellingMarker).y)) {
