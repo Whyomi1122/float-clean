@@ -120,6 +120,23 @@ function uiRole(msg: ChatMessage): string {
     return msg.role;
 }
 
+/**
+ * 若消息正文是「独立的纯括号中文译文」（如「（删了吧，留着这东西干嘛。）」，
+ * 括号外没有任何其他内容），返回括号内的译文；否则返回 null。
+ * 用于语音转写双语统一：模型偶尔把译文拆成紧随语音条后的独立消息。
+ */
+function extractStandaloneParenTranslation(msg: ChatMessage): string | null {
+    const raw = (msg.content || "").trim();
+    if (!raw || raw.includes("\n")) return null;
+    // 去掉可能的动作/旁白包裹后必须整体就是一对全角括号
+    const m = raw.match(/^（([^（）]+)）$/);
+    if (!m) return null;
+    const inner = m[1].trim();
+    // 必须含 CJK（中文译文），纯标点/纯数字不算
+    if (!/[\u3400-\u9fff]/.test(inner)) return null;
+    return inner;
+}
+
 function isChatRoomElementVisible(element: HTMLElement | null): boolean {
     if (!element || !element.isConnected) return false;
     const rect = element.getBoundingClientRect();
@@ -5900,6 +5917,33 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const segStart = !!msg.deliverySessionId && !projectedMessages[idx - 1]?.deliverySessionId;
                     const segEnd = !!msg.deliverySessionId && !projectedMessages[idx + 1]?.deliverySessionId;
 
+                    // 语音转写双语统一：模型偶尔把中文译文作为紧随的独立「（…）」文本消息发出，
+                    // 导致同一语音条下的转写时而带双语块、时而只有原文。这里把这种「纯括号译文」
+                    // 消息并入转写气泡（组成 原文 | 译文 双语块），原消息本体不再单独渲染。
+                    const nextRawMsg = projectedMessages[idx + 1];
+                    const prevRawMsg = projectedMessages[idx - 1];
+                    const parenTranslationText = nextRawMsg
+                        && nextRawMsg.role === msg.role
+                        && uiRole(nextRawMsg) !== "system"
+                        && nextRawMsg.mediaType !== "audio"
+                        && renderMsg.mediaType === "audio"
+                        && voiceTextIds.has(msg.id)
+                        ? extractStandaloneParenTranslation(nextRawMsg)
+                        : null;
+                    const hasFollowingParenTranslation = !!parenTranslationText;
+
+                    // 本条消息是「被并入上一条语音转写」的独立译文：不再单独渲染
+                    const mergedIntoPrevVoice = !!prevRawMsg
+                        && voiceTextIds.has(prevRawMsg.id)
+                        && prevRawMsg.mediaType === "audio"
+                        && prevRawMsg.role === msg.role
+                        && uiRole(msg) !== "system"
+                        && msg.mediaType !== "audio"
+                        && !!extractStandaloneParenTranslation(msg);
+
+                    // 已并入上一条语音转写的独立译文消息：整条跳过渲染（气泡与附件都不出）
+                    if (mergedIntoPrevVoice) return null;
+
                     return (
                         <div key={msg.id} className="flex flex-col gap-4" {...(hiddenEmpty ? { style: { display: "none" } } : {})} {...(isEmptyBubble && renderMsg.reasoningText && !showTime ? { "data-reasoning-only": "" } : {})}>
                             {segStart && (
@@ -6156,7 +6200,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     {msg.role !== "user" && <div className="w-[40px] shrink-0" />}
                                     <div className="voice-msg-text-bubble">
                                         <BilingualTextBlock
-                                            text={msg.displayProjected ? (renderMsg.mediaData?.label || "") : renderDisplayText(renderMsg.mediaData?.label || "", msg.role === "user" ? 1 : 2, false)}
+                                            text={(() => {
+                                                const raw = msg.displayProjected ? (renderMsg.mediaData?.label || "") : renderDisplayText(renderMsg.mediaData?.label || "", msg.role === "user" ? 1 : 2, false);
+                                                // 双语格式统一：模型有时把中文译文拆成紧随其后的独立「（…）」消息。
+                                                // 若下一条件成立，把它并入转写气泡组成标准双语块，并隐藏原消息。
+                                                if (hasFollowingParenTranslation) return `${raw} | ${parenTranslationText}`;
+                                                return raw;
+                                            })()}
                                             mode="markdown"
                                             defaultExpanded={session.collapseBilingualTranslation !== false ? false : true}
                                         />
