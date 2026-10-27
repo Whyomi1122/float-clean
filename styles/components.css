@@ -5315,7 +5315,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 26px 0 0;
+  /* 顶部不再额外加高：与上方 chips 行由滚动容器 gap-2 统一控制间距 */
+  padding: 2px 0 0;
 }
 
 /* Card */
