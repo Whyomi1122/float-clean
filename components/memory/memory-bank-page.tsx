@@ -941,8 +941,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         return (
             <div className="flex flex-col absolute inset-0 overflow-hidden" style={{ padding: "0 16px" }}>
                 {/* Content */}
-                {/* 顶部安全区：详情页没有自己的顶栏，给全局悬浮按钮（音乐球等）留出空间 */}
-                <div style={{ height: 56, flexShrink: 0 }} />
                 <div className="memory-detail-scroll flex-1 overflow-y-auto flex flex-col gap-2 min-h-0">
                     <MemoryDetailBoundary>
                     {loading ? (

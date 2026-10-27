@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.26-9",
+    version: "2026.10.26-10",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.26-10",
+            title: "短期页来源筛选样式补全",
+            items: [
+                "此前 .mem-source-chip 样式未写入 CSS，筛选条无内边距导致头部被裁切；现补全 chip 样式",
+            ],
+        },
         {
             version: "2026.10.26-9",
             title: "导出分隔线样式与短期页遮挡修复",

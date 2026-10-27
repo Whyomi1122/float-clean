@@ -1227,6 +1227,47 @@
   pointer-events: none;
 }
 
+/* ── Memory: short-term source filter chips ── */
+.mem-source-filter {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 顶部留白，避免贴住滚动区上沿被切头 */
+  padding: 6px 2px 8px;
+  min-height: 44px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mem-source-filter::-webkit-scrollbar { display: none; }
+
+.mem-source-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid var(--c-card-border, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  background: var(--c-card, #fff);
+  color: var(--c-text, #555);
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mem-source-chip:active { opacity: 0.75; }
+
+.mem-source-chip-active {
+  background: var(--c-accent, #5661b3);
+  border-color: var(--c-accent, #5661b3);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ── Utility: secondary text color ── */
 .text-secondary { color: var(--c-text); }
 
