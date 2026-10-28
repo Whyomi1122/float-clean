@@ -137,6 +137,18 @@ function extractStandaloneParenTranslation(msg: ChatMessage): string | null {
     return inner;
 }
 
+function canMergeVoiceTranslation(voice: ChatMessage, translation: ChatMessage): boolean {
+    return voice.mediaType === "audio"
+        && !translation.mediaType
+        && voice.role === translation.role
+        && voice.senderCharacterId === translation.senderCharacterId
+        && voice.deliverySessionId === translation.deliverySessionId
+        && !voice.isRetracted && !translation.isRetracted
+        && /[가-힣ぁ-ゟ゠-ヿa-zA-Z]/.test(voice.content)
+        && !/[\u3400-\u9fff]/.test(voice.content)
+        && !!extractStandaloneParenTranslation(translation);
+}
+
 function isChatRoomElementVisible(element: HTMLElement | null): boolean {
     if (!element || !element.isConnected) return false;
     const rect = element.getBoundingClientRect();
@@ -5923,7 +5935,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const nextRawMsg = projectedMessages[idx + 1];
                     const prevRawMsg = projectedMessages[idx - 1];
                     const parenTranslationText = nextRawMsg
-                        && nextRawMsg.role === msg.role
+                        && canMergeVoiceTranslation(msg, nextRawMsg)
                         && uiRole(nextRawMsg) !== "system"
                         && nextRawMsg.mediaType !== "audio"
                         && renderMsg.mediaType === "audio"
@@ -5936,7 +5948,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const mergedIntoPrevVoice = !!prevRawMsg
                         && voiceTextIds.has(prevRawMsg.id)
                         && prevRawMsg.mediaType === "audio"
-                        && prevRawMsg.role === msg.role
+                        && canMergeVoiceTranslation(prevRawMsg, msg)
                         && uiRole(msg) !== "system"
                         && msg.mediaType !== "audio"
                         && !!extractStandaloneParenTranslation(msg);

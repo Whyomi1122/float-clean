@@ -1241,7 +1241,7 @@ export function ChatSettingsPanel({
                         <button type="button" className="menu-item" onClick={() => setShowConfirmClear(true)}>
                             <span className="menu-label-group">
                                 <span className="menu-label is-danger">清空聊天记录</span>
-                                <span className="menu-desc">清空该会话的全部消息，好友保留</span>
+                                <span className="menu-desc">清空线上消息，保留会话、线下剧情与好友</span>
                             </span>
                             <span className="menu-right"><ChevronRight size={16} /></span>
                         </button>
@@ -1423,7 +1423,7 @@ export function ChatSettingsPanel({
             {showConfirmClear && (
                 <ConfirmDialog
                     title="确定要清空聊天记录吗？"
-                    message="清空后无法恢复。是否继续？"
+                    message="将清空该会话的线上消息，保留会话入口、线下剧情、已归档记忆与好友。清空后无法恢复，是否继续？"
                     icon={AlertCircle}
                     variant="danger"
                     confirmLabel="清空"
