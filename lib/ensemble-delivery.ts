@@ -11,6 +11,8 @@
 //   · 聊天 App 的长期记忆总结只吃普通聊天，跳过带 deliverySessionId 的消息
 //   · 剧情模式下的内容归到群像剧本自己的归档里
 
+import { loadUserIdentities, resolveUserIdentity } from "./settings-storage";
+
 import {
     createOrGetSession,
     createGroupSession,
@@ -176,6 +178,8 @@ export function deliverToChat(params: {
     scriptId: string;
     scriptTitle: string;
     turnId: string;
+    /** 剧本使用的面具；投递前须与目标聊天室的实际身份一致。 */
+    personaId?: string;
     /** 投递目标；省略时按单聊角色处理。 */
     target?: { kind: "direct"; characterId: string } | { kind: "group"; participantIds: string[] };
     /** 非角色台词（旁白 / 多人混合段）时可显式指定投递给谁。 */
@@ -187,6 +191,18 @@ export function deliverToChat(params: {
 
     try {
         const isGroup = params.target?.kind === "group";
+        if (params.personaId) {
+            const persona = loadUserIdentities().find(identity => identity.id === params.personaId);
+            if (!persona) return { ok: false, error: "剧本面具已不存在，请先在群像中重新选择面具" };
+            const directId = params.target?.kind === "direct" ? params.target.characterId : params.characterId;
+            const chatIdentity = resolveUserIdentity(isGroup ? undefined : directId, isGroup ? "group_chat" : "chat");
+            if (chatIdentity?.id !== persona.id) {
+                return {
+                    ok: false,
+                    error: `剧本使用「${persona.name}」，${isGroup ? "群聊" : "目标角色的聊天"}使用「${chatIdentity?.name || "未设置面具"}」。请先在设置中将${isGroup ? "群聊" : "该角色聊天"}面具设为「${persona.name}」后再投递`,
+                };
+            }
+        }
         let chatSessionId: string;
         if (params.target?.kind === "group") {
             chatSessionId = ensureEnsembleGroupSession({

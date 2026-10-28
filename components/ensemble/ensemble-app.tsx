@@ -1452,6 +1452,7 @@ export function EnsembleApp({
       scriptId: currentScript.id,
       scriptTitle: currentScript.title || "未命名剧本",
       turnId: turn.id,
+      personaId: currentScript.personaId,
       target:
         target.kind === "direct" ? { kind: "direct", characterId: speaker.id } : target,
     });
