@@ -824,11 +824,11 @@ function EnsembleFrameStream({
         //   短句会缩成小方块；用户要求整行长方形）。
         if (f.kind === "inner") {
           return (
+            <div key={i} style={{ marginTop: tpx(topMargin) }}>
+              {showName && renderBlockHead(f.speaker)}
             <div
-              key={i}
               className="frame-inner"
               style={{
-                marginTop: tpx(topMargin),
                 marginLeft: tpx(FRAME_BODY_INSET),
                 marginRight: tpx(FRAME_TEXT_INSET),
                 // 整行通栏
@@ -844,6 +844,7 @@ function EnsembleFrameStream({
               }}
             >
               <BodyText raw={f.text} kind="act" inset={0} fontFamily={fontFamily} />
+            </div>
             </div>
           );
         }
@@ -2422,6 +2423,8 @@ ${sceneBlock}${openingBlock}${memoryBlock}${crossMemoryBlock}${archiveBlock}${wo
 （中文全角冒号，**这一行除名字和冒号外什么都不写**）。它声明「下面紧跟的
 所有暗号块，都归这个角色」。同一角色只需写一次，不用每个块都重复写。
     岳霖玉：
+消息、电话或引用中出现其他角色的台词时，［对白］必须归实际发信人/说话人，不能归收信人。
+例如岳霖玉收到金成帝的消息：先在岳霖玉的［动作］中写收到消息，再另起「金成帝：」和［对白］写消息正文；继续写岳霖玉的动作前，再另起「岳霖玉：」。
 
 【第二条 · 五种暗号块】归属行之后，每个内容块都以暗号开头，独占一行：
     ［对白］:   → 角色**嘴里说出来的话**（台词）

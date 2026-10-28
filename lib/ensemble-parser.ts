@@ -531,13 +531,22 @@ export function parseEnsembleReply(
     // ── ①d 显式对白暗号 [对白]（归属当前角色，整块黑色）──
     if (DIALOGUE_TOKEN.test(line)) {
       const rest = line.replace(DIALOGUE_TOKEN, "").trim();
+      // 兼容旧稿：当前角色收到的消息，其对白属于发信人；不改变后续动作归属。
+      const precedingAction = currentAction?.text.join("\n").trim() ?? "";
+      const messageSender = allCast.filter(member => {
+        const escapedName = member.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`(?:^|[。！？\\n])\\s*${escapedName}的消息[，,:：]\\s*(?:一行字[。:：]?)?\\s*$`).test(precedingAction);
+      });
+      const dialogueOwner = messageSender.length === 1
+        ? { name: messageSender[0].name, id: messageSender[0].id, avatar: messageSender[0].avatar ?? null }
+        : currentOwner;
       flushAllBlocks();
-      if (currentOwner) {
+      if (dialogueOwner) {
         currentDialogue = {
           text: rest ? [rest] : [],
-          speaker: currentOwner.name,
-          speakerId: currentOwner.id,
-          speakerAvatar: currentOwner.avatar ?? null,
+          speaker: dialogueOwner.name,
+          speakerId: dialogueOwner.id,
+          speakerAvatar: dialogueOwner.avatar ?? null,
         };
       } else {
         // 没有归属声明却出现 [对白] → 兜底：当普通对白帧（无归属）
