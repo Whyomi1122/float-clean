@@ -36,7 +36,7 @@ import { CustomAppRunner } from "@/components/app-market/custom-app-runner";
 import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-failure";
 
 import { ChatSettingsPanel } from "./chat-settings-panel";
-import { VoiceCallScreen } from "./voice-call-screen";
+import { startPersistentVoiceCall, VOICE_CALL_ENDED } from "./persistent-voice-call";
 import { VideoCallScreen } from "./video-call-screen";
 import { GroupCallScreen } from "./group-call-screen";
 import { TransferTargetModal } from "./transfer-target-modal";
@@ -5472,6 +5472,22 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const editingMessage = editingMessageId ? messages.find(m => m.id === editingMessageId) : null;
     const editingSystemInstruction = editingMessage ? isSystemInstructionMessage(editingMessage) : false;
 
+    useEffect(() => {
+        if (!showVoiceCall || session.isGroup || !character) return;
+        startPersistentVoiceCall({ session, character, initiator: callInitiator });
+        setShowVoiceCall(false);
+    }, [showVoiceCall, session, character, callInitiator]);
+
+    useEffect(() => {
+        const ended = (event: Event) => {
+            if ((event as CustomEvent).detail?.sessionId === session.id) {
+                returnFromCall(() => setShowVoiceCall(false));
+            }
+        };
+        window.addEventListener(VOICE_CALL_ENDED, ended);
+        return () => window.removeEventListener(VOICE_CALL_ENDED, ended);
+    }, [session.id]);
+
     // 群聊通话没有缩小悬浮窗，维持原有的整屏早退渲染
     if (showVoiceCall && session.isGroup && groupCharacters.length > 0) {
         return (
@@ -6924,17 +6940,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {/* 单聊语音/视频通话：内联挂载（而非提前 return），使缩小为悬浮窗时通话组件
                 不被卸载，计时/字幕等状态得以保留；组件内部依据 minimized 决定渲染
                 全屏界面还是左侧悬浮窗 */}
-            {showVoiceCall && character && (
-                <VoiceCallScreen
-                    session={session}
-                    character={character}
-                    initiator={callInitiator}
-                    minimized={callMinimized}
-                    onMinimize={() => setCallMinimized(true)}
-                    onRestore={() => setCallMinimized(false)}
-                    onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
-                />
-            )}
+
             {showVideoCall && character && (
                 <VideoCallScreen
                     session={session}

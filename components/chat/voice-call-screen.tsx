@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues, updateChatMessage, deleteChatMessage } from "@/lib/chat-storage";
+import { prepareChatVoiceAudio } from "@/lib/chat-asset-storage";
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "@/lib/chat-status-region";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
@@ -86,12 +87,25 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [typedText, setTypedText] = useState("");
     const [bgImageResolved, setBgImageResolved] = useState<string | null>(null);
     const [showSttWarning, setShowSttWarning] = useState(false);
+    const pendingRef = useRef<string[]>([]);
+    const busyRef = useRef(false);
+    const [pendingCount, setPendingCount] = useState(0);
+    const [autoChat, setAutoChat] = useState(false);
+    const [autoCount, setAutoCount] = useState(0);
+    const [selectedSubtitle, setSelectedSubtitle] = useState<SubtitleEntry | null>(null);
+    const [editText, setEditText] = useState("");
+    const [editingSubtitle, setEditingSubtitle] = useState(false);
+    const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latestReplyIdsRef = useRef<string[]>([]);
+    const [miniPosition, setMiniPosition] = useState<{ left: number; top: number } | null>(null);
+    const miniDragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+    const turnRef = useRef<(text?: string) => Promise<void>>(async () => {});
 
     const sttRef = useRef<STTSession | null>(null);
     const audioAbortRef = useRef<(() => void) | null>(null);
+    const requestAbortRef = useRef<AbortController | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const callStartRef = useRef<number>(0);
-    const pausedAtRef = useRef<number | null>(null);
     const minimizedRef = useRef(false);
     const stateRef = useRef<string>("CONNECTING");
     const interimTextRef = useRef<string>("");  // ref 版本，闭包安全
@@ -105,13 +119,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     useEffect(() => { stateRef.current = callState; }, [callState]);
     useEffect(() => { minimizedRef.current = minimized; }, [minimized]);
 
-    // 缩小为悬浮窗：冻结通话——停止监听、打断在播放的语音
+    // 缩小时暂停收音以免误录；当前回复和计时继续。
     useEffect(() => {
         if (!minimized) return;
         if (sttRef.current) { sttRef.current.abort(); sttRef.current = null; }
         setInterimText("");
-        if (audioAbortRef.current) { audioAbortRef.current(); audioAbortRef.current = null; }
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
     }, [minimized]);
 
     // 来电等待接听：循环振动（开关在聊天主页，iOS 网页不支持自动无效果）
@@ -135,6 +147,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         setCallAudioSessionActive(true);
         return () => {
             stateRef.current = "ENDED";
+            requestAbortRef.current?.abort();
+            if (longPressRef.current) clearTimeout(longPressRef.current);
             if (sttRef.current) { sttRef.current.abort(); sttRef.current = null; }
             if (audioAbortRef.current) { audioAbortRef.current(); audioAbortRef.current = null; }
             setCallAudioSessionActive(false);
@@ -192,17 +206,6 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             callStartRef.current = Date.now();
         }
 
-        // 缩小为悬浮窗：冻结计时显示，不再推进
-        if (minimized) {
-            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-            if (pausedAtRef.current === null) pausedAtRef.current = Date.now();
-            return;
-        }
-        // 从悬浮窗恢复：把冻结期间流逝的时间补回起点，避免时长跳变
-        if (pausedAtRef.current !== null) {
-            callStartRef.current += Date.now() - pausedAtRef.current;
-            pausedAtRef.current = null;
-        }
 
         timerRef.current = setInterval(() => {
             setCallDuration(Math.floor((Date.now() - callStartRef.current) / 1000));
@@ -331,6 +334,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 })
             );
             messagesRef.current = [...messagesRef.current, ...newMsgs];
+            setSubtitles(prev => [...prev, ...newMsgs.filter(m => !m.mediaType && m.content.trim()).map(m => ({ id: m.id, role: "assistant" as const, text: m.content }))]);
         }
 
         // Return clean text parts for TTS (exclude rich media content)
@@ -344,6 +348,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     // ── Full conversation turn ──────────────────────
 
     const runConversationTurn = useCallback(async (userText?: string) => {
+        if (stateRef.current === "ENDED" || busyRef.current) return;
+        busyRef.current = true;
+        const request = new AbortController();
+        requestAbortRef.current = request;
+        sttRef.current?.abort();
+        sttRef.current = null;
         // 1. Save user message (skip for initial greeting)
         if (userText) {
             const userMsg = pushChatMessage({
@@ -365,12 +375,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             // 3. Generate AI response
             const aiResponseText = flattenCompletionResult(await generateChatCompletion(session, messagesRef.current, {
                 appTags: ["chat", "voice"],
+                signal: request.signal,
             }));
 
             // Bail if call ended during generation
             if (stateRef.current === "ENDED") return;
 
             // 4. Process response
+            const previousIds = new Set(messagesRef.current.map(m => m.id));
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
             const speechText = stripBilingualForSpeech(displayText);
@@ -380,15 +392,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 return;
             }
 
-            // 5. Add AI subtitle
-            const subtitleId = `ai-${Date.now()}`;
-            setSubtitles(prev => [...prev, { id: subtitleId, role: "assistant", text: displayText }]);
-
-            // 缩小为悬浮窗期间收到的回复：只静默记录文字，不播放语音
-            if (minimizedRef.current) {
-                setCallState("IDLE");
-                return;
-            }
+            const replyMessages = messagesRef.current.filter(m => !previousIds.has(m.id) && !m.mediaType && m.content.trim());
+            latestReplyIdsRef.current = replyMessages.map(m => m.id);
 
             // 6. TTS
             setCallState("AI_SPEAKING");
@@ -396,10 +401,21 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const voiceConfig = resolveVoiceConfig(session.contactId);
             if (voiceConfig) {
                 try {
-                    const audioBlob = await synthesizeSpeech(speechText, voiceConfig);
-                    if (stateRef.current === "ENDED") return;
-
-                    if (audioBlob) {
+                    for (const message of replyMessages) {
+                        if (stateRef.current === "ENDED") break;
+                        const spoken = stripBilingualForSpeech(message.content);
+                        const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
+                        if (stateRef.current === "ENDED") break;
+                        if (!audioBlob) continue;
+                        try {
+                            const current = loadChatMessages(session.id).find(m => m.id === message.id);
+                            if (current?.content === message.content) {
+                                const audio = await prepareChatVoiceAudio(audioBlob, message.content);
+                                updateChatMessage(message.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: spoken } });
+                                messagesRef.current = loadChatMessages(session.id);
+                            }
+                        } catch (error) { console.warn("[VoiceCall] 保存原音失败", error); }
+                        if (stateRef.current === "ENDED") break;
                         const { promise, abort } = playCallAudio(audioBlob);
                         audioAbortRef.current = abort;
                         await promise;
@@ -423,8 +439,16 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 }]);
                 setCallState("IDLE");
             }
+        } finally {
+            busyRef.current = false;
+            if (stateRef.current !== "ENDED" && pendingRef.current.length > 0) {
+                const next = pendingRef.current.shift()!;
+                setPendingCount(pendingRef.current.length);
+                queueMicrotask(() => { void turnRef.current(next); });
+            }
         }
     }, [session, processAIResponse, playCallAudio]);
+    turnRef.current = runConversationTurn;
 
     // ── Auto-listen: 进入 IDLE 自动开始监听 ────────
 
@@ -557,7 +581,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
     const handleTextSubmit = useCallback(() => {
         const text = typedText.trim();
-        if (!text || callState !== "IDLE") return;
+        if (!text || callState === "CONNECTING" || callState === "ENDED") return;
+        if (busyRef.current) {
+            if (pendingRef.current.length >= 5) return;
+            pendingRef.current.push(text);
+            setPendingCount(pendingRef.current.length);
+            setTypedText("");
+            return;
+        }
         if (sttRef.current) {
             sttRef.current.abort();
             sttRef.current = null;
@@ -595,9 +626,35 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         },
     });
 
+    useEffect(() => {
+        if (!autoChat || autoCount >= 3 || callState !== "IDLE" || pendingCount > 0 || typedText.trim() || minimized) return;
+        const timer = setTimeout(() => {
+            if (busyRef.current || stateRef.current !== "IDLE") return;
+            sttRef.current?.abort();
+            sttRef.current = null;
+            setAutoCount(count => count + 1);
+            void turnRef.current();
+        }, 45000 + Math.random() * 30000);
+        return () => clearTimeout(timer);
+    }, [autoChat, autoCount, callState, pendingCount, typedText, minimized]);
+
+    const applySubtitleEdit = () => {
+        if (!selectedSubtitle || !editText.trim()) return;
+        updateChatMessage(selectedSubtitle.id, { content: editText.trim(), mediaType: undefined, mediaUrl: undefined, mediaData: undefined });
+        messagesRef.current = loadChatMessages(session.id);
+        setSubtitles(items => items.map(item => item.id === selectedSubtitle.id ? { ...item, text: editText.trim() } : item));
+        setSelectedSubtitle(null);
+        setEditingSubtitle(false);
+    };
+
     // ── Hangup ──────────────────────────────────────
 
     const handleHangup = useCallback(() => {
+        if (stateRef.current === "ENDED") return;
+        stateRef.current = "ENDED";
+        pendingRef.current = [];
+        requestAbortRef.current?.abort();
+        setPendingCount(0);
         setCallState("ENDED");
 
         // Stop any ongoing STT
@@ -633,17 +690,28 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
     if (minimized) {
         return (
-            <button
-                type="button"
-                className="call-mini-window"
-                style={{ backgroundImage: `url(${bgImageResolved || character.avatar || ""})` }}
-                onClick={onRestore}
-                aria-label={`返回与${character.name}的语音通话`}
-                title="点击返回通话"
-            >
-                <span className="call-mini-window-overlay" />
-                <span className="call-mini-window-name">{character.name}</span>
-            </button>
+            <div className="call-mini-window call-mini-compact" style={miniPosition ? { left: miniPosition.left, top: miniPosition.top, bottom: "auto", right: "auto" } : undefined}>
+                <div className="call-mini-drag" aria-label="拖动通话小窗" onPointerDown={e => {
+                    const box = e.currentTarget.parentElement!;
+                    miniDragRef.current = { x: e.clientX, y: e.clientY, left: box.offsetLeft, top: box.offsetTop };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                }} onPointerMove={e => {
+                    const drag = miniDragRef.current;
+                    if (!drag) return;
+                    const box = e.currentTarget.parentElement!;
+                    const parent = box.offsetParent as HTMLElement | null;
+                    setMiniPosition({ left: Math.max(0, Math.min((parent?.clientWidth ?? innerWidth) - box.offsetWidth, drag.left + e.clientX - drag.x)), top: Math.max(0, Math.min((parent?.clientHeight ?? innerHeight) - box.offsetHeight, drag.top + e.clientY - drag.y)) });
+                }} onPointerUp={() => { miniDragRef.current = null; }} onPointerCancel={() => { miniDragRef.current = null; }}><span /></div>
+                <button type="button" className="call-mini-restore" onClick={onRestore} aria-label={`返回与${character.name}的语音通话`}>
+                    {character.avatar && <img src={character.avatar} alt="" />}
+                    <span><strong>{character.name}</strong><small>{formatTime(callDuration)} · {stateLabel()}</small></span>
+                </button>
+                <form className="call-mini-reply" onSubmit={e => { e.preventDefault(); handleTextSubmit(); }}>
+                    <input aria-label="通话快捷回复" value={typedText} onChange={e => setTypedText(e.target.value)} placeholder={pendingCount ? `${pendingCount} 条待发送` : "说点什么…"} />
+                    <button type="submit" disabled={!typedText.trim() || callState === "CONNECTING" || callState === "ENDED"}>发送</button>
+                    <button type="button" onClick={handleHangup} aria-label="挂断通话">挂断</button>
+                </form>
+            </div>
         );
     }
 
@@ -733,6 +801,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     {character.name}
                 </div>
 
+                <div className="call-quiet-options">
+                    <button type="button" aria-pressed={autoChat} onClick={() => setAutoChat(value => !value)}>
+                        {autoChat ? `自动搭话 ${autoCount}/3` : "自动搭话 · 关"}
+                    </button>
+                    {autoChat && <span>安静 45–75 秒后开口，本次最多 3 次</span>}
+                    {pendingCount > 0 && <span>{pendingCount} 条待发送</span>}
+                </div>
+
                 {/* Subtitle area — top fade via mask */}
                 <div
                     ref={subtitleScrollRef}
@@ -744,6 +820,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             key={sub.id}
                             className="call-subtitle"
                             data-role={sub.role}
+                            role="button" tabIndex={0} aria-label="台词操作"
+                            onPointerDown={() => { longPressRef.current = setTimeout(() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }, 500); }}
+                            onPointerUp={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+                            onPointerCancel={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+                            onPointerMove={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+                            onContextMenu={e => { e.preventDefault(); setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }}
+                            onDoubleClick={() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }}
+                            onKeyDown={e => { if (e.key === "Enter") { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); } }}
                         >
                             <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
                         </div>
@@ -779,13 +863,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 value={typedText}
                                 onChange={e => setTypedText(e.target.value)}
                                 className="call-text-input"
-                                placeholder={callState === "IDLE" ? "输入你想说的话..." : "稍等对方说完..."}
-                                disabled={callState !== "IDLE"}
+                                placeholder={pendingCount >= 5 ? "待发已满，文字会保留" : busyRef.current ? "输入后排队发送…" : "输入你想说的话…"}
                             />
                             <button
                                 type="submit"
                                 className="call-text-send-btn"
-                                disabled={!typedText.trim() || callState !== "IDLE"}
+                                disabled={!typedText.trim() || pendingCount >= 5}
                                 aria-label="发送"
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
@@ -796,6 +879,76 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         </div>
                     </form>
                 )}
+
+                {selectedSubtitle && <div className="call-subtitle-menu" role="dialog" aria-label="台词操作">
+                    {editingSubtitle ? <>
+                        <textarea aria-label="编辑台词" value={editText} onChange={e => setEditText(e.target.value)} />
+                        <button type="button" onClick={applySubtitleEdit} disabled={busyRef.current || !editText.trim()}>保存</button>
+                    </> : <>
+                        <button type="button" disabled={busyRef.current || selectedSubtitle.role !== "assistant"} onClick={async () => {
+                            if (!selectedSubtitle) return;
+                            const chosen = selectedSubtitle;
+                            setSelectedSubtitle(null);
+                            busyRef.current = true;
+                            sttRef.current?.abort();
+                            sttRef.current = null;
+                            setCallState("AI_SPEAKING");
+                            const message = loadChatMessages(session.id).find(m => m.id === chosen.id);
+                            const config = resolveVoiceConfig(session.contactId);
+                            try {
+                                const saved = message?.mediaUrl;
+                                let blob: Blob | null = null;
+                                if (saved?.startsWith("idb://")) {
+                                    const { getChatImageFromIndexedDB } = await import("@/lib/chat-asset-storage");
+                                    const data = await getChatImageFromIndexedDB(saved.slice(6));
+                                    if (data) blob = await (await fetch(data)).blob();
+                                } else if (saved) {
+                                    blob = await (await fetch(saved)).blob();
+                                }
+                                if (!blob && config) {
+                                    blob = await synthesizeSpeech(stripBilingualForSpeech(chosen.text), config);
+                                    if (blob && message && stateRef.current !== "ENDED") {
+                                        const audio = await prepareChatVoiceAudio(blob, chosen.text);
+                                        updateChatMessage(message.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: stripBilingualForSpeech(chosen.text) } });
+                                        messagesRef.current = loadChatMessages(session.id);
+                                    }
+                                }
+                                if (blob && stateRef.current !== "ENDED") {
+                                    audioAbortRef.current?.();
+                                    const audio = playCallAudio(blob);
+                                    audioAbortRef.current = audio.abort;
+                                    await audio.promise;
+                                }
+                            } catch (error) { console.warn("[VoiceCall] 重听失败", error); }
+                            finally {
+                                busyRef.current = false;
+                                audioAbortRef.current = null;
+                                if (stateRef.current !== "ENDED") {
+                                    setCallState("IDLE");
+                                    const next = pendingRef.current.shift();
+                                    setPendingCount(pendingRef.current.length);
+                                    if (next) queueMicrotask(() => { void turnRef.current(next); });
+                                }
+                            }
+                        }}>重听</button>
+                        <button type="button" disabled={busyRef.current} onClick={() => setEditingSubtitle(true)}>编辑</button>
+                        <button type="button" disabled={busyRef.current} onClick={() => {
+                            deleteChatMessage(selectedSubtitle.id);
+                            messagesRef.current = loadChatMessages(session.id);
+                            setSubtitles(items => items.filter(item => item.id !== selectedSubtitle.id));
+                            setSelectedSubtitle(null);
+                        }}>删除</button>
+                        <button type="button" disabled={busyRef.current || selectedSubtitle.role !== "assistant" || subtitles[subtitles.length - 1]?.id !== selectedSubtitle.id} onClick={() => {
+                            const ids = new Set(latestReplyIdsRef.current);
+                            for (const id of ids) deleteChatMessage(id);
+                            messagesRef.current = loadChatMessages(session.id);
+                            setSubtitles(items => items.filter(item => !ids.has(item.id)));
+                            setSelectedSubtitle(null);
+                            void turnRef.current();
+                        }}>重新生成</button>
+                    </>}
+                    <button type="button" onClick={() => setSelectedSubtitle(null)}>关闭</button>
+                </div>}
 
                 {/* 按住说话提示/错误行 */}
                 {holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (

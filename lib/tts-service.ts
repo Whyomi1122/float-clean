@@ -366,7 +366,11 @@ export function playAudioBlobViaMediaElement(blob: Blob): { promise: Promise<voi
     return playAudioBlobElement(blob);
 }
 
+let _activeMediaAbort: (() => void) | null = null;
+
 function playAudioBlobElement(blob: Blob): { promise: Promise<void>; abort: () => void } {
+    // Settle the previous owner before replacing the shared element's source.
+    _activeMediaAbort?.();
     const url = URL.createObjectURL(blob);
     const audio = getSharedAudio();
     audio.muted = false;
@@ -378,19 +382,35 @@ function playAudioBlobElement(blob: Blob): { promise: Promise<void>; abort: () =
     const finalize = () => {
         if (settled) return;
         settled = true;
-        audio.onended = null;
-        audio.onerror = null;
+        audio.removeEventListener("ended", onTerminalEvent);
+        audio.removeEventListener("error", onTerminalEvent);
+        audio.removeEventListener("pause", onTerminalEvent);
+        audio.removeEventListener("abort", onTerminalEvent);
         URL.revokeObjectURL(url);
-        try { audio.pause(); audio.removeAttribute("src"); audio.load(); } catch {}
+        if (_activeMediaAbort === finalize) {
+            _activeMediaAbort = null;
+            try { audio.pause(); audio.removeAttribute("src"); audio.load(); } catch {}
+        }
         resolveFn();
+    };
+    const onTerminalEvent = (event: Event) => {
+        // pause/abort from a previous src/load can be queued until this clip starts.
+        if (event.type === "pause" && !audio.paused) return;
+        if (event.type === "abort" && audio.getAttribute("src") === url && audio.networkState !== 0 && audio.networkState !== 1) return;
+        finalize();
     };
     const promise = new Promise<void>((resolve) => {
         resolveFn = resolve;
-        audio.onended = finalize;
-        audio.onerror = finalize;
-        audio.play().catch(() => {
+        _activeMediaAbort = finalize;
+        audio.addEventListener("ended", onTerminalEvent);
+        audio.addEventListener("error", onTerminalEvent);
+        audio.addEventListener("pause", onTerminalEvent);
+        audio.addEventListener("abort", onTerminalEvent);
+        try {
+            void audio.play().catch(finalize);
+        } catch {
             finalize();
-        });
+        }
     });
     return { promise, abort: finalize };
 }
@@ -411,8 +431,13 @@ export function playAudioBlob(blob: Blob): { promise: Promise<void>; abort: () =
 
     let gain: GainNode | null = null;
     let fallbackAbort: (() => void) | null = null;
+    const onContextStateChange = () => {
+        if (source && ctx.state !== "running") finalize();
+    };
+    ctx.addEventListener("statechange", onContextStateChange);
 
     const cleanupWebAudio = () => {
+        ctx.removeEventListener("statechange", onContextStateChange);
         if (source) {
             source.onended = null;
             try { source.stop(); } catch {}

@@ -5228,7 +5228,8 @@
 }
 .call-subtitle[data-role="assistant"] {
   align-self: flex-start;
-  background: color-mix(in srgb, var(--c-overlay) 70%, transparent);
+  background: color-mix(in srgb, var(--c-icon) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-card-border) 24%, transparent);
 }
 .call-subtitle[data-interim] {
   align-self: flex-end;
@@ -5253,6 +5254,91 @@
   flex: 1;
   width: auto;
 }
+
+.voicecall-text-input-panel {
+  max-width: 340px;
+  align-self: center;
+  padding-inline: 24px;
+}
+.call-quiet-options {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 20px 8px;
+  font-size: 10px;
+  opacity: .8;
+}
+.call-quiet-options button {
+  border: 1px solid currentColor;
+  border-radius: 14px;
+  background: transparent;
+  padding: 3px 9px;
+  color: inherit;
+}
+.call-subtitle-menu {
+  position: absolute;
+  z-index: 35;
+  left: 20px;
+  right: 20px;
+  bottom: max(115px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--c-card-border);
+  border-radius: 18px;
+  background: var(--c-page-body-bg);
+  color: var(--c-text-title);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--c-overlay) 15%, transparent);
+  animation: modalSoftRise .2s ease-out;
+}
+.call-subtitle-menu button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-card);
+  color: inherit;
+  border: 1px solid var(--c-card-border);
+  font-size: 12px;
+}
+.call-subtitle-menu button:disabled { opacity: .4; }
+.call-subtitle-menu textarea {
+  width: 100%;
+  min-height: 80px;
+  color: inherit;
+  background: var(--c-card);
+  border: 1px solid var(--c-card-border);
+  border-radius: 10px;
+  padding: 10px;
+}
+.call-mini-window.call-mini-compact {
+  top: auto;
+  bottom: max(80px, calc(var(--kb-inset, 0px) + 12px));
+  transform: none;
+  width: min(280px, calc(100% - 24px));
+  height: auto;
+  display: block;
+  padding: 10px;
+  z-index: 180;
+  cursor: auto;
+  color: var(--c-text-title);
+  background: color-mix(in srgb, var(--c-page-body-bg) 95%, transparent);
+  border: 1px solid var(--c-card-border);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--c-overlay) 14%, transparent);
+  backdrop-filter: blur(16px);
+}
+.call-mini-drag { display: flex; justify-content: center; padding: 1px 0 9px; touch-action: none; cursor: grab; }
+.call-mini-drag span { width: 28px; height: 3px; background: var(--c-icon); border-radius: 4px; opacity: .5; }
+.call-mini-restore { display: flex; gap: 10px; align-items: center; width: 100%; border: 0; background: transparent; color: inherit; text-align: left; padding: 2px 0 10px; }
+.call-mini-restore img { width: 36px; height: 36px; border-radius: 12px; object-fit: cover; }
+.call-mini-restore strong, .call-mini-restore small { display: block; }
+.call-mini-restore strong { font-size: 12px; }
+.call-mini-restore small { font-size: 10px; opacity: .65; margin-top: 3px; }
+.call-mini-reply { display: flex; gap: 6px; align-items: center; }
+.call-mini-reply input { min-width: 0; flex: 1; padding: 8px; border-radius: 10px; border: 1px solid var(--c-card-border); background: var(--c-card); color: inherit; font-size: 12px; }
+.call-mini-reply button { border: 0; background: transparent; color: var(--c-text-title); font-size: 11px; padding: 6px 2px; }
+.call-mini-reply button:disabled { opacity: .4; }
 
 /* ── 左上角返回键（缩小通话为悬浮窗） ── */
 .call-back-btn {

@@ -11,6 +11,7 @@ import { PhoneThemeApp } from "@/components/phone-theme-app";
 import { PhoneCharacterApp } from "@/components/phone-character-app";
 import { PhoneSettingsApp } from "@/components/phone-settings-app";
 import { PhoneChatApp } from "@/components/chat/phone-chat-app";
+import { PersistentVoiceCall } from "@/components/chat/persistent-voice-call";
 import { PhonePlaceholderApp } from "@/components/phone-placeholder-app";
 import MusicApp from "@/components/music/music-app";
 import MusicPlayer from "@/components/music/music-player";
@@ -4410,6 +4411,8 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                   <span className="chat-message-notice-action">查看</span>
                 </button>
               ) : null}
+
+              <PersistentVoiceCall />
 
               {/* Music custom CSS — injected at shell level so it persists across apps */}
               {musicCustomCss && <style dangerouslySetInnerHTML={{ __html: musicCustomCss }} />}

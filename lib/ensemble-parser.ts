@@ -535,7 +535,7 @@ export function parseEnsembleReply(
       const precedingAction = currentAction?.text.join("\n").trim() ?? "";
       const messageSender = allCast.filter(member => {
         const escapedName = member.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        return new RegExp(`(?:^|[。！？\\n])\\s*${escapedName}的消息[，,:：]\\s*(?:一行字[。:：]?)?\\s*$`).test(precedingAction);
+        return new RegExp(`(?:^|[。！？\\n])\\s*${escapedName}的消息[，,:：]\\s*(?:一行字[。:：]?)?\\s*$|${escapedName}发来的(?:短消息|短信|消息)[，,:：]\\s*(?:只有|仅有)?(?:简短)?(?:几个字|一行字)[。:：]?\\s*$`).test(precedingAction);
       });
       const dialogueOwner = messageSender.length === 1
         ? { name: messageSender[0].name, id: messageSender[0].id, avatar: messageSender[0].avatar ?? null }
