@@ -1263,6 +1263,7 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
    */
   const HANGUL_RE = /[\uac00-\ud7af\u1100-\u11ff]/;
   let pending: DeliverableLine | null = null;
+  let dialogueLineSeen = false;
   const flushPending = () => {
     if (pending) out.push(pending);
     pending = null;
@@ -1278,6 +1279,8 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     );
     if (tag) {
       const isDialogue = tag[1] === "对白" || tag[1] === "台词";
+      flushPending();
+      dialogueLineSeen = false;
       inDialogueBlock = isDialogue;
       inNonDialogueBlock = !isDialogue;
       line = line.slice(tag[0].length).trim();
@@ -1326,6 +1329,13 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     // 8) 洗掉残留的括号表演、心理块和包住台词的引号
     const cleaned = sanitizeChatLine(line);
     if (!/[\u4e00-\u9fa5a-zA-Z0-9가-힣]/.test(cleaned)) continue;
+    const bilingualParts = cleaned.split(/\s+\|\s+/);
+    if (bilingualParts.length === 2 && /[가-힣ぁ-ゟ゠-ヿa-zA-Z]/.test(bilingualParts[0]) && /[\u4e00-\u9fff]/.test(bilingualParts[1])) {
+      flushPending();
+      out.push({ text: bilingualParts[0], translation: bilingualParts[1], speaker });
+      dialogueLineSeen = true;
+      continue;
+    }
 
     // 9) 双语配对（只对台词块生效）
     if (inDialogueBlock) {
@@ -1337,9 +1347,11 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
         // 紧跟原文的中文行 → 译文，并入同一条
         pending.translation = cleaned;
       } else {
-        // 没有挂着的原文、或已经配过译文 → 是叙述/动作，不是台词
+        // 明确对白块的第一句也可以直接是中文；后续无标记行仍保守排除。
         flushPending();
+        if (!dialogueLineSeen) out.push({ text: cleaned, speaker });
       }
+      dialogueLineSeen = true;
       continue;
     }
     // 对白块外维持旧规则：无引号的行多半是叙述/动作，不能当台词
@@ -2435,21 +2447,20 @@ ${sceneBlock}${openingBlock}${memoryBlock}${crossMemoryBlock}${archiveBlock}${wo
                  （**不写任何角色名、角色动作或心理**，那些归角色自己的块；
                   旁白不属于任何角色，单独写在归属行之外）
 
-⚠️ 正文里**禁止出现任何其它符号**：不要圆括号（）、不要方括号【】、
-   不要引号 ""、不要星号 *、《》、~、#。
-   **台词一律不加引号、不加括号**，直接写。
+⚠️ 不要用额外的方括号【】、星号 *、~、# 包装正文。
+   台词引号与译文括号遵循用户文风规则；这些符号不代表动作或心理。
    动作 / 叙述一律放进 ［叙述］/［动作］ 块，**不要裸写在角色名后面**。
 
-═══════════ 双语格式（写死，务必遵守）═══════════
-本剧本默认采用双语：只要角色说韩语，就必须**先写韩语原句，紧跟一行中文翻译**。
-**中文翻译行不加任何括号**，直接另起一行。固定为：
+═══════════ 台词语言与双语格式 ═══════════
+台词实际语言遵循角色、用户面具、关系与具体情境的设定；通用场景语言与面具对特定关系的明确语言习惯冲突时，优先采用更具体的关系设定。
+不得仅因故事发生在韩国，就把所有角色和用户面具的台词统一翻成韩语。实际说中文的台词直接写中文，不额外补韩语。
+实际说韩语或其他外语时，原文在前、中文译文在后；格式优先遵循用户文风规则，未指定时采用「原文」（中文译文）。例如：
     ［对白］:
-    「밥 먹었어?」
-    잘 먹었어.
-
-不得只写中文、也不得只写韩语。翻译行紧跟在韩语下面，不要空行。
-如果角色说的是中文，就直接写中文台词，同样不加括号。
-［对白］块里可以写多行（韩语 + 中文译文 + 后续中文句），**它们都是台词、都加粗显示**。
+    「밥 먹었어?」（吃饭了吗？）
+中文对白示范：
+    ［对白］:
+    蟹黄你吃，腿给我就行。
+每句对白独立一行；原文和译文必须属于同一句话，不得把另一句外语当成中文译文。
 
 【正确示范】多角色 + 叙述 + 旁白 + 心理 + 对白 + 双语混排：
     ［旁白］:
@@ -2458,19 +2469,17 @@ ${sceneBlock}${openingBlock}${memoryBlock}${crossMemoryBlock}${archiveBlock}${wo
     ［叙述］:
     她站在门槛内，看着转身准备下楼的金成帝，轻声喊住了他。
     ［对白］:
-    「날씨 많이 추운데, 조심해서 가.」
-    밖은 많이 추워, 조심해서 가.
+    「날씨 많이 추운데, 조심해서 가.」（天气很冷，路上小心。）
     ［心理］:
     她用韩语说话时尾音总是下意识放轻，像怕惊扰到别人一样。
     金成帝：
     ［动作］:
     他停在转角的阴影里，手插在黑色夹克口袋里，侧过头看了她一眼。
     ［对白］:
-    「어, 너도 얼른 들어가.」
-    알겠어, 너도 얼른 들어가.
+    「어, 너도 얼른 들어가.」（嗯，你也快进去吧。）
 
 （注意：［叙述］/［动作］→ 灰；［心理］→ 与叙述同色；［对白］→ 黑色；
-［旁白］→ 淡灰斜体；台词与译文都不加括号。）
+［旁白］→ 淡灰斜体；台词与译文按用户指定格式展示。）
 ⚠️ 注意上面示范：**旁白只写了环境**（灯 / 绿光 / 雨声），**没有一个角色名、没有人物动作**；
    而人物动作（"她站在门槛内…""他停在转角…"）都**归在该角色自己的［叙述］/［动作］块里**，
    块内用「她/他」是允许的（归属行已说清是谁）。

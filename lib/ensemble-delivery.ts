@@ -409,6 +409,12 @@ export function sanitizeChatLine(input: string): string {
     let s = (input ?? "").replace(/\r/g, "");
     if (!s.trim()) return "";
 
+    // 明确的外语对白 + 中文译文不是动作括号，转换为聊天通用双语格式。
+    const bilingual = s.trim().match(/^[「『“"]([^「」『』“”"\n]+)[」』”"]\s*[（(]([^（）()\n]+)[）)]$/);
+    if (bilingual && /[가-힣ぁ-ゟ゠-ヿa-zA-Z]/.test(bilingual[1]) && /[\u4e00-\u9fff]/.test(bilingual[2])) {
+        return `${bilingual[1].trim()} | ${bilingual[2].trim()}`;
+    }
+
     // 1) 剥掉成对的 （…）【…】［…］ 包裹内容，反复剥到稳定（防嵌套）
     for (let i = 0; i < 6; i += 1) {
         const next = s
