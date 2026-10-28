@@ -1218,7 +1218,7 @@ type EnsembleView = "personas" | "scripts" | "create" | "workspace";
  * 投递到聊天室必须只剩对白 —— 用户明确要求「格式都是线上的微信格式」。
  */
 /** 投递候选：一句真正能发出去的台词 + 这一句属于谁。 */
-type DeliverableLine = { text: string; speaker: string | null; translation?: string };
+type DeliverableLine = { text: string; speaker: string | null; speakerId?: string; translation?: string };
 
 /** [旁白] [动作] [心理] [叙述] [对白] 这类块标记。 */
 const BLOCK_TAG_RE = /^\[(旁白|动作|心理|描写|叙述|场景|说明|环境|内心|画外音|系统|对白|台词)\]\s*[:：]?\s*/;
@@ -1246,10 +1246,10 @@ function matchSpeakerHeader(line: string): string | null {
  * ```
  * 投递到聊天室必须只剩对白 —— 用户明确要求「格式都是线上的微信格式」。
  */
-function extractDeliverableLines(content: string): DeliverableLine[] {
-  const raw = content ?? "";
+function extractDeliverableLines(frames: EnsembleFrame[]): DeliverableLine[] {
   const out: DeliverableLine[] = [];
   let speaker: string | null = null;
+  let speakerId: string | undefined;
   /** 当前是否处在「旁白 / 动作 / 心理」块里 —— 里面的每一行都不是台词。 */
   let inNonDialogueBlock = false;
   /** 当前所处的台词块（[对白]）—— 只有它里面的内容才算台词。 */
@@ -1269,7 +1269,15 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     pending = null;
   };
 
-  for (const rawLine of raw.split(/\r?\n/)) {
+  for (const frame of frames) {
+    if (frame.kind !== "dialogue") continue;
+    flushPending();
+    speaker = frame.speaker ?? null;
+    speakerId = frame.speakerId;
+    inDialogueBlock = true;
+    inNonDialogueBlock = false;
+    dialogueLineSeen = false;
+    for (const rawLine of frame.text.split(/\r?\n/)) {
     let line = rawLine.trim();
     if (!line) continue;
 
@@ -1294,7 +1302,6 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     const header = matchSpeakerHeader(line);
     if (header) {
       flushPending();
-      speaker = header;
       continue;
     }
 
@@ -1318,7 +1325,6 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     const named = line.match(/^([^\s：:\[\]【】（）()]{1,16})\s*(?:[（(][^）)]{0,20}[)）])?\s*[：:]\s*(.+)$/);
     if (named) {
       flushPending();
-      speaker = named[1].trim();
       line = named[2].trim();
     }
 
@@ -1332,7 +1338,7 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     const bilingualParts = cleaned.split(/\s+\|\s+/);
     if (bilingualParts.length === 2 && /[가-힣ぁ-ゟ゠-ヿa-zA-Z]/.test(bilingualParts[0]) && /[\u4e00-\u9fff]/.test(bilingualParts[1])) {
       flushPending();
-      out.push({ text: bilingualParts[0], translation: bilingualParts[1], speaker });
+      out.push({ text: bilingualParts[0], translation: bilingualParts[1], speaker, speakerId });
       dialogueLineSeen = true;
       continue;
     }
@@ -1342,14 +1348,14 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
       if (HANGUL_RE.test(cleaned)) {
         // 韩语原文行 → 开新候选
         flushPending();
-        pending = { text: cleaned, speaker };
+        pending = { text: cleaned, speaker, speakerId };
       } else if (pending && !pending.translation) {
         // 紧跟原文的中文行 → 译文，并入同一条
         pending.translation = cleaned;
       } else {
         // 明确对白块的第一句也可以直接是中文；后续无标记行仍保守排除。
         flushPending();
-        if (!dialogueLineSeen) out.push({ text: cleaned, speaker });
+        if (!dialogueLineSeen) out.push({ text: cleaned, speaker, speakerId });
       }
       dialogueLineSeen = true;
       continue;
@@ -1357,14 +1363,11 @@ function extractDeliverableLines(content: string): DeliverableLine[] {
     // 对白块外维持旧规则：无引号的行多半是叙述/动作，不能当台词
     if (!/["“”「」『』]/.test(line)) continue;
     flushPending();
-    out.push({ text: cleaned, speaker });
+    out.push({ text: cleaned, speaker, speakerId });
+    }
+    flushPending();
   }
-  flushPending();
-
-  // 一句都抽不出来就退回原文，至少别让用户无从下手
-  if (out.length > 0) return out;
-  const fallback = sanitizeChatLine(raw);
-  return fallback ? [{ text: fallback, speaker: null }] : [];
+  return out;
 }
 
 export function EnsembleApp({
@@ -1415,24 +1418,21 @@ export function EnsembleApp({
 
   /** 打开投递面板：抽出这一幕里「能当微信消息发出去」的台词。 */
   const openDeliverPicker = (turn: EnsembleTurn, member: EnsembleCastMember) => {
-    const lines = extractDeliverableLines(turn.content);
+    if (!currentScript) return;
+    const parseCast = castWithPersona(currentScript.cast, activePersona);
+    const lines = extractDeliverableLines(framesOfTurn(turn, parseCast));
     setDeliverPicker({ turn, member, lines });
     setDeliverTargetStage(false);
     // 默认选最后一句 —— 一般是最后一句最好走剧情
-    setDeliverLine(lines.length > 0 ? lines[lines.length - 1] : null);
+    setDeliverLine([...lines].reverse().find(line => currentScript.cast.some(c => c.id === line.speakerId)) ?? null);
   };
 
-  /** 这一句到底是谁说的：优先按台词自带的说话人，其次退回「点投递的那个角色」。 */
+  /** 只接受原文解析确定的演员 ID；用户台词或未知归属不能回退成入口角色。 */
   const resolveSpeaker = (
-    member: EnsembleCastMember,
+    _member: EnsembleCastMember,
     line: DeliverableLine | null,
-  ): EnsembleCastMember => {
-    const name = line?.speaker?.trim();
-    if (name && currentScript) {
-      const hit = currentScript.cast.find(c => c.name === name);
-      if (hit) return hit;
-    }
-    return member;
+  ): EnsembleCastMember | undefined => {
+    return currentScript?.cast.find(c => c.id === line?.speakerId);
   };
 
   /** 真正执行投递。target 决定了落在单聊还是群聊。 */
@@ -1458,6 +1458,10 @@ export function EnsembleApp({
     }
     // ⚠️ 必须按「这句是谁说的」投，不能一律用点投递的那个角色
     const speaker = resolveSpeaker(member, line);
+    if (!speaker) {
+      setToast("请选择归属明确的角色台词；用户台词不能作为角色消息投递");
+      return;
+    }
     const result = deliverToChat({
       characterId: speaker.id,
       characterName: speaker.name,
@@ -5163,13 +5167,15 @@ ${lastSpeakerNote}
                   </div>
                   <div className="bg-white rounded-[16px] overflow-hidden max-h-[46vh] overflow-y-auto">
                     {deliverPicker.lines.map((line, idx) => {
-                      const active = deliverLine?.text === line.text && deliverLine?.speaker === line.speaker;
+                      const active = deliverLine === line;
+                      const canDeliver = !!resolveSpeaker(deliverPicker.member, line);
                       return (
                         <button
                           key={`${idx}-${line.text.slice(0, 12)}`}
                           type="button"
                           className="w-full text-left px-4 py-3 flex items-start gap-3"
-                          style={active ? { background: "rgba(0,0,0,0.04)" } : undefined}
+                          disabled={!canDeliver}
+                          style={{ opacity: canDeliver ? 1 : 0.45, ...(active ? { background: "rgba(0,0,0,0.04)" } : {}) }}
                           onClick={() => setDeliverLine(line)}
                         >
                           <span
@@ -5183,7 +5189,7 @@ ${lastSpeakerNote}
                           </span>
                           <span className="flex-1 min-w-0">
                             {line.speaker && (
-                              <span className="block text-[10px] text-black/35 mb-[2px]">{line.speaker}</span>
+                              <span className="block text-[10px] text-black/35 mb-[2px]">{line.speaker}{!canDeliver ? " · 不可作为角色消息投递" : ""}</span>
                             )}
                             <span className="block text-[13px] leading-relaxed text-black/80 whitespace-pre-wrap break-words">
                               {line.text}
@@ -5215,7 +5221,7 @@ ${lastSpeakerNote}
                 <>
                   <div className="bg-white rounded-[16px] p-4">
                     <div className="text-[10px] text-black/40 mb-1">
-                      {resolveSpeaker(deliverPicker.member, deliverLine).name} · 将发送这一句
+                      {resolveSpeaker(deliverPicker.member, deliverLine)?.name} · 将发送这一句
                     </div>
                     <div className="text-[13px] leading-relaxed text-black/80 max-h-[110px] overflow-y-auto whitespace-pre-wrap">
                       {deliverLine?.translation
@@ -5233,7 +5239,7 @@ ${lastSpeakerNote}
                           deliverPicker.member,
                           {
                             kind: "direct",
-                            characterId: resolveSpeaker(deliverPicker.member, deliverLine).id,
+                            characterId: resolveSpeaker(deliverPicker.member, deliverLine)?.id ?? "",
                           },
                           deliverLine?.text ?? undefined,
                           deliverLine,
@@ -5244,7 +5250,7 @@ ${lastSpeakerNote}
                       <span className="flex flex-col items-start">
                         <span className="text-[13px] text-black/80">投到单聊</span>
                         <span className="text-[11px] text-black/40">
-                          只给 {resolveSpeaker(deliverPicker.member, deliverLine).name}
+                          只给 {resolveSpeaker(deliverPicker.member, deliverLine)?.name}
                         </span>
                       </span>
                       <ChevronRight size={14} className="text-black/25" />
