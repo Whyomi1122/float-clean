@@ -5319,11 +5319,10 @@
   white-space: nowrap;
 }
 
-/* 键盘弹出：不再整体 translateY（会把顶栏/头像/底栏一起顶飞），
-   改为抬升容器底边，中间弹性区被压缩，顶栏与底栏原地不动。
-   （根容器是 absolute inset-0，已有 top/bottom，用 height 会冲突） */
+/* 手机外壳已通过 --kb-inset 收缩高度，通话页只补偿尚未处理的键盘遮挡，
+   避免重复减去键盘高度后露出底层聊天页。 */
 .call-keyboard-shift {
-  bottom: var(--call-keyboard-offset, 0px) !important;
+  bottom: max(0px, calc(var(--call-keyboard-offset, 0px) - var(--kb-inset, 0px))) !important;
   transition: bottom 180ms ease;
 }
 

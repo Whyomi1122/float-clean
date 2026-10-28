@@ -863,6 +863,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             <CallVolumeControl inBottomBar />
                         </>
                     ) : androidTextInputOnly ? (
+                        <>
+                        <span aria-hidden="true" style={{ width: 56, height: 56 }} />
                         <button
                             onClick={handleHangup}
                             className="ui-call-btn ui-call-btn-danger"
@@ -873,6 +875,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 <line x1="23" y1="1" x2="1" y2="23" />
                             </svg>
                         </button>
+                        <CallVolumeControl inBottomBar />
+                        </>
                     ) : (
                         <>
                             {/* Mute button */}
