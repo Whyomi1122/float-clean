@@ -1376,7 +1376,7 @@ function ImageBubble({
                     <img
                         src={resolvedUrl}
                         alt={label}
-                        className="chat-photo-card-image block max-w-[240px] max-h-[320px] w-auto h-auto"
+                        className="chat-photo-card-image block max-w-[180px] max-h-[240px] w-auto h-auto"
                     />
                 </div>
                 {previewAndDialog}

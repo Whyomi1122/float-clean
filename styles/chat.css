@@ -1650,9 +1650,14 @@
 }
 
 .chat-photo-card--image .chat-photo-card-image {
+  /* 聊天缩略图等比限制在 180×240px 内，点击仍打开原图预览。 */
+  display: block;
   width: auto;
   height: auto;
+  max-width: 180px;
+  max-height: 240px;
   object-fit: contain;
+  border-radius: 12px;
 }
 
 .chat-generated-image-retry-stack {
