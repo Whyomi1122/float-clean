@@ -1,5 +1,10 @@
 /* ═══ 多功能悬浮球 Multi Float Ball — INS 灰蓝浅色 ═══ */
 
+/* 全屏通话时让出操作区域；缩小或结束通话后自动恢复。 */
+body:has(.call-keyboard-shift) :is(.mfb-ball, .mfb-restore, .mfb-mask) {
+    display: none;
+}
+
 .mfb-ball {
     position: fixed;
     z-index: 9600;
