@@ -1801,7 +1801,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     );
 
     useEffect(() => {
-        setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+        setUserIdentity(resolveUserIdentity(session.isGroup ? undefined : session.contactId, session.isGroup ? "group_chat" : "chat"));
         setTransientMessages([]);
         setOfflineMode(kvGet(CHAT_OFFLINE_MODE_PREFIX + session.id) === "1");
         setOfflineVisibleCount(OFFLINE_INITIAL_LOAD);

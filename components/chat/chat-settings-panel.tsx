@@ -584,7 +584,7 @@ export function ChatSettingsPanel({
     const groupChars = session.isGroup
         ? (session.participantIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean)
         : [];
-    const userIdentity = resolveUserIdentity(undefined, session.isGroup ? "group_chat" : "chat");
+    const userIdentity = resolveUserIdentity(session.isGroup ? undefined : session.contactId, session.isGroup ? "group_chat" : "chat");
 
     // ── Group member management ──
     const [, setRosterVersion] = useState(0); // bump to re-render after admin actions
