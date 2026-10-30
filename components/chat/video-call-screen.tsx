@@ -106,7 +106,7 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
     const cameraEnabledRef = useRef<boolean>(false);
     const videoElRef = useRef<HTMLVideoElement | null>(null);
     const isSpeakerMutedRef = useRef<boolean>(false);
-    const _initUi = resolveUserIdentity(session.contactId, "chat");
+    const _initUi = resolveUserIdentity(session.contactId, "chat", session.userIdentityId);
     const userNameRef = useRef<string>(_initUi?.name || "你");
     const userAvatarRef = useRef<string | null>(_initUi?.avatarUrl || null);
 
@@ -311,7 +311,7 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
     useEffect(() => {
         cancelFollowUp(session.id);
 
-        const ui = resolveUserIdentity(session.contactId, "chat");
+        const ui = resolveUserIdentity(session.contactId, "chat", session.userIdentityId);
         userNameRef.current = ui?.name || "你";
         userAvatarRef.current = ui?.avatarUrl || null;
 

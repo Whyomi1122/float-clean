@@ -36,6 +36,8 @@ export type ChatContact = {
 export type ChatSession = {
     id: string;
     contactId: string;
+    /** 仅本会话使用的面具；未设置时沿用原绑定。 */
+    userIdentityId?: string;
     lastMessageId?: string;
     lastMessagePreview?: string;
     unreadCount: number;

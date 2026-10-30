@@ -5257,8 +5257,24 @@
 
 .voicecall-text-input-panel {
   max-width: 340px;
+  min-width: 0;
+  box-sizing: border-box;
   align-self: center;
-  padding-inline: 24px;
+}
+
+/* 两层 flex 都允许收窄，避免输入框的固有宽度把发送按钮挤出屏幕。 */
+.voicecall-text-input-panel .call-text-input-shell {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.voicecall-text-input-panel .call-text-input {
+  width: 0;
+}
+
+.voicecall-text-input-panel .call-text-send-btn,
+.voicecall-text-input-panel .call-text-input-close-btn {
+  flex-shrink: 0;
 }
 .call-quiet-options {
   display: flex;

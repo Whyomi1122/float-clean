@@ -195,7 +195,14 @@ export function deliverToChat(params: {
             const persona = loadUserIdentities().find(identity => identity.id === params.personaId);
             if (!persona) return { ok: false, error: "剧本面具已不存在，请先在群像中重新选择面具" };
             const directId = params.target?.kind === "direct" ? params.target.characterId : params.characterId;
-            const chatIdentity = resolveUserIdentity(isGroup ? undefined : directId, isGroup ? "group_chat" : "chat");
+            const targetSession = loadChatSessions().find(s => {
+                if (!isGroup) return !s.isGroup && s.contactId === directId;
+                if (params.target?.kind !== "group" || !s.isGroup || !s.participantIds) return false;
+                const ids = [...new Set(params.target.participantIds)].sort();
+                const members = [...new Set(s.participantIds)].sort();
+                return ids.length === members.length && ids.every((id, i) => id === members[i]);
+            });
+            const chatIdentity = resolveUserIdentity(isGroup ? undefined : directId, isGroup ? "group_chat" : "chat", targetSession?.userIdentityId);
             if (chatIdentity?.id !== persona.id) {
                 return {
                     ok: false,

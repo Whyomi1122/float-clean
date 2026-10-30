@@ -1857,7 +1857,7 @@ export async function buildChatPromptMessages(
         ? []
         : (activeSlot.regexIds || []).map(id => allRegexes.find(r => r.id === id)).filter(Boolean) as typeof allRegexes;
 
-    const userIdentity = resolveUserIdentity(character.id, resolvedAppId);
+    const userIdentity = resolveUserIdentity(character.id, resolvedAppId, session.userIdentityId);
     const attachedImages = config.enableImageRecognition === true ? options?.attachedImages : undefined;
     const historyForPrompt: ChatMessage[] = attachedImages?.length
         ? [

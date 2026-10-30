@@ -37,7 +37,7 @@ import { triggerDeleteFriendReaction } from "@/lib/friend-request-engine";
 import { loadCharacters } from "@/lib/character-storage";
 import { isAgentComputerConfigured } from "@/lib/agent-computer";
 import { CharacterComputerPage } from "./character-computer-page";
-import { resolveUserIdentity, loadBindingConfig, loadPresets, resolveBinding } from "@/lib/settings-storage";
+import { resolveUserIdentity, loadUserIdentities, loadBindingConfig, loadPresets, resolveBinding } from "@/lib/settings-storage";
 import { getStatusRegionConfig, saveStatusRegionConfig, presetSupportsStatusRegion, isCustomStatusRegionActive, STATUS_REGION_SCHEME_TARGET, STATUS_REGION_UPDATED_EVENT, type StatusRegionConfig } from "@/lib/chat-status-region";
 import { downloadFile } from "@/lib/download-utils";
 import { getSchemes, saveScheme, deleteScheme, type CSSScheme } from "@/lib/css-scheme-storage";
@@ -584,7 +584,8 @@ export function ChatSettingsPanel({
     const groupChars = session.isGroup
         ? (session.participantIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean)
         : [];
-    const userIdentity = resolveUserIdentity(session.isGroup ? undefined : session.contactId, session.isGroup ? "group_chat" : "chat");
+    const userIdentity = resolveUserIdentity(session.isGroup ? undefined : session.contactId, session.isGroup ? "group_chat" : "chat", session.userIdentityId);
+    const availableIdentities = loadUserIdentities();
 
     // ── Group member management ──
     const [, setRosterVersion] = useState(0); // bump to re-render after admin actions
@@ -930,6 +931,36 @@ export function ChatSettingsPanel({
                 </div>
             )}
             <div className="page-menu chat-info-menu chat-prefs-menu">
+                <PrefsSection label="IDENTITY">
+                    <label className="menu-item">
+                        <div className="menu-label-group">
+                            <span className="menu-label">{session.isGroup ? "本群使用的面具" : "本聊天使用的面具"}</span>
+                            <span className="menu-desc">仅影响本会话，不修改其他聊天或历史消息</span>
+                        </div>
+                        <select
+                            aria-label={session.isGroup ? "本群使用的面具" : "本聊天使用的面具"}
+                            className="menu-desc"
+                            style={{ maxWidth: "45%", minWidth: 0 }}
+                            value={session.userIdentityId || ""}
+                            onChange={e => {
+                                const userIdentityId = e.target.value || undefined;
+                                const sessions = loadChatSessions();
+                                const index = sessions.findIndex(s => s.id === session.id);
+                                if (index === -1) return;
+                                sessions[index] = { ...sessions[index], userIdentityId };
+                                saveChatSessions(sessions);
+                                session.userIdentityId = userIdentityId;
+                                setRosterVersion(v => v + 1);
+                            }}
+                        >
+                            <option value="">跟随默认绑定</option>
+                            {availableIdentities.map(identity => (
+                                <option key={identity.id} value={identity.id}>{identity.name}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <div className="menu-desc px-4 pb-3">当前面具：{userIdentity?.name || "未设置"}</div>
+                </PrefsSection>
                 {session.isGroup && (
                     <PrefsSection label="SESSION">
                         <button className="menu-item" onClick={() => setEditingAlias(true)}>

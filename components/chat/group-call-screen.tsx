@@ -163,7 +163,7 @@ export function GroupCallScreen({ type, session, characters, onEnd, initiator = 
     // ── Init ─────────────────────────────────────────
     useEffect(() => {
         cancelFollowUp(session.id);
-        const ui = resolveUserIdentity(undefined, "group_chat");
+        const ui = resolveUserIdentity(undefined, "group_chat", session.userIdentityId);
         userNameRef.current = ui?.name || "你";
         userAvatarRef.current = ui?.avatarUrl || null;
         messagesRef.current = loadChatMessages(session.id);

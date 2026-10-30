@@ -761,7 +761,7 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
 
     // Group chat: build grid of participant avatars (2×2)
     const isGroup = session.isGroup;
-    const userIdentity = isGroup ? resolveUserIdentity(undefined, "group_chat") : null;
+    const userIdentity = isGroup ? resolveUserIdentity(undefined, "group_chat", session.userIdentityId) : null;
     const groupAvatarItems = isGroup
         ? [
             ...(userIdentity ? [{ id: "self", name: userIdentity.name || "我", avatar: userIdentity.avatarUrl || "" }] : []),

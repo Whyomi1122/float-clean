@@ -112,7 +112,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const sttWarningShownRef = useRef(false);
     const subtitleScrollRef = useRef<HTMLDivElement>(null);
     const messagesRef = useRef<ChatMessage[]>([]);
-    const _initUi = resolveUserIdentity(session.contactId, "chat");
+    const _initUi = resolveUserIdentity(session.contactId, "chat", session.userIdentityId);
     const userNameRef = useRef<string>(_initUi?.name || "你");
 
     // Keep refs in sync
@@ -222,7 +222,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         cancelFollowUp(session.id);
 
         // Resolve user name
-        const ui = resolveUserIdentity(session.contactId, "chat");
+        const ui = resolveUserIdentity(session.contactId, "chat", session.userIdentityId);
         userNameRef.current = ui?.name || "你";
 
         // Load existing messages for context

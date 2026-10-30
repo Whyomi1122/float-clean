@@ -1199,9 +1199,11 @@ export const USER_IDENTITIES_UPDATED_EVENT = "user-identities-updated";
  *   global defaults → character defaults → app overrides.
  * Falls back to first identity if binding has no userIdentityId set.
  */
-export function resolveUserIdentity(characterId?: string, appId?: string): UserIdentity | null {
+export function resolveUserIdentity(characterId?: string, appId?: string, sessionIdentityId?: string): UserIdentity | null {
     const identities = loadUserIdentities();
     if (identities.length === 0) return null;
+    const sessionIdentity = sessionIdentityId ? identities.find(i => i.id === sessionIdentityId) : undefined;
+    if (sessionIdentity) return sessionIdentity;
     const config = loadBindingConfig();
     const resolved = resolveBinding(config, characterId, appId);
     if (resolved.userIdentityId) {
