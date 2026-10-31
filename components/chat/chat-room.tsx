@@ -1147,10 +1147,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
      */
     const isStoryDeliverySession = useMemo(() => {
         try {
-            return loadDeliverySessions().some(s => s.chatSessionId === session.id);
+            return loadDeliverySessions().some(s => s.chatSessionId === session.id && !s.endedAt);
         } catch {
-            // 判断失败就按剧情模式处理：宁可多洗一遍，也不让剧本体泄漏到聊天里
-            return true;
+            return false;
         }
     }, [session.id, messages.length]);
 

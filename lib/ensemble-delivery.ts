@@ -112,7 +112,7 @@ export function findOpenSession(params: {
     const list = loadDeliverySessions().filter(s => !s.endedAt);
     if (list.length === 0) return null;
 
-    if (params.characterId) {
+    if (params.characterId && !params.sessionId) {
         for (let i = list.length - 1; i >= 0; i -= 1) {
             if (list[i].characterId === params.characterId) return list[i];
         }
@@ -127,7 +127,7 @@ export function findOpenSession(params: {
             if (hit) return s;
         }
     }
-    if (params.characterId) {
+    if (params.characterId && !params.sessionId) {
         const cast = new Set(params.participantIds ?? []);
         if (cast.has(params.characterId)) {
             for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -135,8 +135,8 @@ export function findOpenSession(params: {
             }
         }
     }
-    // 兜底：只剩一段未归入就一定是它
-    return list.length === 1 ? list[0] : null;
+    // 指定了会话却没有匹配时，不得把其他聊天室的剧情带入当前会话。
+    return !params.sessionId && !params.characterId && list.length === 1 ? list[0] : null;
 }
 
 /** 标记用户已经进过这段剧情对应的聊天室。 */

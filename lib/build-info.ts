@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.31-1",
+    version: "2026.10.31-2",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-2",
+            title: "修复聊天室剧情模式串用",
+            items: ["剧情模式仅匹配当前聊天室，普通单聊和群聊不再误用其他会话的剧情", "已结束的剧情不再触发剧情回复处理"],
+        },
         {
             version: "2026.10.31-1",
             title: "手机通话诊断",
