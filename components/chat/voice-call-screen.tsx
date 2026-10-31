@@ -23,6 +23,8 @@ import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHi
 import { isAndroidBrowser, isIOSDevice } from "./voice-input-platform";
 import { CallVolumeControl } from "./call-volume-control";
 import { startIncomingCallVibration } from "@/lib/call-vibration";
+import { CallDiagnosticPanel } from "./call-diagnostic-panel";
+import { recordCallDiagnostic } from "@/lib/call-diagnostics";
 
 // ── Types ───────────────────────────────────────────
 
@@ -303,7 +305,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         // Filter out non-chat action types (voice_call, video_call, poke, etc.)
         const chatParts = parts.filter(p =>
             !p.mediaType || !["voice_call", "video_call", "poke", "accept_red_packet", "decline_red_packet", "accept_transfer", "decline_transfer", "accept_payment_request", "decline_payment_request"].includes(p.mediaType)
-        );
+        ).map(p => p.mediaType === "audio"
+            ? { ...p, content: p.mediaData?.label || p.content, mediaType: undefined, mediaData: undefined }
+            : p);
 
         // Save messages to storage
         if (chatParts.length === 0 && (statusPanel || innerMonologue)) {
@@ -372,6 +376,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         setInterimText("");
 
         try {
+            recordCallDiagnostic(`通话开始请求 · 输入 ${userText?.length ?? 0} 字 · 历史 ${messagesRef.current.length} 条 · 安卓文字降级 ${androidTextInputOnly}`);
             // 3. Generate AI response
             const aiResponseText = flattenCompletionResult(await generateChatCompletion(session, messagesRef.current, {
                 appTags: ["chat", "voice"],
@@ -385,11 +390,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const previousIds = new Set(messagesRef.current.map(m => m.id));
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
+            recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
             const speechText = stripBilingualForSpeech(displayText);
 
-            if (!displayText) {
-                setCallState("IDLE");
-                return;
+            if (!displayText.trim()) {
+                throw new Error("本次通话回复没有可显示的文字，请重试或检查模型返回内容。");
             }
 
             const replyMessages = messagesRef.current.filter(m => !previousIds.has(m.id) && !m.mediaType && m.content.trim());
@@ -958,6 +963,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             : holdInput.error || "按住下方麦克风说话"}
                     </div>
                 )}
+
+                <CallDiagnosticPanel />
 
                 {/* Bottom controls */}
                 <div

@@ -5,6 +5,7 @@
 //    绕过 opencode.ai 未开放浏览器 CORS 的问题。
 
 import type { LlmRequestPayload } from "./llm-provider-adapter";
+import { diagnosticEndpoint, recordCallDiagnostic } from "./call-diagnostics";
 
 export type FetchLlmPayloadOptions = {
     signal?: AbortSignal;
@@ -14,9 +15,18 @@ export function fetchLlmPayload(
     payload: LlmRequestPayload,
     options: FetchLlmPayloadOptions = {},
 ): Promise<Response> {
+    const started = Date.now();
+    recordCallDiagnostic(`请求 ${payload.providerKind} ${diagnosticEndpoint(payload.url)} · 模型 ${String(payload.body.model ?? "见模型路径")} · 流式 ${payload.body.stream === true} · 代理 ${!!payload.serverProxy}`);
+    const observe = (promise: Promise<Response>) => promise.then(response => {
+        recordCallDiagnostic(`HTTP ${response.status} · ${Date.now() - started}ms · ${response.headers.get("content-type") || "未知类型"}`);
+        return response;
+    }, error => {
+        recordCallDiagnostic(`网络请求失败 · ${Date.now() - started}ms · ${error instanceof Error ? error.name : "Error"}`);
+        throw error;
+    });
     const bodyText = JSON.stringify(payload.body);
     if (payload.serverProxy) {
-        return fetch("/api/llm-proxy", {
+        return observe(fetch("/api/llm-proxy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -25,12 +35,12 @@ export function fetchLlmPayload(
                 body: bodyText,
             }),
             signal: options.signal,
-        });
+        }));
     }
-    return fetch(payload.url, {
+    return observe(fetch(payload.url, {
         method: "POST",
         headers: payload.headers,
         body: bodyText,
         signal: options.signal,
-    });
+    }));
 }

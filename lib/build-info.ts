@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.28-4",
+    version: "2026.10.31-1",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-1",
+            title: "手机通话诊断",
+            items: ["通话页新增诊断报告复制入口，便于手机排查请求失败和字幕缺失", "通话收到空字幕时显示明确提示"],
+        },
         {
             version: "2026.10.28-4",
             title: "会话面具切换与通话输入栏修复",
