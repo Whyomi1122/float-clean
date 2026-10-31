@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.31-6",
+    version: "2026.10.31-7",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-7",
+            title: "补齐群像括号译文投递",
+            items: ["保留紧随韩文对白的括号中文译文", "明确的动作、心理说明继续排除在投递内容之外"],
+        },
         {
             version: "2026.10.31-6",
             title: "修正剧情结束边界",

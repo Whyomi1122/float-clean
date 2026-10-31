@@ -1328,8 +1328,20 @@ function extractDeliverableLines(frames: EnsembleFrame[]): DeliverableLine[] {
       line = named[2].trim();
     }
 
-    // 7) 整行被括号包住的舞台说明，整行丢掉
+    // 7) 紧随韩文的括号译文先配对；明确动作/心理仍按舞台说明排除。
     if (!line) continue;
+    const wrappedTranslation = line.match(/^[（(]([^（）()]+)[）)]$/);
+    if (inDialogueBlock && pending && !pending.translation && wrappedTranslation) {
+      const inner = wrappedTranslation[1].trim();
+      const labeled = /^(?:中文(?:翻译|译文)?|翻译|译文)\s*[:：]\s*/.test(inner);
+      const stageDirection = /^(?:动作|心理|内心|旁白|神态|语气|表情)\s*[:：]|^(?:他|她|他们|她们|说着|一边|随后|随即)|^(?:微笑|轻笑|冷笑|苦笑|笑了|点头|摇头|抬头|低头|转身|挥手|皱眉|叹气|沉默|停顿|看向|望向|拿起|放下|走向|坐下)/.test(inner);
+      const translated = sanitizeChatLine(inner.replace(/^(?:中文(?:翻译|译文)?|翻译|译文)\s*[:：]\s*/, ""));
+      if ((labeled || !stageDirection) && /[\u4e00-\u9fff]/.test(translated) && !HANGUL_RE.test(translated)) {
+        pending.translation = translated;
+        dialogueLineSeen = true;
+        continue;
+      }
+    }
     if (/^[（(［\[【].*[)）］\]】]$/.test(line) && !/["“”「」『』]/.test(line)) continue;
 
     // 8) 洗掉残留的括号表演、心理块和包住台词的引号
