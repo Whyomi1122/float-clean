@@ -92,6 +92,7 @@ import {
     findOpenSession as findOpenDeliverySession,
     markSessionOpened as markDeliverySessionOpened,
     closeDeliverySession,
+    finishDeliverySession,
     formatTranscriptAsNarration,
     loadSessionTranscript,
     loadDeliverySessions,
@@ -1135,7 +1136,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     /** 待「带回剧情」的消息（点了菜单后先选剧本，再确认内容）。 */
     const [bringBackMessage, setBringBackMessage] = useState<ChatMessage | null>(null);
     /** 返回剧情前的二次确认（防止误触直接归档）。 */
-    const [returnStoryConfirm, setReturnStoryConfirm] = useState<string | null>(null);
+    /** 未回填：等待「返回剧情」确认；已回填：等待用户确认结束本次剧情。 */
+    const [returnStoryConfirm, setReturnStoryConfirm] = useState<null | { deliverySessionId: string } | { deliverySessionId: string; scriptTitle: string; count: number }>(null);
 
     /**
      * 当前会话是不是「剧情对话段」的聊天室。
@@ -1182,14 +1184,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
      */
     const handleReturnToStory = (deliverySessionId: string) => {
         setReturnStoryConfirm(null);
-        const result = closeDeliverySession({ deliverySessionId });
+        // 只收集，不结束：结束必须由用户在回填成功后确认。
+        const result = closeDeliverySession({ deliverySessionId, preview: true });
         if (!result) {
             showChatToast("这段已经归入过剧情了");
             return;
         }
         const { session: ds, transcript } = result;
         if (transcript.length === 0) {
-            showChatToast("这段没有找到聊天内容，已丢弃");
+            showChatToast("这段没有找到聊天内容，未做改动");
             return;
         }
         const narration = formatTranscriptAsNarration(ds, transcript);
@@ -1202,8 +1205,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             timestamp: new Date().toISOString(),
             rawText: narration,
         });
-        showChatToast(`已归入《${ds.scriptTitle}》· ${transcript.length} 句`);
         window.dispatchEvent(new CustomEvent("float:ensemble-updated"));
+        setReturnStoryConfirm({ deliverySessionId, scriptTitle: ds.scriptTitle, count: transcript.length });
     };
 
     const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -5017,7 +5020,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     {openStorySession && (
                         <button
                             onClick={() => {
-                                setReturnStoryConfirm(openStorySession.id);
+                                setReturnStoryConfirm({ deliverySessionId: openStorySession.id });
                                 setActiveMessageId(null);
                             }}
                             className="ctx-menu-btn"
@@ -6914,13 +6917,29 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 />
             )}
 
-            {returnStoryConfirm && openStorySession && openStorySession.id === returnStoryConfirm && (
+            {returnStoryConfirm && "scriptTitle" in returnStoryConfirm && (
+                <ConfirmDialog
+                    title="已带回剧情"
+                    message={`${returnStoryConfirm.count} 句聊天已归入《${returnStoryConfirm.scriptTitle}》。请确认是否结束本次剧情模式，确认后本次「剧情对话」将出现「止」并恢复普通聊天。`}
+                    confirmLabel="结束本次剧情"
+                    cancelLabel="稍后再确认"
+                    onConfirm={() => {
+                        const current = returnStoryConfirm;
+                        finishDeliverySession(current.deliverySessionId);
+                        setReturnStoryConfirm(null);
+                        closeTheaterMode();
+                        showChatToast("本次剧情已结束");
+                    }}
+                    onCancel={() => setReturnStoryConfirm(null)}
+                />
+            )}
+            {returnStoryConfirm && !("scriptTitle" in returnStoryConfirm) && (
                 <ConfirmDialog
                     title="返回剧情"
-                    message={`将把本次聊天记录整理为「来自聊天」的旁白，归入《${openStorySession.scriptTitle}》，并结束这段剧情对话。确认归入？`}
+                    message="将把本次聊天记录整理为「来自聊天」的旁白并归入剧情。回填成功后才会询问是否结束本次剧情模式。确认归入？"
                     confirmLabel="归入剧情"
                     cancelLabel="取消"
-                    onConfirm={() => handleReturnToStory(openStorySession.id)}
+                    onConfirm={() => handleReturnToStory(returnStoryConfirm.deliverySessionId)}
                     onCancel={() => setReturnStoryConfirm(null)}
                 />
             )}

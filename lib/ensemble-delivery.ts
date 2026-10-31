@@ -292,6 +292,8 @@ function markMessagesAsDelivery(chatSessionId: string, fromMessageId: string, de
  */
 export function closeDeliverySession(params: {
     deliverySessionId: string;
+    /** 仅收集，回填成功并经用户确认后才结束。 */
+    preview?: boolean;
     /** 兼容旧调用：可省略，省略时按 id 扫描全部会话。 */
     characterId?: string;
 }): { session: DeliverySession; transcript: { role: string; senderName?: string; content: string; at: number }[] } | null {
@@ -335,9 +337,20 @@ export function closeDeliverySession(params: {
         transcript = [];
     }
 
+    if (params.preview) return { session: target, transcript };
     const ended: DeliverySession = { ...target, endedAt: Date.now() };
     saveDeliverySessions(list.map(s => (s.id === target.id ? ended : s)));
     return { session: ended, transcript };
+}
+
+/** 回填确认后结束本次剧情；未归入成功前不得调用，否则「止」会提前出现。 */
+export function finishDeliverySession(deliverySessionId: string): DeliverySession | null {
+    const list = loadDeliverySessions();
+    const target = list.find(s => s.id === deliverySessionId);
+    if (!target || target.endedAt) return null;
+    const ended: DeliverySession = { ...target, endedAt: Date.now() };
+    saveDeliverySessions(list.map(s => (s.id === target.id ? ended : s)));
+    return ended;
 }
 
 /**
