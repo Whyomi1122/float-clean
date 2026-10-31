@@ -78,6 +78,7 @@ import { parseToolCalls, parseToolFetches, executeToolCalls, formatToolResults, 
 import { stripStateAndInnerForPrompt } from "./prompt-sanitizer";
 import { buildGroupRosterMacro } from "./group-admin";
 import { parseOfflineResponse, extractThinkingTag, type ParsedOfflineResponse } from "./chat-offline-storage";
+import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
 import { buildProviderRequest, nativeToolProtocolForConfig, toLlmRequestMessages, type LlmRequestMessage, type LlmToolCall } from "./llm-provider-adapter";
 import type { DebugPromptSnapshot } from "./debug-store";
 import { throwIfAborted } from "./abort-utils";
@@ -328,6 +329,9 @@ async function buildGroupChatPromptMessages(
         ? [...baseAppTags, "spectator"]
         : baseAppTags;
     const isOfflineMode = activeAppTags.includes("offline");
+    // 剧情投递背景（2026-10-31）：本群聊会话存在未归入的投递段时，带入来源剧本背景与世界书。
+    // 离线任务不注入；结束后 / 关闭背景 / 剧本已删除都自动失效。
+    const deliveryBackground = isOfflineMode ? null : buildEnsembleDeliveryPromptBackground(session.id);
 
     const memConfig = loadMemoryConfig();
     const allWorldBooks = loadWorldBooks();
@@ -374,6 +378,18 @@ async function buildGroupChatPromptMessages(
     const memberResults = await Promise.all(memberDataPromises);
     const members = memberResults.filter(Boolean) as GroupMemberData[];
     if (members.length === 0) throw new ChatEngineError("No valid group members found.");
+    // 剧情世界书并入第一位成员的世界书列表（拼装时按 id 去重，避免重复注入）。
+    if (deliveryBackground && promptProfile?.enableWorldBooks !== false && deliveryBackground.worldBookIds.length > 0) {
+        const existingIds = new Set<string>();
+        for (const m of members) for (const w of m.worldBooks) existingIds.add(w.id);
+        const deliveryBooks = deliveryBackground.worldBookIds
+            .filter(id => !existingIds.has(id))
+            .map(id => allWorldBooks.find(w => w.id === id))
+            .filter(Boolean) as GroupMemberData["worldBooks"];
+        if (deliveryBooks.length > 0) {
+            members[0] = { ...members[0], worldBooks: [...members[0].worldBooks, ...deliveryBooks] };
+        }
+    }
 
     const nameToId = new Map<string, string>();
     const memberNames: string[] = [];
@@ -493,6 +509,10 @@ async function buildGroupChatPromptMessages(
         offlineSummaryTag: preset?.story_summary_tag?.trim() || "summary",
         nativeToolHistory: usesNativeActions,
     });
+    // 剧情背景放在最前：多个 system 消息在本管线已支持
+    if (deliveryBackground) {
+        llmMessages.unshift({ role: "system", content: deliveryBackground.block });
+    }
     if (promptProfile?.output === "plain_text") {
         llmMessages.push({
             role: "system",

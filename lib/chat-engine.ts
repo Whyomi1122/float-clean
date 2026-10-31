@@ -35,6 +35,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
+import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
 import {
@@ -1847,7 +1848,17 @@ export async function buildChatPromptMessages(
 
     const allWorldBooks = loadWorldBooks();
     const extraWorldBookIds = options?.extraWorldBookIds ?? [];
-    const worldBookIds = [...new Set([...(activeSlot.worldBookIds || []), ...extraWorldBookIds])];
+    // 剧情投递背景（2026-10-31）：本聊天室存在未归入的投递段时，带入来源剧本的背景与世界书。
+    // 只在聊天 App、非离线任务时生效；结束后 / 关闭背景 / 剧本已删除都自动失效。
+    const deliveryBackground = resolvedAppId === "chat" && options?.appTags?.includes("offline") !== true
+        ? buildEnsembleDeliveryPromptBackground(session.id)
+        : null;
+    const worldBookIds = [...new Set([
+        ...(activeSlot.worldBookIds || []),
+        ...extraWorldBookIds,
+        // 剧情世界书：enableWorldBooks=false 时下游不会注入世界书，这里始终带上即可
+        ...deliveryBackground?.worldBookIds ?? [],
+    ])];
     const worldBooks = promptProfile?.enableWorldBooks === false
         ? []
         : worldBookIds.map(id => allWorldBooks.find(w => w.id === id)).filter(Boolean) as typeof allWorldBooks;
@@ -1982,6 +1993,10 @@ export async function buildChatPromptMessages(
         offlineSummaryTag: preset?.story_summary_tag?.trim() || "summary",
         nativeToolHistory: usesNativeActions,
     });
+    // 剧情背景放在最前：多个 system 消息在本管线已支持（plain_text/json 也是追加 system）
+    if (deliveryBackground) {
+        llmMessages.unshift({ role: "system", content: deliveryBackground.block });
+    }
     if (promptProfile?.output === "plain_text") {
         llmMessages.push({
             role: "system",

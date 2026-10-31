@@ -12,6 +12,7 @@
 //   · 剧情模式下的内容归到群像剧本自己的归档里
 
 import { loadUserIdentities, resolveUserIdentity } from "./settings-storage";
+import { loadEnsembleScripts } from "./ensemble-storage";
 
 import {
     createOrGetSession,
@@ -62,6 +63,8 @@ export type DeliverySession = {
     startedAt: number;
     /** 返回剧情时刻；为空表示这段还没归入。 */
     endedAt?: number;
+    /** 用户关闭了「本段带入剧情背景」：聊天生成不再注入剧本背景（不影响归属与回填）。 */
+    backgroundDisabled?: boolean;
 };
 
 const SESSION_KEY = "float_delivery_sessions_v1";
@@ -149,6 +152,94 @@ export function markSessionOpened(deliverySessionId: string) {
         return { ...s, opened: true };
     });
     if (changed) saveDeliverySessions(next);
+}
+
+/** 开关「本段带入剧情背景」：只影响提示词注入，不影响消息归属与回填结束流程。 */
+export function setDeliveryBackgroundEnabled(deliverySessionId: string, enabled: boolean) {
+    const list = loadDeliverySessions();
+    let changed = false;
+    const next = list.map(s => {
+        if (s.id !== deliverySessionId) return s;
+        if (enabled ? !s.backgroundDisabled : s.backgroundDisabled === true) return s;
+        changed = true;
+        const nextS = { ...s };
+        if (enabled) delete nextS.backgroundDisabled;
+        else nextS.backgroundDisabled = true;
+        return nextS;
+    });
+    if (changed) saveDeliverySessions(next);
+}
+
+function truncateForPrompt(text: string, max: number): string {
+    const clean = (text || "").trim();
+    return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** 组装出的剧情背景（注入聊天提示词用）。 */
+export type EnsembleDeliveryPromptBackground = {
+    session: DeliverySession;
+    /** 完整背景文本（含剧本设定 / 此前剧情 / 归档），由调用方包进 system 消息。 */
+    block: string;
+    /** 来源剧本绑定的世界书 id（复用聊天 App 现有世界书激活管线）。 */
+    worldBookIds: string[];
+};
+
+/**
+ * 组装「本段剧情背景」：给定聊天会话 id，若存在未归入、且用户未关闭背景的投递段，
+ * 则从来源剧本取「起点之前」的剧情（绝不带起点之后的内容，防止时间线泄漏）。
+ * 没有活动投递段 / 剧本已删除 / 会话对不上 → 返回 null，普通聊天完全不受影响。
+ */
+export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): EnsembleDeliveryPromptBackground | null {
+    if (typeof window === "undefined" || !chatSessionId) return null;
+    const open = loadDeliverySessions().find(s => !s.endedAt && s.chatSessionId === chatSessionId);
+    if (!open || open.backgroundDisabled) return null;
+    const script = loadEnsembleScripts().find(sc => sc.id === open.scriptId);
+    if (!script) return null;
+
+    const originIdx = script.turns.findIndex(t => t.id === open.originTurnId);
+    const lines: string[] = [];
+    lines.push(`本段对话来自群像剧本《${script.title || "未命名剧本"}》，是其中一段正在进行的剧情。`);
+    if (open.characterName) {
+        lines.push(`投递角色：${open.characterName}。`);
+    }
+    if (open.originContent?.trim()) {
+        lines.push(`剧情起点（投递台词）：${truncateForPrompt(open.originContent, 200)}`);
+    }
+    if (script.background?.trim()) {
+        lines.push(`剧本设定：${truncateForPrompt(script.background, 600)}`);
+    }
+
+    // 剧情回放：只取起点之前的最多 6 幕，短摘要在前
+    if (originIdx > 0) {
+        const prior = script.turns.slice(Math.max(0, originIdx - 6), originIdx);
+        if (prior.length > 0) {
+            lines.push("此前剧情回放：");
+            for (const t of prior) {
+                lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
+            }
+        }
+    }
+
+    // 杀青归档：只带「覆盖范围在起点之前」的最新一份，避免后续剧情泄漏
+    if (originIdx >= 0) {
+        const safeArchives = (script.archives ?? []).filter(a => {
+            if (!a.lastTurnId) return false;
+            const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
+            return aIdx >= 0 && aIdx <= originIdx;
+        });
+        const latest = safeArchives[safeArchives.length - 1];
+        if (latest?.content?.trim()) {
+            lines.push(`已归档剧情摘要：${truncateForPrompt(latest.content, 500)}`);
+        }
+    }
+
+    lines.push("请继续沿用上述剧情设定、人物关系与语气进行对话；本段内容之后会作为剧情带回剧本，请保持剧情内视角。");
+
+    return {
+        session: open,
+        block: `【剧情背景 · 进行中的投递段】\n${lines.join("\n")}`,
+        worldBookIds: [...(script.worldBookIds ?? [])],
+    };
 }
 
 /** 按 sessionId 取。 */
