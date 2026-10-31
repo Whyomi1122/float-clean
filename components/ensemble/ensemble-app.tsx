@@ -1446,12 +1446,10 @@ export function EnsembleApp({
   ) => {
     if (!currentScript) return;
     const line = lineOverride !== undefined ? lineOverride : deliverLine;
-    // 双语划分：翻译不单独成句，跟着说出的那句话一起走 ——
-    // 「原文\n译文」合成一条微信消息，和聊天室里 AI 双语回复的样式一致
-    const translation = translationOverride ?? line?.translation;
-    const rawContent = contentOverride ?? (line ? (translation ? `${line.text}\n${translation}` : line.text) : turn.content);
-    // 最后一道保险：即便台词来源有污染，投出去的一定是干净的微信格式
-    const content = sanitizeChatLine(rawContent);
+    // 先清洗原文与译文，再按聊天室的双语格式合并；原文覆盖不能吞掉译文。
+    const translation = sanitizeChatLine(translationOverride ?? line?.translation ?? "");
+    const original = sanitizeChatLine(contentOverride ?? line?.text ?? turn.content);
+    const content = original && translation ? `${original} | ${translation}` : original;
     if (!content) {
       setToast("这一句洗完之后是空的，换一句吧");
       return;

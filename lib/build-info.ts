@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.31-3",
+    version: "2026.10.31-4",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-4",
+            title: "修复群像投递丢失译文",
+            items: ["群像台词投到单聊或群聊时保留中文译文", "投递消息沿用聊天双语格式，支持展开与收起中文"],
+        },
         {
             version: "2026.10.31-3",
             title: "剧情结束改为手动确认",
