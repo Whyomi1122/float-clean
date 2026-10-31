@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.31-4",
+    version: "2026.10.31-5",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-5",
+            title: "改善通话小窗拖动",
+            items: ["扩大顶部拖动区，手机上更容易按住移动", "改善拖动结束与中断时的指针释放"],
+        },
         {
             version: "2026.10.31-4",
             title: "修复群像投递丢失译文",

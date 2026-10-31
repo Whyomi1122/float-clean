@@ -697,6 +697,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         return (
             <div className="call-mini-window call-mini-compact" style={miniPosition ? { left: miniPosition.left, top: miniPosition.top, bottom: "auto", right: "auto" } : undefined}>
                 <div className="call-mini-drag" aria-label="拖动通话小窗" onPointerDown={e => {
+                    if (!e.isPrimary || e.button !== 0) return;
+                    e.preventDefault();
                     const box = e.currentTarget.parentElement!;
                     miniDragRef.current = { x: e.clientX, y: e.clientY, left: box.offsetLeft, top: box.offsetTop };
                     e.currentTarget.setPointerCapture(e.pointerId);
@@ -706,7 +708,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     const box = e.currentTarget.parentElement!;
                     const parent = box.offsetParent as HTMLElement | null;
                     setMiniPosition({ left: Math.max(0, Math.min((parent?.clientWidth ?? innerWidth) - box.offsetWidth, drag.left + e.clientX - drag.x)), top: Math.max(0, Math.min((parent?.clientHeight ?? innerHeight) - box.offsetHeight, drag.top + e.clientY - drag.y)) });
-                }} onPointerUp={() => { miniDragRef.current = null; }} onPointerCancel={() => { miniDragRef.current = null; }}><span /></div>
+                }} onPointerUp={e => {
+                    miniDragRef.current = null;
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                }} onPointerCancel={() => { miniDragRef.current = null; }} onLostPointerCapture={() => { miniDragRef.current = null; }}><span /></div>
                 <button type="button" className="call-mini-restore" onClick={onRestore} aria-label={`返回与${character.name}的语音通话`}>
                     {character.avatar && <img src={character.avatar} alt="" />}
                     <span><strong>{character.name}</strong><small>{formatTime(callDuration)} · {stateLabel()}</small></span>
