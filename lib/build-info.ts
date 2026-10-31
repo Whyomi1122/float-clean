@@ -18,9 +18,14 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.10.31-5",
+    version: "2026.10.31-6",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.10.31-6",
+            title: "修正剧情结束边界",
+            items: ["未确认结束时不再提前显示剧情对话止标记", "回填成功后须确认结束，并立即恢复普通聊天状态"],
+        },
         {
             version: "2026.10.31-5",
             title: "改善通话小窗拖动",

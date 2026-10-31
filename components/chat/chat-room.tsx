@@ -1138,6 +1138,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     /** 返回剧情前的二次确认（防止误触直接归档）。 */
     /** 未回填：等待「返回剧情」确认；已回填：等待用户确认结束本次剧情。 */
     const [returnStoryConfirm, setReturnStoryConfirm] = useState<null | { deliverySessionId: string } | { deliverySessionId: string; scriptTitle: string; count: number }>(null);
+    const [deliveryRevision, setDeliveryRevision] = useState(0);
 
     /**
      * 当前会话是不是「剧情对话段」的聊天室。
@@ -1153,7 +1154,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         } catch {
             return false;
         }
-    }, [session.id, messages.length]);
+    }, [session.id, messages.length, deliveryRevision]);
 
     /** 当前会话名下「投递了但还没返回」的剧情对话段（长按菜单里的返回入口用）。 */
     const openStorySession = useMemo(() => {
@@ -1162,7 +1163,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         } catch {
             return null;
         }
-    }, [session.id, session.participantIds, messages.length]);
+    }, [session.id, session.participantIds, messages.length, deliveryRevision]);
 
     // 进入会话即标记「这段剧情已经打开过」，群像那边据此提示是否已录入聊天记录
     useEffect(() => {
@@ -1184,7 +1185,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
      */
     const handleReturnToStory = (deliverySessionId: string) => {
         setReturnStoryConfirm(null);
-        // 只收集，不结束：结束必须由用户在回填成功后确认。
+        // 先补齐最新消息的归属，再收集；结束必须由用户在回填成功后确认。
+        tagMessagesForOpenDeliverySession(session.id);
         const result = closeDeliverySession({ deliverySessionId, preview: true });
         if (!result) {
             showChatToast("这段已经归入过剧情了");
@@ -5945,10 +5947,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         "data-multi-select": "",
                         ...(isMultiSelected ? { "data-selected": "" } : {}),
                     } : {};
-                    // 剧情对话段分界线：段的头一条上画「起」、末一条下画「止」，
-                    // 让「剧情带进来的聊天」和普通聊天在时间线上一眼分开
-                    const segStart = !!msg.deliverySessionId && !projectedMessages[idx - 1]?.deliverySessionId;
-                    const segEnd = !!msg.deliverySessionId && !projectedMessages[idx + 1]?.deliverySessionId;
+                    // 未结束的剧情只显示「起」；用户确认结束后才在该段末尾显示「止」。
+                    const segStart = !!msg.deliverySessionId && projectedMessages[idx - 1]?.deliverySessionId !== msg.deliverySessionId;
+                    const segEnd = !!msg.deliverySessionId
+                        && projectedMessages[idx + 1]?.deliverySessionId !== msg.deliverySessionId
+                        && loadDeliverySessions().some(s => s.id === msg.deliverySessionId && !!s.endedAt);
 
                     // 语音转写双语统一：模型偶尔把中文译文作为紧随的独立「（…）」文本消息发出，
                     // 导致同一语音条下的转写时而带双语块、时而只有原文。这里把这种「纯括号译文」
@@ -6922,15 +6925,21 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     title="已带回剧情"
                     message={`${returnStoryConfirm.count} 句聊天已归入《${returnStoryConfirm.scriptTitle}》。请确认是否结束本次剧情模式，确认后本次「剧情对话」将出现「止」并恢复普通聊天。`}
                     confirmLabel="结束本次剧情"
-                    cancelLabel="稍后再确认"
+                    cancelLabel=""
                     onConfirm={() => {
                         const current = returnStoryConfirm;
-                        finishDeliverySession(current.deliverySessionId);
+                        const ended = finishDeliverySession(current.deliverySessionId);
+                        if (!ended) {
+                            showChatToast("结束失败，请重试");
+                            return;
+                        }
+                        setMessages(loadChatMessages(session.id));
+                        setDeliveryRevision(v => v + 1);
                         setReturnStoryConfirm(null);
                         closeTheaterMode();
                         showChatToast("本次剧情已结束");
                     }}
-                    onCancel={() => setReturnStoryConfirm(null)}
+                    onCancel={() => {}}
                 />
             )}
             {returnStoryConfirm && !("scriptTitle" in returnStoryConfirm) && (
