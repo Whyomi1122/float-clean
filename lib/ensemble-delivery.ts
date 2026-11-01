@@ -275,6 +275,8 @@ export type EnsembleDeliveryPanelSummary = {
     scriptTitle: string;
     characterName: string;
     startedAt: number;
+    /** 投递时的起点台词（截断版，展示用）。 */
+    originPreview: string;
     /** 本段背景是否实际注入（开关开 + 剧本还在）。 */
     backgroundActive: boolean;
     sceneCount: number;
@@ -298,6 +300,7 @@ export function getEnsembleDeliveryPanelSummaries(): EnsembleDeliveryPanelSummar
                 scriptTitle: script?.title || s.scriptTitle || "未知剧本",
                 characterName: s.characterName || "",
                 startedAt: s.startedAt,
+                originPreview: truncateForPrompt(s.originContent || "", 64),
                 backgroundActive: false,
                 sceneCount: 0,
                 hasArchive: false,

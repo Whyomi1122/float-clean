@@ -17,6 +17,7 @@ import type { MusicTrack } from "@/lib/music-storage";
 import {
     getEnsembleDeliveryPanelSummaries,
     setDeliveryBackgroundEnabled,
+    buildEnsembleDeliveryPromptBackground,
     type EnsembleDeliveryPanelSummary,
 } from "@/lib/ensemble-delivery";
 import "./../styles/multi-float.css";
@@ -96,9 +97,9 @@ export default function MultiFloatBall({ hidden }: Props) {
             setDismissed(true);
             return;
         }
-        // 位移小于 8px → 视为点击,展开面板
+        // 位移小于 8px → 视为点击：面板开着就收起，没开就展开
         if (dist < 8) {
-            setPanelOpen(true);
+            setPanelOpen(open => !open);
         }
     };
     const onPointerCancel = () => {
@@ -127,6 +128,7 @@ export default function MultiFloatBall({ hidden }: Props) {
 
     // ── 剧情投递面板(只读摘要 + 背景开关) ──
     const [deliveryList, setDeliveryList] = useState<EnsembleDeliveryPanelSummary[]>([]);
+    const [previewId, setPreviewId] = useState<string | null>(null);
     const refreshDelivery = useCallback(() => {
         try { setDeliveryList(getEnsembleDeliveryPanelSummaries()); } catch { /* ignore */ }
     }, []);
@@ -228,11 +230,11 @@ export default function MultiFloatBall({ hidden }: Props) {
 
     return (
         <>
-            {/* ── 收起态小球 ── */}
-            {pos && !panelOpen && (
+            {/* ── 悬浮球：始终显示，面板展开时也可点击/拖动（点球收起面板） ── */}
+            {pos && (
                 <div
                     ref={ballRef}
-                    className={`mfb-ball ${isPlaying ? "mfb-playing" : ""}`}
+                    className={`mfb-ball ${isPlaying ? "mfb-playing" : ""} ${panelOpen ? "mfb-ball-open" : ""}`}
                     style={{ left: pos.x, top: pos.y }}
                     onPointerDown={onPointerDown}
                     onPointerMove={onPointerMove}
@@ -431,7 +433,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                                 {deliveryList.length === 0 ? (
                                     <div className="mfb-model-status">暂无进行中的剧情投递<br />在群像 App 投递一幕后，这里会显示本段剧情背景</div>
                                 ) : (
-                                    deliveryList.map(({ session: s, scriptTitle, characterName, startedAt, backgroundActive, sceneCount, hasArchive, worldBookCount, inactiveReason }) => (
+                                    deliveryList.map(({ session: s, scriptTitle, characterName, startedAt, originPreview, backgroundActive, sceneCount, hasArchive, worldBookCount, inactiveReason }) => (
                                         <div key={s.id} className={`mfb-dl-card ${backgroundActive ? "" : "mfb-dl-card-off"}`}>
                                             <div className="mfb-dl-head">
                                                 <span className="mfb-dl-title">{scriptTitle}</span>
@@ -440,6 +442,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                                                 </span>
                                             </div>
                                             {characterName && <div className="mfb-dl-char">投递角色：{characterName}</div>}
+                                            {originPreview && <div className="mfb-dl-origin">「{originPreview}」</div>}
                                             {backgroundActive ? (
                                                 <div className="mfb-dl-scope">
                                                     <span>本段带入：剧本背景 · 此前剧情 {sceneCount} 幕{hasArchive ? " · 归档摘要" : ""}{worldBookCount > 0 ? ` · 世界书 ${worldBookCount} 本` : ""}</span>
@@ -447,6 +450,40 @@ export default function MultiFloatBall({ hidden }: Props) {
                                             ) : (
                                                 <div className="mfb-dl-scope mfb-dl-scope-off">
                                                     {inactiveReason === "off" ? "本段剧情背景已关闭" : "来源剧本已删除，背景不可用"}
+                                                </div>
+                                            )}
+                                            <div className="mfb-dl-actions">
+                                                <button
+                                                    className="mfb-dl-link"
+                                                    onClick={() => {
+                                                        if (!s.chatSessionId) return;
+                                                        try {
+                                                            window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: "chat", sessionId: s.chatSessionId } }));
+                                                        } catch { /* ignore */ }
+                                                        setPanelOpen(false);
+                                                    }}
+                                                >
+                                                    进入聊天室 →
+                                                </button>
+                                                {backgroundActive && (
+                                                    <button
+                                                        className="mfb-dl-link"
+                                                        onClick={() => setPreviewId(previewId === s.id ? null : s.id)}
+                                                    >
+                                                        {previewId === s.id ? "收起背景" : "查看背景"}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {previewId === s.id && backgroundActive && (
+                                                <div className="mfb-dl-preview">
+                                                    {(() => {
+                                                        try {
+                                                            const bg = s.chatSessionId ? buildEnsembleDeliveryPromptBackground(s.chatSessionId) : null;
+                                                            return bg?.block || "（本段暂无可注入的背景内容）";
+                                                        } catch {
+                                                            return "（背景读取失败）";
+                                                        }
+                                                    })()}
                                                 </div>
                                             )}
                                             <div className="mfb-dl-toggle-row">
