@@ -1,4 +1,4 @@
-import type { InternalCapabilityConfig } from "./settings-types";
+import type { InternalCapabilityConfig, MusicDjSwitches } from "./settings-types";
 import { isAgentComputerConfigured, isContainerComputer } from "./agent-computer";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { loadBridgeDataItems, loadBridgeShortcutActions, parseBridgeActionParameterSchema } from "./reality-bridge/storage";
@@ -23,6 +23,37 @@ export type InternalToolDefinition = {
     parameterSchema: string;
     usageGuide?: string;
 };
+
+// ── 音乐 DJ 并列开关(全部默认关) ──
+// 子工具名 → 开关键。开关存于 InternalCapabilityConfig.musicDjSwitches,
+// undefined 视为全关;执行与暴露共用同一过滤,保证关了就真用不了。
+const MUSIC_SUBTOOL_SWITCH_MAP: Record<string, keyof MusicDjSwitches> = {
+    "查看音乐状态": "view",
+    "查看音乐库概览": "view",
+    "查看歌单歌曲": "view",
+    "搜索音乐": "search",
+    "加入播放列表": "queue",
+    "播放音乐": "play",
+    "切换音乐": "play",
+};
+
+export function getMusicDjSwitches(capability: InternalCapabilityConfig): MusicDjSwitches {
+    const sw = capability.musicDjSwitches;
+    return {
+        view: !!sw?.view,
+        search: !!sw?.search,
+        queue: !!sw?.queue,
+        play: !!sw?.play,
+    };
+}
+
+function isMusicSubtoolAllowed(capability: InternalCapabilityConfig, toolName: string): boolean {
+    if (capability.id !== MUSIC_CONTROL_CAPABILITY_ID) return true;
+    const key = MUSIC_SUBTOOL_SWITCH_MAP[toolName];
+    if (!key) return true; // 未映射的子工具不受 DJ 开关约束
+    return getMusicDjSwitches(capability)[key];
+}
+
 
 const MEMORY_WRITE_PARAMETER_SCHEMA = JSON.stringify({
     type: "object",
@@ -1462,7 +1493,10 @@ export function getInternalCapabilitySubToolDefinition(
         return NOTE_WALL_SUBTOOLS.find(tool => tool.name === name) ?? null;
     }
     if (capability.id === MUSIC_CONTROL_CAPABILITY_ID) {
-        return MUSIC_CONTROL_SUBTOOLS.find(tool => tool.name === name) ?? null;
+        // 音乐 DJ 并列开关:关掉的子工具既不暴露也不可执行
+        const tool = MUSIC_CONTROL_SUBTOOLS.find(tool => tool.name === name) ?? null;
+        if (tool && !isMusicSubtoolAllowed(capability, tool.name)) return null;
+        return tool;
     }
     if (capability.id === CALENDAR_MANAGEMENT_CAPABILITY_ID) {
         return CALENDAR_MANAGEMENT_SUBTOOLS.find(tool => tool.name === name) ?? null;
@@ -1486,7 +1520,8 @@ export function getInternalCapabilitySubToolDefinitions(
         return NOTE_WALL_SUBTOOLS;
     }
     if (capability.id === MUSIC_CONTROL_CAPABILITY_ID) {
-        return MUSIC_CONTROL_SUBTOOLS;
+        // 音乐 DJ 并列开关:默认全关,只暴露已开启的子工具
+        return MUSIC_CONTROL_SUBTOOLS.filter(tool => isMusicSubtoolAllowed(capability, tool.name));
     }
     if (capability.id === CALENDAR_MANAGEMENT_CAPABILITY_ID) {
         return CALENDAR_MANAGEMENT_SUBTOOLS;

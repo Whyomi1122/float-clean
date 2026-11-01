@@ -435,6 +435,20 @@ export type InternalCapabilityConfig = {
     description: string;
     enabled: boolean;
     mode: InternalCapabilityMode;
+    /** 音乐 DJ 并列开关(仅 music_control 能力使用;undefined 视为全关) */
+    musicDjSwitches?: MusicDjSwitches;
     createdAt: number;
     updatedAt: number;
+};
+
+// 主动排歌并列开关——全部默认关,各场景自由组合
+export type MusicDjSwitches = {
+    /** 查看听歌状态/音乐库/歌单 */
+    view: boolean;
+    /** 搜索音乐 */
+    search: boolean;
+    /** 排歌(加入播放列表) */
+    queue: boolean;
+    /** 切歌(播放/上一首/下一首等) */
+    play: boolean;
 };

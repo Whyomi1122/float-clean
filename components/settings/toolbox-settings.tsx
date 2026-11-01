@@ -11,6 +11,7 @@ import type {
     RestToolPackageConfig,
     McpServerConfig,
     InternalCapabilityConfig,
+    MusicDjSwitches,
 } from "@/lib/settings-types";
 import {
     loadCompositeTools, saveCompositeTools, createCompositeTool,
@@ -1673,6 +1674,13 @@ export function ToolboxSettings() {
                 const capability = internalCapabilities.find(item => item.id === editInternalId);
                 if (!capability) return null;
                 if (isAutoOnlyInternalCapability(capability.id)) {
+                    const sw: Partial<MusicDjSwitches> = capability.musicDjSwitches ?? {};
+                    const djSwitches: Array<{ key: "view" | "search" | "queue" | "play"; label: string; desc: string }> = [
+                        { key: "view", label: "查看听歌状态", desc: "正在播放的歌、音乐库、歌单" },
+                        { key: "search", label: "搜索音乐", desc: "让 TA 搜歌找歌" },
+                        { key: "queue", label: "排歌", desc: "把歌加进播放列表(不打断当前播放)" },
+                        { key: "play", label: "切歌", desc: "播放、上一首、下一首等" },
+                    ];
                     return (
                         <ContentDialog
                             title={capability.name}
@@ -1682,6 +1690,26 @@ export function ToolboxSettings() {
                             onCancel={() => setEditInternalId(null)}
                         >
                             <p className="menu-desc text-left leading-relaxed">{getAutoOnlyCapabilityDetail(capability.id)}</p>
+                            {capability.id === MUSIC_CONTROL_CAPABILITY_ID && (
+                                <div className="flex flex-col gap-2 mt-3">
+                                    <span className="menu-desc ml-1">主动排歌开关(默认全关,按需开启)</span>
+                                    {djSwitches.map(item => (
+                                        <label key={item.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-black/[0.04] cursor-pointer">
+                                            <span className="flex flex-col">
+                                                <span className="text-[13px] font-medium">{item.label}</span>
+                                                <span className="text-[11px] opacity-60">{item.desc}</span>
+                                            </span>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!sw[item.key]}
+                                                onChange={e => updateInternalCapability(capability.id, {
+                                                    musicDjSwitches: { view: !!sw.view, search: !!sw.search, queue: !!sw.queue, play: !!sw.play, [item.key]: e.target.checked },
+                                                })}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
                         </ContentDialog>
                     );
                 }
