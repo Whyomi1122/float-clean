@@ -64,19 +64,11 @@ export async function retrieveCoreMemoriesForPrompt(
     characterId: string,
     config: MemoryConfig,
 ): Promise<MemoryEntry[]> {
-    const coreEntries = await loadMemoryEntriesByType(characterId, "core");
-    if (coreEntries.length === 0) return [];
-
-    const sorted = [...coreEntries].sort((a, b) => {
-        const aActive = a.metadata?.active ? 1 : 0;
-        const bActive = b.metadata?.active ? 1 : 0;
-        if (aActive !== bActive) return bActive - aActive;
-        const aDate = String(a.metadata?.eventDate ?? a.updatedAt ?? a.createdAt);
-        const bDate = String(b.metadata?.eventDate ?? b.updatedAt ?? b.createdAt);
-        return bDate.localeCompare(aDate);
-    });
-
-    return fillByBudget(sorted, config.coreMemoryTokenBudget);
+    // 核心记忆管线已废弃（2026-10-15），注入同步停用（2026-11-01 C 项清理）：
+    // 历史 core 条目只读保留在存储里，不再进提示词；恢复只需删掉这一行 return。
+    void characterId;
+    void config;
+    return [];
 }
 
 /** Pick entries in order until token budget is exhausted. */
