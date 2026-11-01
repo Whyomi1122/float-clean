@@ -4379,17 +4379,29 @@ ${lastSpeakerNote}
                         }}
                         onDelete={() => requestDeleteTurn(turn)}
                         onDeliver={
-                          !isUser && turn.senderName
+                          !isUser
                             ? () => {
-                                const member = currentScript.cast.find(
-                                  (c) => c.name === turn.senderName
-                                );
-                                if (!member) {
+                                // 多说话人幕（旁白开头等）的 senderName 可能不是 cast 名，
+                                // member 仅作面板入口；真正归属由所选台词的 speakerId 决定。
+                                const byName = turn.senderName
+                                  ? currentScript.cast.find((c) => c.name === turn.senderName)
+                                  : undefined;
+                                const fallback = byName ?? (() => {
+                                  const parseCast = castWithPersona(currentScript.cast, activePersona);
+                                  for (const f of framesOfTurn(turn, parseCast)) {
+                                    const hit = f.speakerId
+                                      ? currentScript.cast.find((c) => c.id === f.speakerId)
+                                      : undefined;
+                                    if (hit) return hit;
+                                  }
+                                  return undefined;
+                                })();
+                                if (!fallback) {
                                   setToast("找不到说话的角色");
                                   return;
                                 }
                                 // 单人 / 多人都要先选「哪一句」；多人在下一步才选单聊还是群聊
-                                openDeliverPicker(turn, member);
+                                openDeliverPicker(turn, fallback);
                               }
                             : undefined
                         }
