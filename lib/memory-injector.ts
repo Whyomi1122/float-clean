@@ -36,5 +36,14 @@ export function formatCoreMemories(memories: MemoryEntry[]): string {
  */
 export function formatArchivesForPrompt(archives: MemoryEntry[]): string {
     if (archives.length === 0) return "";
-    return archives.map(entry => `【归档】${entry.content}`).join("\n");
+    // 兜底去重：同一内容（群像镜像多角色场景）只注入一次
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    for (const entry of archives) {
+        const key = entry.content.trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lines.push(`【归档】${entry.content}`);
+    }
+    return lines.join("\n");
 }
