@@ -542,7 +542,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                         )}
                     </div>
                 </div>
-            )}
+            )})()}
 
             {/* ── 一起听全屏浮层 ── */}
             {listenOpen && partner && (

@@ -5,7 +5,7 @@
 // AI 回应走 listen-together-engine(绑定槽 listen,注入 now_playing)
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMusicControlsOptional } from "@/lib/music-context";
+import { useMusicControlsOptional, useMusicPlayerOptional } from "@/lib/music-context";
 import { generateListenReply } from "@/lib/listen-together-engine";
 import {
     loadListenMessages,
@@ -26,8 +26,10 @@ type Props = {
 
 export default function ListenTogetherOverlay({ character, userName, userAvatar, onClose }: Props) {
     const controls = useMusicControlsOptional();
+    const player = useMusicPlayerOptional();
     const track = controls?.currentTrack ?? null;
     const isPlaying = controls?.isPlaying ?? false;
+    const currentTime = player?.currentTime ?? 0;
 
     const [messages, setMessages] = useState<ListenMessage[]>([]);
     const [input, setInput] = useState("");
@@ -149,12 +151,12 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
                                 <div className="lt-player-artist">{track.artist}</div>
                             </div>
                         </div>
-                        <div className="lt-progress"><div className="lt-progress-fill" style={{ width: `${track.duration > 0 ? Math.min((controls?.currentTime ?? 0) / track.duration, 1) * 100 : 0}%` }} /></div>
-                        <div className="lt-time"><span>{fmt(controls?.currentTime ?? 0)}</span><span>{fmt(track.duration)}</span></div>
+                        <div className="lt-progress"><div className="lt-progress-fill" style={{ width: `${track.duration > 0 ? Math.min(currentTime / track.duration, 1) * 100 : 0}%` }} /></div>
+                        <div className="lt-time"><span>{fmt(currentTime)}</span><span>{fmt(track.duration)}</span></div>
                         <div className="lt-ctrls">
-                            <button className="lt-ctrl" onClick={() => controls?.playPrev()}>⏮</button>
+                            <button className="lt-ctrl" onClick={() => player?.prev()}>⏮</button>
                             <button className="lt-ctrl lt-ctrl-main" onClick={() => controls?.togglePlay()}>{isPlaying ? "⏸" : "▶"}</button>
-                            <button className="lt-ctrl" onClick={() => controls?.playNext()}>⏭</button>
+                            <button className="lt-ctrl" onClick={() => player?.next()}>⏭</button>
                         </div>
                     </>
                 ) : (
