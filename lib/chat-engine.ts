@@ -1906,6 +1906,11 @@ export async function buildChatPromptMessages(
         excludeOfflineSessionId: options?.excludeOfflineSessionId,
         promptTimestampOptions,
     });
+    // 剧本世界书关键词条目的激活比对文本并入背景全文（deliveryBackground 已在上方解析）：
+    // 剧情关键词（人名/地名/物件）多在归档与回放里，聊天上下文没有会漏激活。
+    const wbContextWithDelivery = deliveryBackground
+        ? `${deliveryBackground.block}\n${wbActivationContext}`
+        : wbActivationContext;
     const promptHistory = applyVisionImagePromptLimit(
         truncatedHistory.map(msg => ({ ...msg })),
         session.visionImagePromptLimit,
@@ -1918,7 +1923,7 @@ export async function buildChatPromptMessages(
     }
 
     const [memResults, coreResults, archiveResults, musicLocal, musicCloud] = await Promise.all([
-        retrieveMemoriesForPrompt(character.id, wbActivationContext, memConfig).catch(() => null),
+        retrieveMemoriesForPrompt(character.id, wbContextWithDelivery, memConfig).catch(() => null),
         retrieveCoreMemoriesForPrompt(character.id, memConfig).catch(() => null),
         retrieveArchivesForPrompt(character.id, memConfig).catch(() => null),
         buildMusicLocalMacro(),
@@ -1975,7 +1980,7 @@ export async function buildChatPromptMessages(
         currentSchedule,
         coreMemories,
         longTermMemories,
-        worldBookActivationContext: options?.worldBookActivationContext || wbActivationContext,
+        worldBookActivationContext: options?.worldBookActivationContext || wbContextWithDelivery,
         activateAllWorldBooks: options?.activateAllWorldBooks,
         recentBlocks,
         unifiedRecentItems,

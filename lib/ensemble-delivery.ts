@@ -223,27 +223,41 @@ export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): En
             lines.push(`剧本设定：${truncateForPrompt(script.background, 600)}`);
         }
 
-        // 剧情回放：只取起点之前的最多 6 幕，短摘要在前
-        if (originIdx > 0) {
-            const prior = script.turns.slice(Math.max(0, originIdx - 6), originIdx);
-            if (prior.length > 0) {
-                lines.push("此前剧情回放：");
-                for (const t of prior) {
-                    lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
-                }
-            }
-        }
-
-        // 杀青归档：只带「覆盖范围在起点之前」的最新一份，避免后续剧情泄漏
+        // ── 杀青归档（2026-11-02 对齐群像口径）：覆盖范围在起点之前的归档**全部合并全文**注入。
+        //    群像 AI 自己就是"杀青=原文真删、只靠归档续写"，聊天侧必须一致，
+        //    否则会出现「聊天 AI 记得被归档修正前剧情」的记忆打架。归档全文不限量
+        //    （用户归档+世界书总量压在 6-7k 字，群像 30-50k token 胜任）。
+        let killAnchorIdx = -1;
         if (originIdx >= 0) {
             const safeArchives = (script.archives ?? []).filter(a => {
-                if (!a.lastTurnId) return false;
+                if (!a.lastTurnId || !a.content?.trim()) return false;
                 const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
                 return aIdx >= 0 && aIdx <= originIdx;
             });
-            const latest = safeArchives[safeArchives.length - 1];
-            if (latest?.content?.trim()) {
-                lines.push(`已归档剧情摘要：${truncateForPrompt(latest.content, 500)}`);
+            if (safeArchives.length > 0) {
+                const merged = safeArchives.map(a => a.content.trim()).join("\n\n");
+                lines.push("【剧情归档 · 已杀青总结（这是你能记起的全部过往剧情，请以它为准）】");
+                lines.push("归档之外的过往细节已被封存——若与你的印象冲突，一律以归档为准。");
+                lines.push(merged);
+                anyArchive = true;
+                const lastAnchor = safeArchives[safeArchives.length - 1].lastTurnId;
+                killAnchorIdx = script.turns.findIndex(t => t.id === lastAnchor);
+            }
+        }
+
+        // ── 原文回放（2026-11-02 对齐群像口径）：只取「杀青点 → 投递起点」之间的原文
+        //    （这段双方都合法可见），最多取最近 8 幕；杀青点之前的原文已被归档取代，不注入。
+        if (originIdx > 0) {
+            const visibleStart = killAnchorIdx + 1;
+            if (originIdx > visibleStart) {
+                const prior = script.turns.slice(Math.max(visibleStart, originIdx - 8), originIdx);
+                if (prior.length > 0) {
+                    lines.push("此前剧情回放（未杀青的最近原文）：");
+                    for (const t of prior) {
+                        lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
+                    }
+                }
+                sceneTotal += prior.length;
             }
         }
 
@@ -251,12 +265,6 @@ export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): En
 
         parts.push(`【剧情背景 · 进行中的投递段】\n${lines.join("\n")}`);
         for (const id of script.worldBookIds ?? []) wbIds.add(id);
-        sceneTotal += originIdx > 0 ? Math.min(6, originIdx) : 0;
-        if (originIdx >= 0 && (script.archives ?? []).some(a => {
-            if (!a.lastTurnId || !a.content?.trim()) return false;
-            const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
-            return aIdx >= 0 && aIdx <= originIdx;
-        })) anyArchive = true;
     }
 
     if (parts.length === 0) return null;
