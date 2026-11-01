@@ -256,10 +256,24 @@ export default function MultiFloatBall({ hidden }: Props) {
                 </div>
             )}
 
-            {/* ── 展开面板 ── */}
-            {panelOpen && (
-                <div className="mfb-mask" onClick={() => setPanelOpen(false)}>
-                    <div className="mfb-panel" onClick={(e) => e.stopPropagation()}>
+            {/* ── 展开面板：吸附在悬浮球下方（球在下半屏时贴在球上方），点外部关闭 ── */}
+            {panelOpen && (() => {
+                const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+                const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+                const w = Math.min(340, vw * 0.88);
+                const anchor = pos
+                    ? (pos.y < vh * 0.55
+                        ? { left: Math.min(Math.max(8, pos.x + 24 - w / 2), Math.max(8, vw - w - 8)), top: Math.min(pos.y + 56, vh - 120) }
+                        : { left: Math.min(Math.max(8, pos.x + 24 - w / 2), Math.max(8, vw - w - 8)), top: Math.max(8, pos.y - 16), transform: "translateY(-100%)" })
+                    : undefined;
+                return (
+                    <div className="mfb-mask mfb-mask-clear" onClick={() => setPanelOpen(false)}>
+                        <div
+                            className="mfb-panel"
+                            data-anchored={anchor ? "" : undefined}
+                            style={anchor}
+                            onClick={(e) => e.stopPropagation()}
+                        >
                         {/* 顶栏:tab + 菜单 */}
                         <div className="mfb-head">
                             <button className={`mfb-tab ${tab === "music" ? "mfb-tab-on" : ""}`} onClick={() => setTab("music")}>音乐</button>
@@ -485,7 +499,8 @@ export default function MultiFloatBall({ hidden }: Props) {
                         )}
                     </div>
                 </div>
-            )}
+            );
+        })()}
         </>
     );
 }

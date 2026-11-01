@@ -189,66 +189,83 @@ export type EnsembleDeliveryPromptBackground = {
 };
 
 /**
- * 组装「本段剧情背景」：给定聊天会话 id，若存在未归入、且用户未关闭背景的投递段，
- * 则从来源剧本取「起点之前」的剧情（绝不带起点之后的内容，防止时间线泄漏）。
- * 没有活动投递段 / 剧本已删除 / 会话对不上 → 返回 null，普通聊天完全不受影响。
+ * 组装「本段剧情背景」：给定聊天会话 id，把**所有**未归入、且用户未关闭背景的投递段
+ * 一并带入（同一聊天室可能同时有多段投递），每段只取来源剧本「起点之前」的剧情
+ * （绝不带起点之后的内容，防止时间线泄漏）。
+ * 没有活动投递段 / 全部关闭背景 / 剧本都已删除 → 返回 null，普通聊天完全不受影响。
  */
 export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): EnsembleDeliveryPromptBackground | null {
     if (typeof window === "undefined" || !chatSessionId) return null;
-    const open = loadDeliverySessions().find(s => !s.endedAt && s.chatSessionId === chatSessionId);
-    if (!open || open.backgroundDisabled) return null;
-    const script = loadEnsembleScripts().find(sc => sc.id === open.scriptId);
-    if (!script) return null;
+    const opens = loadDeliverySessions().filter(s => !s.endedAt && s.chatSessionId === chatSessionId);
+    if (opens.length === 0) return null;
+    const scripts = loadEnsembleScripts();
 
-    const originIdx = script.turns.findIndex(t => t.id === open.originTurnId);
-    const lines: string[] = [];
-    lines.push(`本段对话来自群像剧本《${script.title || "未命名剧本"}》，是其中一段正在进行的剧情。`);
-    if (open.characterName) {
-        lines.push(`投递角色：${open.characterName}。`);
-    }
-    if (open.originContent?.trim()) {
-        lines.push(`剧情起点（投递台词）：${truncateForPrompt(open.originContent, 200)}`);
-    }
-    if (script.background?.trim()) {
-        lines.push(`剧本设定：${truncateForPrompt(script.background, 600)}`);
-    }
+    const parts: string[] = [];
+    const wbIds = new Set<string>();
+    let sceneTotal = 0;
+    let anyArchive = false;
 
-    // 剧情回放：只取起点之前的最多 6 幕，短摘要在前
-    if (originIdx > 0) {
-        const prior = script.turns.slice(Math.max(0, originIdx - 6), originIdx);
-        if (prior.length > 0) {
-            lines.push("此前剧情回放：");
-            for (const t of prior) {
-                lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
+    for (const open of opens) {
+        if (open.backgroundDisabled) continue;
+        const script = scripts.find(sc => sc.id === open.scriptId);
+        if (!script) continue;
+
+        const originIdx = script.turns.findIndex(t => t.id === open.originTurnId);
+        const lines: string[] = [];
+        lines.push(`本段对话来自群像剧本《${script.title || "未命名剧本"}》，是其中一段正在进行的剧情。`);
+        if (open.characterName) {
+            lines.push(`投递角色：${open.characterName}。`);
+        }
+        if (open.originContent?.trim()) {
+            lines.push(`剧情起点（投递台词）：${truncateForPrompt(open.originContent, 200)}`);
+        }
+        if (script.background?.trim()) {
+            lines.push(`剧本设定：${truncateForPrompt(script.background, 600)}`);
+        }
+
+        // 剧情回放：只取起点之前的最多 6 幕，短摘要在前
+        if (originIdx > 0) {
+            const prior = script.turns.slice(Math.max(0, originIdx - 6), originIdx);
+            if (prior.length > 0) {
+                lines.push("此前剧情回放：");
+                for (const t of prior) {
+                    lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
+                }
             }
         }
-    }
 
-    // 杀青归档：只带「覆盖范围在起点之前」的最新一份，避免后续剧情泄漏
-    if (originIdx >= 0) {
-        const safeArchives = (script.archives ?? []).filter(a => {
-            if (!a.lastTurnId) return false;
-            const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
-            return aIdx >= 0 && aIdx <= originIdx;
-        });
-        const latest = safeArchives[safeArchives.length - 1];
-        if (latest?.content?.trim()) {
-            lines.push(`已归档剧情摘要：${truncateForPrompt(latest.content, 500)}`);
+        // 杀青归档：只带「覆盖范围在起点之前」的最新一份，避免后续剧情泄漏
+        if (originIdx >= 0) {
+            const safeArchives = (script.archives ?? []).filter(a => {
+                if (!a.lastTurnId) return false;
+                const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
+                return aIdx >= 0 && aIdx <= originIdx;
+            });
+            const latest = safeArchives[safeArchives.length - 1];
+            if (latest?.content?.trim()) {
+                lines.push(`已归档剧情摘要：${truncateForPrompt(latest.content, 500)}`);
+            }
         }
-    }
 
-    lines.push("请继续沿用上述剧情设定、人物关系与语气进行对话；本段内容之后会作为剧情带回剧本，请保持剧情内视角。");
+        lines.push("请继续沿用上述剧情设定、人物关系与语气进行对话；本段内容之后会作为剧情带回剧本，请保持剧情内视角。");
 
-    return {
-        session: open,
-        block: `【剧情背景 · 进行中的投递段】\n${lines.join("\n")}`,
-        worldBookIds: [...(script.worldBookIds ?? [])],
-        sceneCount: originIdx > 0 ? Math.min(6, originIdx) : 0,
-        hasArchive: originIdx >= 0 && !!(script.archives ?? []).some(a => {
+        parts.push(`【剧情背景 · 进行中的投递段】\n${lines.join("\n")}`);
+        for (const id of script.worldBookIds ?? []) wbIds.add(id);
+        sceneTotal += originIdx > 0 ? Math.min(6, originIdx) : 0;
+        if (originIdx >= 0 && (script.archives ?? []).some(a => {
             if (!a.lastTurnId || !a.content?.trim()) return false;
             const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
             return aIdx >= 0 && aIdx <= originIdx;
-        }),
+        })) anyArchive = true;
+    }
+
+    if (parts.length === 0) return null;
+    return {
+        session: opens[0],
+        block: parts.join("\n\n———\n\n"),
+        worldBookIds: [...wbIds],
+        sceneCount: sceneTotal,
+        hasArchive: anyArchive,
     };
 }
 
