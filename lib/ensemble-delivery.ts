@@ -182,6 +182,10 @@ export type EnsembleDeliveryPromptBackground = {
     block: string;
     /** 来源剧本绑定的世界书 id（复用聊天 App 现有世界书激活管线）。 */
     worldBookIds: string[];
+    /** 实际带入的此前剧情幕数。 */
+    sceneCount: number;
+    /** 是否带入了杀青归档摘要。 */
+    hasArchive: boolean;
 };
 
 /**
@@ -239,7 +243,67 @@ export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): En
         session: open,
         block: `【剧情背景 · 进行中的投递段】\n${lines.join("\n")}`,
         worldBookIds: [...(script.worldBookIds ?? [])],
+        sceneCount: originIdx > 0 ? Math.min(6, originIdx) : 0,
+        hasArchive: originIdx >= 0 && !!(script.archives ?? []).some(a => {
+            if (!a.lastTurnId || !a.content?.trim()) return false;
+            const aIdx = script.turns.findIndex(t => t.id === a.lastTurnId);
+            return aIdx >= 0 && aIdx <= originIdx;
+        }),
     };
+}
+
+/** 悬浮球【剧情投递】面板用的只读摘要。 */
+export type EnsembleDeliveryPanelSummary = {
+    session: DeliverySession;
+    scriptTitle: string;
+    characterName: string;
+    startedAt: number;
+    /** 本段背景是否实际注入（开关开 + 剧本还在）。 */
+    backgroundActive: boolean;
+    sceneCount: number;
+    hasArchive: boolean;
+    worldBookCount: number;
+    /** 背景没注入的原因（仅 backgroundActive=false 时有值）。 */
+    inactiveReason: "off" | "script-missing" | null;
+};
+
+/** 汇总所有未归入投递段的面板信息（新→旧），供综合挂件展示。 */
+export function getEnsembleDeliveryPanelSummaries(): EnsembleDeliveryPanelSummary[] {
+    if (typeof window === "undefined") return [];
+    const scripts = loadEnsembleScripts();
+    return loadDeliverySessions()
+        .filter(s => !s.endedAt)
+        .sort((a, b) => b.startedAt - a.startedAt)
+        .map(s => {
+            const script = scripts.find(sc => sc.id === s.scriptId);
+            const summary: EnsembleDeliveryPanelSummary = {
+                session: s,
+                scriptTitle: script?.title || s.scriptTitle || "未知剧本",
+                characterName: s.characterName || "",
+                startedAt: s.startedAt,
+                backgroundActive: false,
+                sceneCount: 0,
+                hasArchive: false,
+                worldBookCount: 0,
+                inactiveReason: null,
+            };
+            if (s.backgroundDisabled) {
+                summary.inactiveReason = "off";
+                return summary;
+            }
+            if (!script) {
+                summary.inactiveReason = "script-missing";
+                return summary;
+            }
+            const bg = s.chatSessionId ? buildEnsembleDeliveryPromptBackground(s.chatSessionId) : null;
+            summary.backgroundActive = !!bg;
+            if (bg) {
+                summary.sceneCount = bg.sceneCount;
+                summary.hasArchive = bg.hasArchive;
+                summary.worldBookCount = bg.worldBookIds.length;
+            }
+            return summary;
+        });
 }
 
 /** 按 sessionId 取。 */

@@ -1172,6 +1172,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         // 只有真的已经带着剧情消息，才算录入过
         const [t] = loadSessionTranscript(target.id);
         if (t && t.messages.length > 0) markDeliverySessionOpened(target.id);
+        // 通知综合悬浮球切到【剧情投递】标签（无活动剧情时不会派发，普通聊天不受影响）
+        try { window.dispatchEvent(new CustomEvent("float:delivery-focus")); } catch { /* ignore */ }
     }, [session.id]);
 
     // 投递后新产生的消息（用户回复、AI 回复）也要归入这段剧情对话，

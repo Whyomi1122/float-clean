@@ -611,6 +611,99 @@ body:has(.call-keyboard-shift) :is(.mfb-ball, .mfb-restore, .mfb-mask) {
     box-shadow: none;
 }
 
+/* ── 剧情投递 Tab ── */
+.mfb-dl-card {
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(210, 216, 224, 0.6);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mfb-dl-card-off { opacity: 0.72; }
+
+.mfb-dl-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.mfb-dl-title {
+    color: #2c3440;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.mfb-dl-date {
+    flex-shrink: 0;
+    color: #7c93ac;
+    font-size: 10.5px;
+}
+
+.mfb-dl-char {
+    color: #7c93ac;
+    font-size: 11px;
+}
+
+.mfb-dl-scope {
+    color: #4a5560;
+    font-size: 11px;
+    line-height: 1.55;
+    background: rgba(160, 194, 230, 0.1);
+    border-radius: 10px;
+    padding: 7px 9px;
+}
+
+.mfb-dl-scope-off { color: #98a6b4; }
+
+.mfb-dl-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 2px;
+}
+
+.mfb-dl-toggle-label {
+    color: #4a5560;
+    font-size: 12px;
+}
+
+.mfb-dl-toggle {
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(182, 197, 213, 0.7);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.mfb-dl-toggle-on { background: #6e9cc9; }
+
+.mfb-dl-toggle-dot {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(44, 52, 64, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.mfb-dl-toggle-on .mfb-dl-toggle-dot { transform: translateX(16px); }
+
 /* ── 头像选择弹层 ── */
 .mfb-picker-mask {
     position: absolute;

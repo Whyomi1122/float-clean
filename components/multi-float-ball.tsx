@@ -14,6 +14,11 @@ import {
     useMusicPlayerOptional,
 } from "@/lib/music-context";
 import type { MusicTrack } from "@/lib/music-storage";
+import {
+    getEnsembleDeliveryPanelSummaries,
+    setDeliveryBackgroundEnabled,
+    type EnsembleDeliveryPanelSummary,
+} from "@/lib/ensemble-delivery";
 import "./../styles/multi-float.css";
 
 type Props = {
@@ -36,7 +41,7 @@ export default function MultiFloatBall({ hidden }: Props) {
     const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
     const [dismissed, setDismissed] = useState(false);
     const [panelOpen, setPanelOpen] = useState(false);
-    const [tab, setTab] = useState<"music" | "api">("music");
+    const [tab, setTab] = useState<"music" | "api" | "delivery">("music");
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -119,6 +124,26 @@ export default function MultiFloatBall({ hidden }: Props) {
 
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
+
+    // ── 剧情投递面板(只读摘要 + 背景开关) ──
+    const [deliveryList, setDeliveryList] = useState<EnsembleDeliveryPanelSummary[]>([]);
+    const refreshDelivery = useCallback(() => {
+        try { setDeliveryList(getEnsembleDeliveryPanelSummaries()); } catch { /* ignore */ }
+    }, []);
+    const toggleDeliveryBackground = useCallback((sessionId: string, enabled: boolean) => {
+        setDeliveryBackgroundEnabled(sessionId, enabled);
+        refreshDelivery();
+        showToast(enabled ? "已开启本段剧情背景" : "已关闭本段剧情背景");
+    }, [refreshDelivery, showToast]);
+    useEffect(() => {
+        if (panelOpen && tab === "delivery") refreshDelivery();
+    }, [panelOpen, tab, refreshDelivery]);
+    // 进入剧情模式时自动切到剧情投递标签(由聊天室派发;无活动剧情时不切换)
+    useEffect(() => {
+        const onFocus = () => { setPanelOpen(true); setTab("delivery"); };
+        window.addEventListener("float:delivery-focus", onFocus);
+        return () => window.removeEventListener("float:delivery-focus", onFocus);
+    }, []);
 
     // ── API 快切(点击即时生效并持久化) ──
     const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
@@ -239,6 +264,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                         <div className="mfb-head">
                             <button className={`mfb-tab ${tab === "music" ? "mfb-tab-on" : ""}`} onClick={() => setTab("music")}>音乐</button>
                             <button className={`mfb-tab ${tab === "api" ? "mfb-tab-on" : ""}`} onClick={() => setTab("api")}>API</button>
+                            <button className={`mfb-tab ${tab === "delivery" ? "mfb-tab-on" : ""}`} onClick={() => setTab("delivery")}>剧情</button>
                             <div className="mfb-head-right">
                                 <button className="mfb-icon-btn" onClick={() => setPanelOpen(false)}>✕</button>
                             </div>
@@ -382,6 +408,45 @@ export default function MultiFloatBall({ hidden }: Props) {
                                         当前生效 {apiConfigs.find(c => c.id === currentApiId)?.name ?? "—"} · {apiConfigs.find(c => c.id === currentApiId)?.defaultModel ?? "—"}
                                     </span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* ─────── 剧情投递 Tab ─────── */}
+                        {tab === "delivery" && (
+                            <div className="mfb-body">
+                                {deliveryList.length === 0 ? (
+                                    <div className="mfb-model-status">暂无进行中的剧情投递<br />在群像 App 投递一幕后，这里会显示本段剧情背景</div>
+                                ) : (
+                                    deliveryList.map(({ session: s, scriptTitle, characterName, startedAt, backgroundActive, sceneCount, hasArchive, worldBookCount, inactiveReason }) => (
+                                        <div key={s.id} className={`mfb-dl-card ${backgroundActive ? "" : "mfb-dl-card-off"}`}>
+                                            <div className="mfb-dl-head">
+                                                <span className="mfb-dl-title">{scriptTitle}</span>
+                                                <span className="mfb-dl-date">
+                                                    {new Date(startedAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
+                                                </span>
+                                            </div>
+                                            {characterName && <div className="mfb-dl-char">投递角色：{characterName}</div>}
+                                            {backgroundActive ? (
+                                                <div className="mfb-dl-scope">
+                                                    <span>本段带入：剧本背景 · 此前剧情 {sceneCount} 幕{hasArchive ? " · 归档摘要" : ""}{worldBookCount > 0 ? ` · 世界书 ${worldBookCount} 本` : ""}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="mfb-dl-scope mfb-dl-scope-off">
+                                                    {inactiveReason === "off" ? "本段剧情背景已关闭" : "来源剧本已删除，背景不可用"}
+                                                </div>
+                                            )}
+                                            <div className="mfb-dl-toggle-row">
+                                                <span className="mfb-dl-toggle-label">本段带入剧情背景</span>
+                                                <button
+                                                    className={`mfb-dl-toggle ${backgroundActive ? "mfb-dl-toggle-on" : ""}`}
+                                                    onClick={() => toggleDeliveryBackground(s.id, !backgroundActive)}
+                                                >
+                                                    <span className="mfb-dl-toggle-dot" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         )}
 
