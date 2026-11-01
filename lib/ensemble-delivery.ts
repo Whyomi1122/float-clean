@@ -253,8 +253,10 @@ export function buildEnsembleDeliveryPromptBackground(chatSessionId: string): En
                 const prior = script.turns.slice(Math.max(visibleStart, originIdx - 8), originIdx);
                 if (prior.length > 0) {
                     lines.push("此前剧情回放（未杀青的最近原文）：");
+                    // 回放 ≤8 幕时全文保留，不截断；超过 8 幕取最近 8 幕、每幕截 300 字兜底
+                    const full = script.turns.slice(visibleStart, originIdx).length <= 8;
                     for (const t of prior) {
-                        lines.push(`· ${t.senderName || "旁白"}：${truncateForPrompt(t.content, 160)}`);
+                        lines.push(`· ${t.senderName || "旁白"}：${full ? t.content.trim() : truncateForPrompt(t.content, 300)}`);
                     }
                 }
                 sceneTotal += prior.length;
