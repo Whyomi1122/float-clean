@@ -136,6 +136,6 @@ export function buildNowPlayingPromptBlock(): string {
         }
     }
     lines.push("[/music.now_playing]");
-    lines.push("以上是用户设备上正在播放的音乐。你可以自然地感知到它,但不要主动复述歌词全文;除非话题相关,否则不必每轮都提起音乐。");
+    lines.push("以上是用户现实中的设备正在播放的音乐,属于用户的真实环境,与当前对话可能存在的剧情/角色扮演世界无关——不要把它写进叙事、场景描写或角色对白。你可以自然地感知到它的存在,但不要主动复述歌词全文;除非话题相关,否则不必每轮都提起音乐。");
     return lines.join("\n");
 }
