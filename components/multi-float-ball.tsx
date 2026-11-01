@@ -21,6 +21,8 @@ import {
     type EnsembleDeliveryPanelSummary,
 } from "@/lib/ensemble-delivery";
 import "./../styles/multi-float.css";
+import "./../styles/listen-together.css";
+import ListenTogetherOverlay from "@/components/music/listen-together-overlay";
 
 type Props = {
     hidden: boolean;
@@ -112,6 +114,7 @@ export default function MultiFloatBall({ hidden }: Props) {
     const [listenUserId, setListenUserId] = useState<string | null>(null);
     const [listenCharId, setListenCharId] = useState<string | null>(null);
     const [picker, setPicker] = useState<null | "user" | "char">(null);
+    const [listenOpen, setListenOpen] = useState(false);
 
     useEffect(() => {
         if (!panelOpen) return;
@@ -291,10 +294,13 @@ export default function MultiFloatBall({ hidden }: Props) {
                         {/* ─────── 音乐 Tab ─────── */}
                         {tab === "music" && (
                             <div className="mfb-body">
-                                {/* 一起听入口(占位) */}
+                                {/* 一起听入口 */}
                                 <div
                                     className="mfb-listen"
-                                    onClick={() => showToast("一起听功能开发中,敬请期待 💕")}
+                                    onClick={() => {
+                                        if (!partner) { showToast("先在右边选一个角色"); return; }
+                                        setListenOpen(true);
+                                    }}
                                 >
                                     <button
                                         className="mfb-avatar-btn"
@@ -536,8 +542,17 @@ export default function MultiFloatBall({ hidden }: Props) {
                         )}
                     </div>
                 </div>
-            );
-        })()}
+            )}
+
+            {/* ── 一起听全屏浮层 ── */}
+            {listenOpen && partner && (
+                <ListenTogetherOverlay
+                    character={partner}
+                    userName={me?.name ?? "我"}
+                    userAvatar={me?.avatarUrl}
+                    onClose={() => setListenOpen(false)}
+                />
+            )}
         </>
     );
 }
