@@ -37,6 +37,7 @@ export class MacroEngine {
     musicLocal: string = "";
     musicCloud: string = "";
     musicOnlineHint: string = "";
+    musicNowPlaying: string = "";
     currentSchedule: string = "";
     vnScenes: string = "";
     vnSprites: string = "";
@@ -169,6 +170,7 @@ export class MacroEngine {
         if (body === "musicLocal") return this.musicLocal || "无";
         if (body === "musicCloud") return this.musicCloud || "无";
         if (body === "musicOnlineHint") return this.musicOnlineHint;
+        if (body === "musicNowPlaying") return this.musicNowPlaying;
         if (body === "currentSchedule" || body === "当前日程") return this.currentSchedule || "无";
         if (body === "vnScenes") return this.vnScenes || "暂无";
         if (body === "vnSprites") return this.vnSprites || "暂无";

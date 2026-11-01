@@ -65,8 +65,9 @@ import {
     resolveStatusRegionFullExample,
 } from "./chat-status-region";
 import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt, retrieveArchivesForPrompt } from "./memory-service";
+import { formatCoreMemories, formatLongTermMemories, formatArchivesForPrompt } from "./memory-injector";
+import type { MemoryEntry } from "./memory-types";
 import { maybeRunSummarization } from "./memory-summarizer";
 import { prepareShortTermContext, prepareGroupShortTermContext } from "./short-term-assembler";
 import { parseActionTags, dispatchActions } from "./action-parser";
@@ -79,6 +80,7 @@ import { stripStateAndInnerForPrompt } from "./prompt-sanitizer";
 import { buildGroupRosterMacro } from "./group-admin";
 import { parseOfflineResponse, extractThinkingTag, type ParsedOfflineResponse } from "./chat-offline-storage";
 import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
+import { buildNowPlayingPromptBlock } from "./music-now-playing";
 import { buildProviderRequest, nativeToolProtocolForConfig, toLlmRequestMessages, type LlmRequestMessage, type LlmToolCall } from "./llm-provider-adapter";
 import type { DebugPromptSnapshot } from "./debug-store";
 import { throwIfAborted } from "./abort-utils";
@@ -357,12 +359,16 @@ async function buildGroupChatPromptMessages(
         });
         let coreMemories = "", longTermMemories = "";
         try {
-            const [coreResults, results] = await Promise.all([
+            const [coreResults, results, archiveResults] = await Promise.all([
                 retrieveCoreMemoriesForPrompt(charId, memConfig),
                 retrieveMemoriesForPrompt(charId, wbActivationContext, memConfig),
+                retrieveArchivesForPrompt(charId, memConfig).catch(() => [] as MemoryEntry[]),
             ]);
             coreMemories = formatCoreMemories(coreResults);
-            longTermMemories = formatLongTermMemories(results);
+            // 归档（含群像剧情归档镜像）＝重量级，排在长期记忆之前（2026-11-01 回流项目）
+            longTermMemories = [formatArchivesForPrompt(archiveResults), formatLongTermMemories(results)]
+                .filter(Boolean)
+                .join("\n");
         } catch { /* ignore */ }
         return {
             character,
@@ -491,6 +497,7 @@ async function buildGroupChatPromptMessages(
         musicCloud,
         currentSchedule,
         musicOnlineHint,
+        musicNowPlaying: buildNowPlayingPromptBlock(),
         timeContext: groupTimeContext,
         memberTimeContexts,
         promptTimestampOptions: groupPromptTimestampOptions,

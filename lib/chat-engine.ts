@@ -36,6 +36,7 @@ import {
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
 import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
+import { buildNowPlayingPromptBlock } from "./music-now-playing";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
 import {
@@ -57,8 +58,8 @@ import { setDebugPromptSnapshot, type DebugPromptSnapshot } from "./debug-store"
 import { extractFinishReason } from "./api-helpers";
 import { fetchLlmPayload } from "./llm-http";
 import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt, retrieveArchivesForPrompt } from "./memory-service";
+import { formatCoreMemories, formatLongTermMemories, formatArchivesForPrompt } from "./memory-injector";
 import { maybeRunSummarization } from "./memory-summarizer";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { parseActionTags, dispatchActions } from "./action-parser";
@@ -1916,14 +1917,19 @@ export async function buildChatPromptMessages(
         }
     }
 
-    const [memResults, coreResults, musicLocal, musicCloud] = await Promise.all([
+    const [memResults, coreResults, archiveResults, musicLocal, musicCloud] = await Promise.all([
         retrieveMemoriesForPrompt(character.id, wbActivationContext, memConfig).catch(() => null),
         retrieveCoreMemoriesForPrompt(character.id, memConfig).catch(() => null),
+        retrieveArchivesForPrompt(character.id, memConfig).catch(() => null),
         buildMusicLocalMacro(),
         buildMusicCloudMacro(),
     ]);
 
-    const longTermMemories = memResults ? formatLongTermMemories(memResults) : "";
+    // 归档（含群像剧情归档镜像）＝重量级，排在长期记忆之前（2026-11-01 回流项目）
+    const archiveMemories = archiveResults ? formatArchivesForPrompt(archiveResults) : "";
+    const longTermMemories = [archiveMemories, memResults ? formatLongTermMemories(memResults) : ""]
+        .filter(Boolean)
+        .join("\n");
     const coreMemories = coreResults ? formatCoreMemories(coreResults) : "";
     const scheduleSummary = buildCalendarScheduleMarker("character", character.id, getWeekStartIso(now));
     const currentSchedule = getCurrentCalendarScheduleForPrompt("character", character.id, now);
@@ -1978,6 +1984,7 @@ export async function buildChatPromptMessages(
         musicLocal,
         musicCloud,
         musicOnlineHint,
+        musicNowPlaying: buildNowPlayingPromptBlock(),
         timeContext: promptTimeContext,
         promptTimestampOptions,
         enableVision: config.enableImageRecognition,

@@ -7,6 +7,7 @@ import { getAudioBlob, markTrackPlayed } from "./music-storage";
 import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail } from "./music-service";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
+import { setNowPlayingTrack, updateNowPlayingTime, setNowPlayingPlaying, clearNowPlaying } from "./music-now-playing";
 
 // ── Types ──
 
@@ -124,6 +125,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
         audio.addEventListener("timeupdate", () => {
             setCurrentTime(audio.currentTime);
+            updateNowPlayingTime(audio.currentTime); // now_playing 桥(非 React 状态)
         });
         audio.addEventListener("loadedmetadata", () => {
             setDuration(audio.duration || 0);
@@ -131,8 +133,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         audio.addEventListener("ended", () => {
             handleTrackEnd();
         });
-        audio.addEventListener("pause", () => setIsPlaying(false));
-        audio.addEventListener("play", () => setIsPlaying(true));
+        audio.addEventListener("pause", () => { setIsPlaying(false); setNowPlayingPlaying(false); });
+        audio.addEventListener("play", () => { setIsPlaying(true); setNowPlayingPlaying(true); });
 
         return () => {
             audio.pause();
@@ -200,6 +202,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             const playUrl = await getNeteasePlayUrl(nid);
             if (!playUrl) return;
             audio.src = playUrl;
+            // now_playing 桥:注册曲目(歌词异步补)
+            setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0 });
+            getNeteaseLyrics(nid).then(lrc => {
+                if (lrc) setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0, lyrics: lrc });
+            }).catch(() => undefined);
         } else {
             // Local tracks: load blob from IndexedDB
             const blob = await getAudioBlob(track.id);
@@ -210,6 +217,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             const playedAt = new Date().toISOString();
             void markTrackPlayed(track.id, playedAt).catch(() => undefined);
             track = { ...track, lastPlayedAt: playedAt };
+            // now_playing 桥:本地曲(歌词直接用元数据里的)
+            setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, duration: track.duration || 0, lyrics: track.lyrics });
         }
 
         setCurrentTrack(track);
