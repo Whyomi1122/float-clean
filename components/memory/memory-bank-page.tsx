@@ -378,6 +378,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
 
     // ── 导出/导入 ──
     const importFileInputRef = useRef<HTMLInputElement | null>(null);
+    const importModeRef = useRef<"merge" | "replace">("merge");
     const [importing, setImporting] = useState(false);
     const disabledSourceCount = MEMORY_SOURCE_OPTIONS
         .filter(source => source.keys.some(key => (config.shortTermAllowedSources ?? {})[key] === false)).length;
@@ -588,8 +589,8 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         }
     };
 
-    /** 导入 txt / JSON，替换当前角色长期记忆（先自动备份旧数据） */
-    const handleImportFile = async (file: File) => {
+    /** 导入 txt / JSON：merge=合并（保留旧数据，仅追加/覆盖同 id）；replace=替换（先自动备份旧数据再清空导入） */
+    const handleImportFile = async (file: File, mode: "merge" | "replace") => {
         if (!selectedCharId || importing) return;
         setImporting(true);
         try {
@@ -622,27 +623,33 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     id: typeof item.id === "string" && item.id ? item.id : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
                     characterId: selectedCharId,
                     createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
+                    type: typeof item.type === "string" && item.type ? item.type : "long_term",
                 })) as never[];
             if (incoming.length === 0) {
                 showNotice("文件里没有有效的记忆条目");
                 return;
             }
 
-            // 导入前自动备份现有数据（同样导出为 txt）
-            const existing = await loadMemoryEntries(selectedCharId);
-            if (existing.length > 0) {
-                const backupText = buildMemoryExportText(selectedChar?.name ?? "未知角色", existing);
-                const url = URL.createObjectURL(new Blob([backupText], { type: "text/plain;charset=utf-8" }));
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `记忆备份-${selectedChar?.name ?? selectedCharId}-${now.slice(0, 19).replace(/[:T]/g, "-")}.txt`;
-                a.click();
-                URL.revokeObjectURL(url);
+            if (mode === "replace") {
+                // 替换模式：导入前自动备份现有数据（同样导出为 txt），再清空后导入
+                const existing = await loadMemoryEntries(selectedCharId);
+                if (existing.length > 0) {
+                    const backupText = buildMemoryExportText(selectedChar?.name ?? "未知角色", existing);
+                    const url = URL.createObjectURL(new Blob([backupText], { type: "text/plain;charset=utf-8" }));
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `记忆备份-${selectedChar?.name ?? selectedCharId}-${now.slice(0, 19).replace(/[:T]/g, "-")}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+                await deleteCharacterMemoriesByType(selectedCharId, "long_term");
             }
 
             await saveMemoryEntries(incoming);
             loadDetailData(selectedCharId);
-            showNotice(`已导入 ${incoming.length} 条（旧数据已备份下载）`);
+            showNotice(mode === "replace"
+                ? `已替换导入 ${incoming.length} 条（旧数据已备份下载）`
+                : `已合并导入 ${incoming.length} 条（原有记忆保留）`);
         } catch (err) {
             console.error("[MemoryBank] Import failed:", err);
             showNotice("导入失败: " + String(err));
@@ -1405,11 +1412,22 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         </div>
                         <div className="menu-right"><ChevronRight size={16} /></div>
                     </button>
-                    <button type="button" className="menu-item" onClick={() => importFileInputRef.current?.click()} disabled={!selectedCharId || importing}>
+                    <button type="button" className="menu-item" onClick={() => { importModeRef.current = "merge"; importFileInputRef.current?.click(); }} disabled={!selectedCharId || importing}>
                         <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
-                            <span className="menu-label">导入记忆</span>
-                            <span className="menu-desc">导入 txt 或 JSON 覆盖当前角色的长期记忆，导入前会自动备份现有数据</span>
+                            <span className="menu-label">导入记忆（合并）</span>
+                            <span className="menu-desc">导入 txt 或 JSON，与现有记忆合并；原有记忆全部保留，不触发备份下载</span>
+                        </div>
+                        <div className="menu-right">
+                            {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
+                            <ChevronRight size={16} />
+                        </div>
+                    </button>
+                    <button type="button" className="menu-item" onClick={() => { importModeRef.current = "replace"; importFileInputRef.current?.click(); }} disabled={!selectedCharId || importing}>
+                        <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">导入记忆（替换）</span>
+                            <span className="menu-desc">清空当前角色长期记忆后导入文件内容；导入前会自动备份现有数据为 txt</span>
                         </div>
                         <div className="menu-right">
                             {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
@@ -1423,7 +1441,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         style={{ display: "none" }}
                         onChange={event => {
                             const file = event.target.files?.[0];
-                            if (file) void handleImportFile(file);
+                            if (file) void handleImportFile(file, importModeRef.current);
                         }}
                     />
                 </div>

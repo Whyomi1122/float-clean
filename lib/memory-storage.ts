@@ -340,3 +340,16 @@ export function addDeletedHash(characterId: string, hash: string): void {
         kvSet(key, JSON.stringify(list));
     }
 }
+
+/** 撤销墓碑：手动删除条目会留墓碑，但"撤销杀青→重新杀青"这类恢复性操作需要解除拦截 */
+export function removeDeletedHash(characterId: string, hash: string): void {
+    if (typeof window === "undefined") return;
+    const key = tombstoneKey(characterId);
+    try {
+        const raw = kvGet(key);
+        if (!raw) return;
+        const list: string[] = JSON.parse(raw);
+        const next = list.filter(h => h !== hash);
+        if (next.length !== list.length) kvSet(key, JSON.stringify(next));
+    } catch { /* ignore */ }
+}

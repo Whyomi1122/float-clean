@@ -56,7 +56,7 @@ import {
   buildArchiveSummaryPrompt,
   makeStoryRangeLabel,
 } from "@/lib/ensemble-archive";
-import { syncEnsembleArchiveToMemory, removeEnsembleArchiveFromMemory } from "@/lib/ensemble-memory-bridge";
+import { syncEnsembleArchiveToMemory, removeEnsembleArchiveFromMemory, resyncEnsembleArchivesToMemory, restoreEnsembleArchiveTombstones } from "@/lib/ensemble-memory-bridge";
 import { deliverToChat, describePendingSessions, getPendingSessions, discardDeliverySession, loadSessionTranscript, getDeliveredTurnIds, sanitizeChatLine } from "@/lib/ensemble-delivery";
 import type { ApiConfig } from "@/lib/settings-types";
 import { simpleLLMCall } from "@/lib/api-helpers";
@@ -1562,6 +1562,7 @@ export function EnsembleApp({
     pending: number;
   }>({ total: 0, wrapped: 0, pending: 0 });
   const [archiveBusy, setArchiveBusy] = useState(false);
+  const [resyncBusy, setResyncBusy] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [showArchiveSheet, setShowArchiveSheet] = useState(false);
   const [archiveCountDraft, setArchiveCountDraft] = useState(20);
@@ -3133,10 +3134,12 @@ ${lastSpeakerNote}
       // C-1 桥接：把这次杀青同步进参与角色的记忆库（只进归档层，不污染时间线）。
       // 失败不阻断杀青本身，只提示一下。
       void syncEnsembleArchiveToMemory(updated, entry).then(result => {
-        if (result.written > 0) {
+        if (result.written > 0 && result.failed.length === 0) {
           setToast(`已杀青 ${target.length} 幕 · ${result.written} 位角色已记住`);
+        } else if (result.written > 0) {
+          setToast(`已杀青 · ${result.written} 位角色已记住，${result.failed.length} 位失败，可用「重新同步记忆库」补`);
         } else {
-          setToast(`已杀青 ${target.length} 幕`);
+          setToast(`已杀青 ${target.length} 幕 · 记忆库同步未写入，可用「重新同步记忆库」补`);
         }
       }).catch(() => setToast(`已杀青 ${target.length} 幕`));
     } catch (e) {
@@ -3161,9 +3164,39 @@ ${lastSpeakerNote}
     saveOrUpdateEnsembleScript(updated);
     setScripts(loadEnsembleScripts());
     refreshArchivePanelFor(updated);
-    // 同步撤回这条归档在参与角色记忆库里的副本
-    if (removed) void removeEnsembleArchiveFromMemory(updated, removed).catch(() => undefined);
+    // 同步撤回这条归档在参与角色记忆库里的副本；
+    // 同时解除墓碑 —— 否则"撤销→重新杀青"相同内容会被墓碑永久拦截，导致有的角色缺记忆
+    if (removed) {
+      void removeEnsembleArchiveFromMemory(updated, removed)
+        .then(() => restoreEnsembleArchiveTombstones(s, removed))
+        .catch(() => undefined);
+    }
     setToast("已撤销上次杀青");
+  };
+
+  /** 「重新同步记忆库」：按当前演员表把全部归档重灌一遍（幂等，修"有的角色有有的没有"） */
+  const handleResyncMemory = () => {
+    const s = currentScript;
+    if (!s || resyncBusy) return;
+    const list = (s.archives ?? []).filter(a => a.content);
+    if (list.length === 0) {
+      setArchiveError("当前没有可同步的归档内容。");
+      return;
+    }
+    setResyncBusy(true);
+    void resyncEnsembleArchivesToMemory(s, list)
+      .then(result => {
+        if (result.failed > 0) {
+          const firstError = Object.entries(result.errors)[0]?.[1] ?? "";
+          setArchiveError(`同步：写入 ${result.synced} 份、失败 ${result.failed} 份${firstError ? `（${firstError}）` : ""}`);
+        } else if (result.tombstoned > 0) {
+          setToast(`同步完成：${result.synced} 份写入，${result.tombstoned} 份因你手动删过而跳过`);
+        } else {
+          setToast(`同步完成：${result.synced} 份归档已确认写入各角色记忆库`);
+        }
+      })
+      .catch(e => setArchiveError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setResyncBusy(false));
   };
 
   /**
@@ -3198,13 +3231,18 @@ ${lastSpeakerNote}
     setScripts(loadEnsembleScripts());
 
     // 记忆库那份是独立副本，改了群像归档就要同步过去。
-    // 先按旧内容删掉（进墓碑），再按新内容写一份，避免同一条内容留下两份。
+    // 旧口径只删最后一条：前面被清空的条目之前镜像过的副本会成孤儿 → 现在把所有有内容的旧条目都回收。
+    const blanked = list.filter((a, i) => i !== lastIndex && a.content);
     const oldEntry = list[lastIndex];
-    if (oldEntry) {
-      void removeEnsembleArchiveFromMemory(updated, oldEntry)
-        .then(() => syncEnsembleArchiveToMemory(updated, next[lastIndex]))
-        .catch(() => undefined);
-    }
+    const toRemove = [...blanked, ...(oldEntry ? [oldEntry] : [])];
+    void Promise.all(toRemove.map(a => removeEnsembleArchiveFromMemory(updated, a).catch(() => undefined)))
+      .then(() => syncEnsembleArchiveToMemory(updated, next[lastIndex]))
+      .then(result => {
+        if (result.failed.length > 0) {
+          setToast(`档案已保存，但 ${result.failed.length} 位角色同步失败，可用「重新同步记忆库」补`);
+        }
+      })
+      .catch(() => undefined);
 
     // 存完重填草稿：否则 textarea 仍是旧内容，看起来像「没保存」
     refreshArchivePanelFor(updated);
@@ -5850,6 +5888,15 @@ ${lastSpeakerNote}
                   className="w-full py-2.5 rounded-[16px] bg-black/[0.04] text-[12px] font-medium text-black/55 active:scale-[0.985] transition-transform disabled:opacity-45 disabled:active:scale-100"
                 >
                   ↩ 撤销上次杀青（换个模型重来）
+                </button>
+                {/* 修复按钮：按当前演员表把全部归档重灌进记忆库（幂等） */}
+                <button
+                  type="button"
+                  disabled={archiveBusy || resyncBusy}
+                  onClick={handleResyncMemory}
+                  className="w-full py-2.5 rounded-[16px] bg-black/[0.04] text-[12px] font-medium text-black/55 active:scale-[0.985] transition-transform disabled:opacity-45 disabled:active:scale-100"
+                >
+                  {resyncBusy ? "同步中…" : "⟳ 重新同步记忆库（有的角色缺记忆时点这个）"}
                 </button>
                 {/* 错误提示 */}
                 {archiveError ? (

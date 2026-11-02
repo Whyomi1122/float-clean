@@ -19,6 +19,10 @@ export type EnsembleBridgeResult = {
     written: number;
     /** 被写入的角色 id。 */
     characterIds: string[];
+    /** 写入失败 / 被墓碑拦截的角色 id（不再静默吞掉）。 */
+    failed: string[];
+    /** 各角色失败原因。 */
+    errors: Record<string, string>;
 };
 
 /**
@@ -32,19 +36,99 @@ export async function syncEnsembleArchiveToMemory(
     archive: EnsembleArchiveEntry,
 ): Promise<EnsembleBridgeResult> {
     const body = buildEnsembleMemoryContent(script, archive);
-    if (!body) return { written: 0, characterIds: [] };
+    if (!body) return { written: 0, characterIds: [], failed: [], errors: {} };
 
     const characterIds = collectCastCharacterIds(script);
-    if (characterIds.length === 0) return { written: 0, characterIds: [] };
+    if (characterIds.length === 0) return { written: 0, characterIds: [], failed: [], errors: {} };
 
     const results = await Promise.all(
-        characterIds.map(characterId =>
-            commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE).catch(() => null),
-        ),
+        characterIds.map(async characterId => {
+            try {
+                return await commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE);
+            } catch (error) {
+                return { success: false, error: error instanceof Error ? error.message : String(error) };
+            }
+        }),
     );
 
-    const okIds = characterIds.filter((_, index) => results[index]?.success);
-    return { written: okIds.length, characterIds: okIds };
+    const okIds: string[] = [];
+    const failed: string[] = [];
+    const errors: Record<string, string> = {};
+    characterIds.forEach((characterId, index) => {
+        const r = results[index];
+        if (r?.success) okIds.push(characterId);
+        else {
+            failed.push(characterId);
+            errors[characterId] = r?.error || "未知错误";
+        }
+    });
+    return { written: okIds.length, characterIds: okIds, failed, errors };
+}
+
+/**
+ * 把剧本全部归档按当前 cast 重灌一遍（档案面板"重新同步记忆库"按钮用）。
+ * contentHash 幂等：已同步过的自动跳过（算入 synced），手动删过的会被墓碑拦截（算入 tombstoned）。
+ * 撤销杀青→重新杀青导致墓碑误拦的场景，由 syncEnsembleArchiveAfterUndo 先解除墓碑解决。
+ */
+export async function resyncEnsembleArchivesToMemory(
+    script: EnsembleScript,
+    archives: EnsembleArchiveEntry[],
+): Promise<{ synced: number; tombstoned: number; failed: number; errors: Record<string, string> }> {
+    const characterIds = collectCastCharacterIds(script);
+    const bodyCache = archives
+        .map(archive => ({ archive, body: buildEnsembleMemoryContent(script, archive) }))
+        .filter(item => item.body);
+    if (characterIds.length === 0 || bodyCache.length === 0) {
+        return { synced: 0, tombstoned: 0, failed: 0, errors: {} };
+    }
+
+    const { loadMemoryEntriesByType } = await import("./memory-storage");
+    const syncedByHash = new Map<string, number>();
+    for (const characterId of characterIds) {
+        try {
+            const entries = await loadMemoryEntriesByType(characterId, "archive");
+            for (const item of bodyCache) {
+                const hit = entries.find(e => e.metadata?.contentHash === item.body);
+                syncedByHash.set(item.body, (syncedByHash.get(item.body) ?? 0) + (hit ? 1 : 0));
+            }
+        } catch { /* 读取失败按未同步处理，交给 commitArchive */ }
+    }
+
+    let synced = 0;
+    let tombstoned = 0;
+    let failed = 0;
+    const errors: Record<string, string> = {};
+    for (const { body } of bodyCache) {
+        for (const characterId of characterIds) {
+            try {
+                const result = await commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE);
+                if (result.success) synced += 1;
+                else {
+                    tombstoned += 1;
+                    errors[characterId] = result.error || "被墓碑拦截";
+                }
+            } catch (error) {
+                failed += 1;
+                errors[characterId] = error instanceof Error ? error.message : String(error);
+            }
+        }
+    }
+    return { synced, tombstoned, failed, errors };
+}
+
+/**
+ * 撤销杀青时解除墓碑（否则"撤销→重新杀青"同内容会被墓碑永久拦截，导致有的角色缺记忆）。
+ * 只解除本归档正文对应的那一个 hash，手动删除的记忆不受影响。
+ */
+export async function restoreEnsembleArchiveTombstones(script: EnsembleScript, archive: EnsembleArchiveEntry): Promise<void> {
+    const body = buildEnsembleMemoryContent(script, archive);
+    if (!body) return;
+    const { removeDeletedHash } = await import("./memory-storage");
+    const { computeContentHash } = await import("./memory-types");
+    const hash = computeContentHash(body);
+    for (const characterId of collectCastCharacterIds(script)) {
+        removeDeletedHash(characterId, hash);
+    }
 }
 
 /** 取剧本里所有"真实角色"的 id。
