@@ -36,6 +36,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import type { PresetConfig, ApiConfig } from "./settings-types";
+import { buildEnsembleMomentsPhotoBlock } from "./ensemble-moments-context";
 import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
@@ -236,6 +237,20 @@ async function resolveAssemblerInput(
             longTermMemories = formatLongTermMemories(results);
         } catch (err) {
             console.warn("[Moments] Memory retrieval failed:", err);
+        }
+    }
+
+    // 7.5 朋友圈剧情对齐（2026-11-02）：注入最近活跃群像剧本的轻量剧情
+    //     （背景一句 + 最近 8 幕），让动态文案与配图跟随主线。
+    //     只读不写——不回灌群像记忆库，群像引擎不受影响。
+    if (task === "post") {
+        try {
+            const ensembleBlock = buildEnsembleMomentsPhotoBlock();
+            if (ensembleBlock) {
+                longTermMemories = [ensembleBlock, longTermMemories].filter(Boolean).join("\n\n");
+            }
+        } catch (err) {
+            console.warn("[Moments] Ensemble context injection failed:", err);
         }
     }
 
@@ -1215,6 +1230,11 @@ function dispatchMomentPhotoGenerationFailed(message: string): void {
     window.dispatchEvent(new CustomEvent(MOMENT_PHOTO_GENERATION_FAILED_EVENT, { detail: { message } }));
 }
 
+/**
+ * 朋友圈配图统一入口。
+ * userMask：当画面明确出现「我」（自拍/合照等）时，把用户面具的外观提示词叠加进生图，
+ * 让「我」的形象在图里保持一致。
+ */
 export async function generateMomentPhotoUrl(
     description: string,
     characterId: string,
@@ -1223,11 +1243,19 @@ export async function generateMomentPhotoUrl(
 ): Promise<string | undefined> {
     try {
         throwIfAborted(signal);
+        // 画面里出现「我」→ 叠加面具外观词（自拍检测命中或描述明确提到）
+        const mentionsMe = useReferenceImage
+            || /自拍|对镜拍|合照|合影|selfie|group photo|我和/i.test(description);
+        const identity = mentionsMe ? resolveUserIdentity(characterId, "chat") : undefined;
         const generated = await generateImageFromConfiguredApi({
             description,
             characterId,
             useReferenceImage,
             signal,
+            userMask: {
+                positive: identity?.imagePromptPositive,
+                negative: identity?.imagePromptNegative,
+            },
         });
         throwIfAborted(signal);
         if (!generated) return undefined;
