@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useContext } from "react";
+import { useState, useEffect, useCallback, useContext, useMemo } from "react";
 import { Plus, User, Trash2, FileEdit, AlertCircle, Camera, Link, X, Check } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import { loadUserIdentities, saveUserIdentities } from "@/lib/settings-storage";
+import { composeImagePrompt } from "@/lib/image-generation-service";
 import { Input } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/modal";
 
@@ -16,6 +17,10 @@ export type UserIdentity = {
     age: string;
     occupation: string;
     customSettings: string;
+    /** 生图外观 · 正向提示词（固定面具的长相穿搭） */
+    imagePromptPositive?: string;
+    /** 生图外观 · 负向提示词（不要什么） */
+    imagePromptNegative?: string;
 };
 
 const DEFAULT_IDENTITIES: UserIdentity[] = [
@@ -335,6 +340,11 @@ export function UserIdentitySettings() {
                                                 className="ui-textarea"
                                             />
                                         </div>
+
+                                        <IdentityImagePromptEditor
+                                            identity={identity}
+                                            onChange={(patch) => updateIdentity(identity.id, patch)}
+                                        />
                                     </>
                                 )
                             })()}
@@ -357,6 +367,60 @@ export function UserIdentitySettings() {
                     }}
                     onCancel={() => setConfirmDeleteId(null)}
                 />
+            )}
+        </div>
+    );
+}
+
+/** 用户面具 · 生图外观提示词（正向 / 负向 + 预览），生图时拼进最终提示词 */
+function IdentityImagePromptEditor({ identity, onChange }: {
+    identity: UserIdentity;
+    onChange: (patch: Partial<UserIdentity>) => void;
+}) {
+    const [showPreview, setShowPreview] = useState(false);
+    const positive = identity.imagePromptPositive ?? "";
+    const negative = identity.imagePromptNegative ?? "";
+
+    const previewPrompt = useMemo(() => composeImagePrompt({
+        description: "（这里会是画面描述，如：她坐在出租屋窗边吃泡面，看向手机镜头）",
+        extraNegative: "",
+        featurePrompt: positive,
+        featureNegative: negative,
+    }), [positive, negative]);
+
+    return (
+        <div className="flex flex-col gap-2 rounded-2xl border border-[var(--c-border)] p-3">
+            <span className="menu-label font-semibold">生图外观（朋友圈 / 分镜里「我」的形象）</span>
+
+            <label className="flex flex-col gap-1">
+                <span className="menu-desc ml-1">正向提示词 · 长相与穿搭</span>
+                <textarea
+                    value={positive}
+                    onChange={(e) => onChange({ imagePromptPositive: e.target.value })}
+                    rows={4}
+                    placeholder="例如：A 23-year-old Chinese woman, black hair in loose low ponytail, thin brown rectangular glasses, mole on right cheek..."
+                    className="ui-textarea resize-y"
+                />
+            </label>
+
+            <label className="flex flex-col gap-1">
+                <span className="menu-desc ml-1">负向提示词 · 不要什么</span>
+                <textarea
+                    value={negative}
+                    onChange={(e) => onChange({ imagePromptNegative: e.target.value })}
+                    rows={2}
+                    placeholder="例如：no glasses, heavy makeup, masculine, beard"
+                    className="ui-textarea resize-y"
+                />
+            </label>
+
+            <button type="button" className="ui-link-btn self-start" onClick={() => setShowPreview(v => !v)}>
+                {showPreview ? "收起预览 ▲" : "预览最终提示词 ▼"}
+            </button>
+            {showPreview && (
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--c-input)]/60 p-3 ts-12 leading-relaxed text-[var(--c-text)]">
+{previewPrompt}
+                </pre>
             )}
         </div>
     );

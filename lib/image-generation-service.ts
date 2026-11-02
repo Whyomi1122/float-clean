@@ -793,6 +793,8 @@ export async function generateImageFromConfiguredApi(params: {
   signal?: AbortSignal;
   /** 调用来源 App（用于日志与按 App 的设定覆盖，如群像的画风）。 */
   app?: string;
+  /** 用户面具外观提示词（「我」的形象），与角色外观词叠加。 */
+  userMask?: { positive?: string; negative?: string };
 }): Promise<ImageGenerationResult | null> {
   const settings = params.settings ?? loadImageGenerationSettings();
   if (!settings.enabled) return null;
@@ -806,6 +808,12 @@ export async function generateImageFromConfiguredApi(params: {
   const featurePositive = (characterRef?.featurePromptPositive ?? featureSplit.positive).trim();
   const featureNegative = (characterRef?.featurePromptNegative ?? featureSplit.negative).trim();
 
+  // 用户面具外观：与角色外观词叠加（画「我」的形象时传 userMask）
+  const maskPositive = params.userMask?.positive?.trim() ?? "";
+  const maskNegative = params.userMask?.negative?.trim() ?? "";
+  const combinedFeaturePositive = [featurePositive, maskPositive].filter(Boolean).join("\n\n");
+  const combinedFeatureNegative = [featureNegative, maskNegative].filter(Boolean).join(", ");
+
   // NovelAI 模式
   if (settings.provider === "novelai") {
     const naiApiKey = settings.novelai?.apiKey?.trim();
@@ -816,7 +824,7 @@ export async function generateImageFromConfiguredApi(params: {
       : [DEFAULT_NOVELAI_PRESET];
     const activePreset = presets.find(p => p.id === settings.novelai?.activePresetId) || presets[0];
 
-    const naiFeaturePositive = characterRef?.novelAiFeaturePromptEnabled === false ? "" : featurePositive;
+    const naiFeaturePositive = characterRef?.novelAiFeaturePromptEnabled === false ? "" : combinedFeaturePositive;
 
     const positiveParts: string[] = [];
     if (activePreset.positivePrompt?.trim()) positiveParts.push(activePreset.positivePrompt.trim());
@@ -828,7 +836,7 @@ export async function generateImageFromConfiguredApi(params: {
     const negativeParts = [
       activePreset.negativePrompt?.trim(),
       (settings.extraPromptNegative ?? "").trim(),
-      (characterRef?.novelAiFeaturePromptEnabled === false ? "" : featureNegative),
+      (characterRef?.novelAiFeaturePromptEnabled === false ? "" : combinedFeatureNegative),
     ].filter(Boolean);
     const presetForRequest = negativeParts.length > 0
       ? { ...activePreset, negativePrompt: negativeParts.join(", ") }
@@ -878,8 +886,8 @@ export async function generateImageFromConfiguredApi(params: {
     description,
     extraPrompt: openaiSettings.extraPrompt,
     extraNegative: openaiSettings.extraPromptNegative,
-    featurePrompt: featurePositive,
-    featureNegative,
+    featurePrompt: combinedFeaturePositive,
+    featureNegative: combinedFeatureNegative,
   });
 
   const data = openaiSettings.requestMode === "direct"
