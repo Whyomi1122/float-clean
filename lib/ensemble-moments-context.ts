@@ -11,6 +11,7 @@
  *   · 群像引擎侧不受任何影响，保持纯净注入口径不变。
  */
 import { loadEnsembleScripts } from "@/lib/ensemble-storage";
+import { resolveUserIdentity } from "@/lib/settings-storage";
 
 /** 每幕截断字数（与投递回放口径一致） */
 const TURN_LIMIT = 300;
@@ -47,4 +48,24 @@ export function buildEnsembleMomentsPhotoBlock(): string | null {
         }
     }
     return lines.join("\n");
+}
+
+/**
+ * 画面里是否出现「我」→ 返回用户面具外观词；没有则 undefined。
+ * 判定：开启了参考图（自拍检测命中），或描述明确提到自拍/合照/「我和」。
+ */
+export function userMaskForDescription(
+    description: string,
+    characterId?: string,
+    useReferenceImage?: boolean,
+): { positive?: string; negative?: string } | undefined {
+    const mentionsMe = useReferenceImage === true
+        || /自拍|对镜拍|合照|合影|selfie|group photo|我和/i.test(description);
+    if (!mentionsMe || !characterId) return undefined;
+    const identity = resolveUserIdentity(characterId, "chat");
+    if (!identity) return undefined;
+    return {
+        positive: identity.imagePromptPositive,
+        negative: identity.imagePromptNegative,
+    };
 }

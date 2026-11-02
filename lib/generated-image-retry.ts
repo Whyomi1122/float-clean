@@ -1,6 +1,7 @@
 import { saveChatImageToIndexedDB } from "./chat-asset-storage";
 import { syncChatGeneratedImagePromptText, updateChatMessage, type ChatMessage } from "./chat-storage";
 import { generatedImageFilename, generateImageFromConfiguredApi } from "./image-generation-service";
+import { userMaskForDescription } from "./ensemble-moments-context";
 import { updateMomentPost } from "./moments-storage";
 import type { MomentPost } from "./moments-types";
 
@@ -78,6 +79,7 @@ export async function generateAndApplyChatGeneratedImage(
             characterId,
             useReferenceImage: effectiveUseReference,
             signal: options?.signal,
+            userMask: userMaskForDescription(description, characterId, effectiveUseReference),
         });
         if (!generated) throw new Error("生图配置未启用或不完整");
 
@@ -157,6 +159,11 @@ export async function retryMomentGeneratedPhoto(
             description,
             characterId: post.authorType === "character" ? post.authorId : undefined,
             useReferenceImage: effectiveUseReference,
+            userMask: userMaskForDescription(
+                description,
+                post.authorType === "character" ? post.authorId : undefined,
+                effectiveUseReference,
+            ),
         });
         if (!generated) throw new Error("生图配置未启用或不完整");
 

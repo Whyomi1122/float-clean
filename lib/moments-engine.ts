@@ -36,7 +36,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import type { PresetConfig, ApiConfig } from "./settings-types";
-import { buildEnsembleMomentsPhotoBlock } from "./ensemble-moments-context";
+import { buildEnsembleMomentsPhotoBlock, userMaskForDescription } from "./ensemble-moments-context";
 import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
@@ -1244,18 +1244,12 @@ export async function generateMomentPhotoUrl(
     try {
         throwIfAborted(signal);
         // 画面里出现「我」→ 叠加面具外观词（自拍检测命中或描述明确提到）
-        const mentionsMe = useReferenceImage
-            || /自拍|对镜拍|合照|合影|selfie|group photo|我和/i.test(description);
-        const identity = mentionsMe ? resolveUserIdentity(characterId, "chat") : undefined;
         const generated = await generateImageFromConfiguredApi({
             description,
             characterId,
             useReferenceImage,
             signal,
-            userMask: {
-                positive: identity?.imagePromptPositive,
-                negative: identity?.imagePromptNegative,
-            },
+            userMask: userMaskForDescription(description, characterId, useReferenceImage),
         });
         throwIfAborted(signal);
         if (!generated) return undefined;

@@ -8,6 +8,7 @@
 //   · 失败静默，绝不打断剧情生成。
 
 import { generateImageFromConfiguredApi, type ImageGenerationResult } from "./image-generation-service";
+import { loadUserIdentities } from "./settings-storage";
 import type { EnsembleScript, EnsembleTurn } from "./ensemble-storage";
 
 /** 从这一轮的剧情文本里摘出可读的画面描述（不调用 LLM，纯规则，零成本）。 */
@@ -47,10 +48,24 @@ export async function generateStoryboardImage(
   if (!description) return { ok: false, error: "本轮没有可用画面描述" };
 
   try {
+    // 「我」出现在这一幕 → 叠加用户面具外观词，让面具形象在各分镜间保持一致
+    let userMask: { positive?: string; negative?: string } | undefined;
+    if (script.personaId) {
+      const identity = loadUserIdentities().find(p => p.id === script.personaId);
+      const personaInScene = turn.senderType === "user"
+        || (identity?.name ? (turn.content ?? "").includes(identity.name) : false);
+      if (identity && personaInScene) {
+        userMask = {
+          positive: identity.imagePromptPositive,
+          negative: identity.imagePromptNegative,
+        };
+      }
+    }
     const result: ImageGenerationResult | null = await generateImageFromConfiguredApi({
       description,
       app: "ensemble",
       signal,
+      userMask,
     });
     if (!result?.dataUrl) return { ok: false, error: "生成失败" };
     return { ok: true, url: result.dataUrl };
