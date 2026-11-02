@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, Camera, ChevronDown, Image, Info, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import type { ImageGenerationSettings as ImageGenerationSettingsType, NovelAiPreset, OpenAiImagePreset } from "@/lib/settings-types";
 import {
@@ -77,6 +77,8 @@ export function ImageGenerationSettings() {
     const [testPreviewUrl, setTestPreviewUrl] = useState<string | null>(null);
     const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null);
     const [pendingDeleteOpenAiPresetId, setPendingDeleteOpenAiPresetId] = useState<string | null>(null);
+    /** 正在编辑专属外观提示词 / 人脸框选的角色 */
+    const [profileEditorId, setProfileEditorId] = useState<string | null>(null);
     const openaiPresets = useMemo<OpenAiImagePreset[]>(() => (
         settings.openaiPresets?.length ? settings.openaiPresets : [{
             id: "preset_openai_default",
@@ -309,8 +311,34 @@ export function ImageGenerationSettings() {
             ...settings,
             characterReferences: {
                 ...(settings.characterReferences || {}),
-                [characterId]: { assetId, updatedAt: Date.now() },
+                [characterId]: {
+                    // 重新上传时保留已有的外观提示词与参数
+                    ...(settings.characterReferences?.[characterId] ?? {}),
+                    assetId,
+                    updatedAt: Date.now(),
+                },
             },
+        });
+    };
+
+    /** 更新角色的生图档案（外观提示词 / 参考图开关 / 人脸框选） */
+    const updateReferenceProfile = (characterId: string, patch: {
+        featurePrompt?: string;
+        novelAiFeaturePromptEnabled?: boolean;
+        enabled?: boolean;
+        faceCrop?: { x: number; y: number; size: number } | undefined;
+    }) => {
+        const current = settings.characterReferences?.[characterId];
+        const nextRef = {
+            ...current,
+            assetId: current?.assetId ?? "",
+            updatedAt: Date.now(),
+            ...patch,
+        } as ImageGenerationSettingsType["characterReferences"][string];
+        if (patch.faceCrop === undefined) delete (nextRef as { faceCrop?: unknown }).faceCrop;
+        persist({
+            ...settings,
+            characterReferences: { ...(settings.characterReferences || {}), [characterId]: nextRef },
         });
     };
 
@@ -856,43 +884,53 @@ export function ImageGenerationSettings() {
                 </div>
             </div>
 
-            {settings.provider === "novelai" ? (
-                <div className="flex flex-col gap-2">
-                    <p className="settings-menu-section-title">Character References</p>
+            <div className="flex flex-col gap-2">
+                <p className="settings-menu-section-title">Character References</p>
+                {settings.provider === "novelai" && (
                     <Alert variant="info">
                         <Info size={16} className="mt-[2px] shrink-0" />
-                        <span className="leading-[1.5]">NovelAI 当前仅使用文字提示词生成图片，不会读取角色参考图。已有参考图会保留，切回 OpenAI 兼容引擎后仍可继续使用。</span>
+                        <span className="leading-[1.5]">NovelAI 只使用文字提示词生成图片，不读取角色参考图。可点每行的「外观」填写专属提示词（人物性别/发型/服饰），参考图会保留，切回 OpenAI 兼容引擎后仍可使用。</span>
                     </Alert>
-                </div>
-            ) : (
-                <div className="flex flex-col gap-2">
-                    <p className="settings-menu-section-title">Character References</p>
-                    <div className="menu-group">
-                        {characters.length === 0 ? (
-                            <div className="ui-empty py-8">
-                                <Camera size={22} />
-                                <span className="menu-desc">暂无角色。</span>
-                            </div>
-                        ) : characters.map(character => {
-                            const preview = referencePreviews[character.id];
-                            return (
-                                <div key={character.id} className="menu-item">
-                                <span className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--c-input)]">
-                                    {preview ? (
-                                        <img src={preview} alt="" className="h-full w-full object-cover" />
-                                    ) : character.avatar ? (
-                                        <img src={character.avatar} alt="" className="h-full w-full object-cover" />
-                                    ) : (
-                                        <span className="flex h-full w-full items-center justify-center ts-13 font-semibold text-[var(--c-icon)]">
-                                            {character.name.slice(0, 1)}
-                                        </span>
-                                    )}
+                )}
+                <div className="menu-group">
+                    {characters.length === 0 ? (
+                        <div className="ui-empty py-8">
+                            <Camera size={22} />
+                            <span className="menu-desc">暂无角色。</span>
+                        </div>
+                    ) : characters.map(character => {
+                        const preview = referencePreviews[character.id];
+                        const ref = settings.characterReferences?.[character.id];
+                        const hasProfile = Boolean(ref?.featurePrompt?.trim() || ref?.faceCrop);
+                        return (
+                            <div key={character.id} className="menu-item">
+                            <span className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--c-input)]">
+                                {preview ? (
+                                    <img src={preview} alt="" className="h-full w-full object-cover" />
+                                ) : character.avatar ? (
+                                    <img src={character.avatar} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    <span className="flex h-full w-full items-center justify-center ts-13 font-semibold text-[var(--c-icon)]">
+                                        {character.name.slice(0, 1)}
+                                    </span>
+                                )}
+                            </span>
+                            <span className="min-w-0 flex flex-1 flex-col">
+                                <span className="menu-label truncate">{character.name}</span>
+                                <span className="menu-desc truncate">
+                                    {hasProfile ? "已设置外观档案" : "未设置外观档案"} · {preview ? "有参考图" : "无参考图"}
                                 </span>
-                                <span className="min-w-0 flex flex-1 flex-col">
-                                    <span className="menu-label truncate">{character.name}</span>
-                                    <span className="menu-desc truncate">{preview ? "已上传参考图" : "未上传参考图"}</span>
-                                </span>
-                                <span className="menu-right flex gap-2">
+                            </span>
+                            <span className="menu-right flex gap-2">
+                                <button
+                                    type="button"
+                                    className="ui-link-btn"
+                                    aria-label={`设置 ${character.name} 的外观档案`}
+                                    onClick={() => setProfileEditorId(character.id)}
+                                >
+                                    <Sparkles size={18} />
+                                </button>
+                                {settings.provider !== "novelai" && (
                                     <button
                                         type="button"
                                         className="ui-link-btn"
@@ -910,24 +948,42 @@ export function ImageGenerationSettings() {
                                     >
                                         <Upload size={18} />
                                     </button>
-                                    {preview && (
-                                        <button
-                                            type="button"
-                                            className="ui-link-btn"
-                                            data-variant="danger"
-                                            aria-label={`删除 ${character.name} 的参考图`}
-                                            onClick={() => removeReference(character.id)}
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                </span>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                )}
+                                {preview && (
+                                    <button
+                                        type="button"
+                                        className="ui-link-btn"
+                                        data-variant="danger"
+                                        aria-label={`删除 ${character.name} 的参考图`}
+                                        onClick={() => removeReference(character.id)}
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                )}
+                            </span>
+                            </div>
+                        );
+                    })}
                 </div>
-            )}
+            </div>
+
+            {profileEditorId ? (() => {
+                const character = characters.find(item => item.id === profileEditorId);
+                if (!character) return null;
+                return (
+                    <CharacterImageProfileDialog
+                        character={character}
+                        preview={referencePreviews[character.id]}
+                        reference={settings.characterReferences?.[character.id]}
+                        showNovelAiToggle={settings.provider === "novelai"}
+                        onClose={() => setProfileEditorId(null)}
+                        onSave={patch => {
+                            updateReferenceProfile(character.id, patch);
+                            setProfileEditorId(null);
+                        }}
+                    />
+                );
+            })() : null}
 
             {pendingDeleteOpenAiPresetId && (
                 <ConfirmDialog
@@ -960,6 +1016,188 @@ export function ImageGenerationSettings() {
                 />
             )}
 
+        </div>
+    );
+}
+
+/**
+ * 角色生图档案：专属外观提示词 + 参考图开关 + 人脸框选。
+ * 移植自二改 f969e4b（锁脸优化）。框选交互改为「点选中心 + 尺寸滑杆」，手机上更好操作。
+ */
+function CharacterImageProfileDialog({
+    character,
+    preview,
+    reference,
+    showNovelAiToggle,
+    onClose,
+    onSave,
+}: {
+    character: Character;
+    preview?: string;
+    reference?: ImageGenerationSettingsType["characterReferences"][string];
+    showNovelAiToggle: boolean;
+    onClose: () => void;
+    onSave: (patch: {
+        featurePrompt: string;
+        novelAiFeaturePromptEnabled: boolean;
+        enabled: boolean;
+        faceCrop?: { x: number; y: number; size: number };
+    }) => void;
+}) {
+    const [featurePrompt, setFeaturePrompt] = useState(reference?.featurePrompt ?? "");
+    const [enabled, setEnabled] = useState(reference?.enabled !== false);
+    const [novelAiEnabled, setNovelAiEnabled] = useState(reference?.novelAiFeaturePromptEnabled !== false);
+    const [crop, setCrop] = useState<{ x: number; y: number; size: number } | undefined>(reference?.faceCrop);
+    const [cropSize, setCropSize] = useState(reference?.faceCrop?.size ?? 0.45);
+    const frameRef = useRef<HTMLDivElement | null>(null);
+
+    const hasCrop = Boolean(crop && crop.size > 0);
+
+    const placeCrop = useCallback((centerX: number, centerY: number, size: number) => {
+        const rect = frameRef.current?.getBoundingClientRect();
+        const width = rect?.width || 1;
+        const height = rect?.height || 1;
+        const minSide = Math.min(width, height);
+        const sideW = (size * minSide) / width;
+        const sideH = (size * minSide) / height;
+        const x = Math.max(0, Math.min(centerX - sideW / 2, 1 - sideW));
+        const y = Math.max(0, Math.min(centerY - sideH / 2, 1 - sideH));
+        setCrop({ x, y, size });
+    }, []);
+
+    const handleFramePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        const centerX = (event.clientX - rect.left) / rect.width;
+        const centerY = (event.clientY - rect.top) / rect.height;
+        placeCrop(centerX, centerY, cropSize);
+    };
+
+    /** 改框选大小时保持当前中心点不变 */
+    const updateCropSize = (next: number) => {
+        setCropSize(next);
+        const rect = frameRef.current?.getBoundingClientRect();
+        if (!rect || !rect.width || !rect.height || !crop) return;
+        const minSide = Math.min(rect.width, rect.height);
+        const sideW = (crop.size * minSide) / rect.width;
+        const sideH = (crop.size * minSide) / rect.height;
+        placeCrop(crop.x + sideW / 2, crop.y + sideH / 2, next);
+    };
+
+    const cropOverlay = (() => {
+        if (!crop) return null;
+        const rect = frameRef.current?.getBoundingClientRect();
+        const width = rect?.width || 1;
+        const height = rect?.height || 1;
+        const minSide = Math.min(width, height);
+        const w = ((crop.size * minSide) / width) * 100;
+        const h = ((crop.size * minSide) / height) * 100;
+        return { left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${w}%`, height: `${h}%` };
+    })();
+
+    return (
+        <div className="modal-overlay" data-ui="modal" onClick={onClose}>
+            <div
+                className="modal-card"
+                style={{ maxWidth: 380, maxHeight: "86vh", gap: 12 }}
+                onClick={event => event.stopPropagation()}
+            >
+                <h3 className="modal-title">{character.name} · 生图外观</h3>
+
+                {preview ? (
+                    <div className="flex flex-col gap-2">
+                        <div
+                            ref={frameRef}
+                            onPointerDown={handleFramePointerDown}
+                            className="relative w-full overflow-hidden rounded-xl bg-[var(--c-input)]"
+                            style={{ touchAction: "none" }}
+                        >
+                            <img src={preview} alt="" className="block w-full select-none" draggable={false} />
+                            {hasCrop && cropOverlay && (
+                                <span
+                                    className="pointer-events-none absolute rounded-md border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                                    style={cropOverlay}
+                                />
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="menu-desc shrink-0">框选大小</span>
+                            <input
+                                type="range"
+                                min={15}
+                                max={100}
+                                value={Math.round(cropSize * 100)}
+                                onChange={event => updateCropSize(Number(event.target.value) / 100)}
+                                className="flex-1"
+                            />
+                            <button
+                                type="button"
+                                className="ui-link-btn shrink-0"
+                                disabled={!hasCrop}
+                                onClick={() => setCrop(undefined)}
+                            >
+                                清除
+                            </button>
+                        </div>
+                        <p className="menu-desc">
+                            点一下预览图上的人脸即可定位，再拖「框选大小」调整范围。只把框内区域送给模型，锁脸会更准。
+                        </p>
+                    </div>
+                ) : (
+                    <p className="menu-desc">还没有参考图。可先保存外观提示词，之后在列表里上传参考图再回来框选。</p>
+                )}
+
+                <label className="flex flex-col gap-1">
+                    <span className="menu-label">专属外观提示词</span>
+                    <textarea
+                        value={featurePrompt}
+                        onChange={event => setFeaturePrompt(event.target.value)}
+                        rows={4}
+                        placeholder={"例如：1boy, 男性, 25岁, 黑色短发, 单眼皮, 高瘦, 深色大衣\n反向写法：正向1boy, male 反向feminine, girl, long hair"}
+                        className="ui-input w-full resize-y"
+                    />
+                    <span className="menu-desc">
+                        每次生图自动追加到提示词末尾，用来固定性别与外貌。「反向xxx」部分会作为负面提示（OpenAI 兼容接口以「避免：xxx」拼接）。
+                    </span>
+                </label>
+
+                <div className="flex items-center justify-between">
+                    <span className="menu-label">使用参考图（锁脸）</span>
+                    <Toggle checked={enabled} onChange={setEnabled} />
+                </div>
+
+                {showNovelAiToggle && (
+                    <div className="flex items-center justify-between">
+                        <span className="menu-label">NovelAI 也追加外观提示词</span>
+                        <Toggle checked={novelAiEnabled} onChange={setNovelAiEnabled} />
+                    </div>
+                )}
+
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        className="flex-1 rounded-xl py-2.5 ts-13"
+                        style={{ background: "var(--c-input)", color: "var(--c-text-title)" }}
+                        onClick={onClose}
+                    >
+                        取消
+                    </button>
+                    <button
+                        type="button"
+                        className="flex-1 rounded-xl py-2.5 ts-13 font-medium text-white"
+                        style={{ background: "var(--c-icon-active)" }}
+                        onClick={() => onSave({
+                            featurePrompt,
+                            novelAiFeaturePromptEnabled: novelAiEnabled,
+                            enabled,
+                            faceCrop: crop,
+                        })}
+                    >
+                        保存
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

@@ -742,9 +742,34 @@ function normalizeOpenAiPreset(preset: Partial<OpenAiImagePreset> | null | undef
 }
 
 function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSettings> | null | undefined): ImageGenerationSettings {
-    const refs = settings?.characterReferences && typeof settings.characterReferences === "object"
+    const rawRefs = settings?.characterReferences && typeof settings.characterReferences === "object"
         ? settings.characterReferences
         : {};
+    // 角色参考图配置归一化：保留专属外观提示词 / 参考图开关 / 人脸框选（二改 f969e4b 迁移）
+    const refs: ImageGenerationSettings["characterReferences"] = {};
+    for (const [characterId, raw] of Object.entries(rawRefs)) {
+        if (!raw || typeof raw !== "object") continue;
+        const crop = (raw as { faceCrop?: unknown }).faceCrop;
+        const validCrop = crop && typeof crop === "object"
+            && typeof (crop as { x?: unknown }).x === "number"
+            && typeof (crop as { y?: unknown }).y === "number"
+            && typeof (crop as { size?: unknown }).size === "number"
+            && (crop as { size: number }).size > 0
+            ? {
+                x: Math.max(0, Math.min(1, (crop as { x: number }).x)),
+                y: Math.max(0, Math.min(1, (crop as { y: number }).y)),
+                size: Math.max(0.05, Math.min(1, (crop as { size: number }).size)),
+            }
+            : undefined;
+        refs[characterId] = {
+            assetId: typeof raw.assetId === "string" ? raw.assetId : "",
+            updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
+            featurePrompt: typeof raw.featurePrompt === "string" ? raw.featurePrompt : "",
+            novelAiFeaturePromptEnabled: raw.novelAiFeaturePromptEnabled !== false,
+            enabled: raw.enabled !== false,
+            ...(validCrop ? { faceCrop: validCrop } : {}),
+        };
+    }
     const provider = settings?.provider === "novelai" ? "novelai" : "openai";
     const requestMode = settings?.requestMode === "server" || settings?.requestMode === "direct"
         ? settings.requestMode

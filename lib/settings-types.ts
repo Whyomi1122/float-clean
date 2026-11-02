@@ -246,6 +246,14 @@ export type ImageGenerationSettings = {
     characterReferences: Record<string, {
         assetId: string;
         updatedAt: number;
+        /** 角色专属外观提示词：每次生图自动追加（支持「正向xxx 反向xxx」写法）。移植自二改 f969e4b。 */
+        featurePrompt?: string;
+        /** NovelAI 分支是否启用外观提示词（OpenAI 兼容分支始终使用） */
+        novelAiFeaturePromptEnabled?: boolean;
+        /** 参考图单独开关：false = 暂不使用参考图（保留 assetId 与 faceCrop） */
+        enabled?: boolean;
+        /** 参考图人脸框选（归一化正方形，size 为边长占短边比例） */
+        faceCrop?: { x: number; y: number; size: number };
     }>;
     imageHosting: ImageHostingSettings;
 };

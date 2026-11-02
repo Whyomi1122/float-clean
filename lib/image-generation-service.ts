@@ -50,10 +50,29 @@ const IMAGE_MODEL_HINTS = [
   "wan",
 ];
 
-function mergePrompt(description: string, extraPrompt: string): string {
+function mergePrompt(description: string, extraPrompt: string, featurePrompt = ""): string {
   const main = description.trim();
   const extra = extraPrompt.trim();
-  return extra ? `${main}\n\n${extra}` : main;
+  const feature = featurePrompt.trim();
+  const base = extra ? `${main}\n\n${extra}` : main;
+  return feature ? `${base}\n\n${feature}` : base;
+}
+
+/** 专属提示词支持「正向xxx 反向xxx」写法，拆成两段分别使用（移植自二改 c404aec）。 */
+export function splitFeaturePrompt(raw: string): { positive: string; negative: string } {
+  const text = (raw ?? "").trim();
+  if (!text) return { positive: "", negative: "" };
+  const match = text.match(/(?:^|\s)(?:反向|negative|Negative)(?:\s*[:：]|\s)\s*/);
+  if (!match || match.index === undefined) {
+    const positive = text.replace(/^(?:正向|positive|Positive)\s*[:：]?\s*/, "").trim();
+    return { positive, negative: "" };
+  }
+  const before = text.slice(0, match.index);
+  const after = text.slice(match.index + match[0].length);
+  return {
+    positive: before.replace(/^(?:正向|positive|Positive)\s*[:：]?\s*/, "").trim(),
+    negative: after.trim(),
+  };
 }
 
 function base64ToBlob(b64: string, mimeType: string): Blob {
@@ -94,9 +113,9 @@ function loadDataUrlImage(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
-async function normalizeReferenceImageForEdit(dataUrl: string): Promise<string> {
-  if (dataUrlMimeType(dataUrl) === "image/png") return dataUrl;
+async function normalizeReferenceImageForEdit(dataUrl: string, crop?: { x: number; y: number; size: number }): Promise<string> {
   if (typeof document === "undefined") return dataUrl;
+  if (!crop && dataUrlMimeType(dataUrl) === "image/png") return dataUrl;
 
   try {
     const image = await loadDataUrlImage(dataUrl);
@@ -105,11 +124,23 @@ async function normalizeReferenceImageForEdit(dataUrl: string): Promise<string> 
     if (!width || !height) return dataUrl;
 
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return dataUrl;
-    context.drawImage(image, 0, 0, width, height);
+    if (crop && crop.size > 0 && crop.size <= 1) {
+      // faceCrop：按角色框选的正方形区域裁剪（归一化坐标），只把脸喂给模型
+      const side = Math.round(Math.min(width, height) * crop.size);
+      const left = Math.max(0, Math.min(Math.round(crop.x * width), width - side));
+      const top = Math.max(0, Math.min(Math.round(crop.y * height), height - side));
+      canvas.width = side;
+      canvas.height = side;
+      const context = canvas.getContext("2d");
+      if (!context) return dataUrl;
+      context.drawImage(image, left, top, side, side, 0, 0, side, side);
+    } else {
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) return dataUrl;
+      context.drawImage(image, 0, 0, width, height);
+    }
     return canvas.toDataURL("image/png");
   } catch {
     return dataUrl;
@@ -749,14 +780,21 @@ export async function generateImageFromConfiguredApi(params: {
       : [DEFAULT_NOVELAI_PRESET];
     const activePreset = presets.find(p => p.id === settings.novelai?.activePresetId) || presets[0];
 
+    // 角色专属外观提示词（可单独控制在 NovelAI 是否启用）
+    const characterRef = params.characterId ? settings.characterReferences[params.characterId] : undefined;
+    const featurePrompt = characterRef?.novelAiFeaturePromptEnabled === false
+      ? ""
+      : characterRef?.featurePrompt ?? "";
+
     const positiveParts: string[] = [];
     if (activePreset.positivePrompt?.trim()) positiveParts.push(activePreset.positivePrompt.trim());
     if (description) positiveParts.push(description);
     const fullPrompt = positiveParts.join(", ");
+    const finalPrompt = mergePrompt(fullPrompt, "", featurePrompt);
 
     const data = settings.requestMode === "direct"
-      ? await generateNovelAiDirect({ apiKey: naiApiKey, preset: activePreset, prompt: fullPrompt, signal: params.signal })
-      : await generateNovelAiViaServer({ apiKey: naiApiKey, preset: activePreset, prompt: fullPrompt, signal: params.signal });
+      ? await generateNovelAiDirect({ apiKey: naiApiKey, preset: activePreset, prompt: finalPrompt, signal: params.signal })
+      : await generateNovelAiViaServer({ apiKey: naiApiKey, preset: activePreset, prompt: finalPrompt, signal: params.signal });
 
     throwIfAborted(params.signal);
     const mimeType = data.mimeType || "image/png";
@@ -769,7 +807,7 @@ export async function generateImageFromConfiguredApi(params: {
       dataUrl: `data:${mimeType};base64,${data.b64}`,
       blob,
       mimeType,
-      prompt: fullPrompt,
+      prompt: finalPrompt,
       usedReferenceImage: false,
       revisedPrompt: data.revisedPrompt,
     };
@@ -782,15 +820,21 @@ export async function generateImageFromConfiguredApi(params: {
   if (!openaiSettings.apiKey.trim() || !openaiSettings.baseUrl.trim() || !openaiSettings.model.trim()) return null;
 
   const reference = params.characterId ? settings.characterReferences[params.characterId] : undefined;
-  const rawReferenceImageDataUrl = params.useReferenceImage && reference?.assetId
+  // 参考图单独开关（enabled !== false 且未关掉 useReferenceImage 才生效）
+  const referenceAllowed = params.useReferenceImage && reference?.enabled !== false;
+  const rawReferenceImageDataUrl = referenceAllowed && reference?.assetId
     ? await getChatImageFromIndexedDB(reference.assetId)
     : null;
   throwIfAborted(params.signal);
   const referenceImageDataUrl = rawReferenceImageDataUrl
-    ? await normalizeReferenceImageForEdit(rawReferenceImageDataUrl)
+    ? await normalizeReferenceImageForEdit(rawReferenceImageDataUrl, reference?.faceCrop)
     : null;
   throwIfAborted(params.signal);
-  const prompt = mergePrompt(description, openaiSettings.extraPrompt);
+
+  // 专属外观提示词：正向追加到提示词末尾；反向词以「避免：xxx」拼进正向（OpenAI 兼容接口无原生 negative）
+  const { positive: featurePositive, negative: featureNegative } = splitFeaturePrompt(reference?.featurePrompt ?? "");
+  const negativeSuffix = featureNegative ? `。避免：${featureNegative}` : "";
+  const prompt = mergePrompt(description, openaiSettings.extraPrompt, `${featurePositive}${negativeSuffix}`);
 
   const data = openaiSettings.requestMode === "direct"
     ? await generateImageDirect({ settings: openaiSettings, prompt, referenceImageDataUrl, signal: params.signal })
