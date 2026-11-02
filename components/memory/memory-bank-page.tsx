@@ -1464,27 +1464,31 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         }}
                     />
                     {pendingImport ? (
-                        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45" onClick={() => setPendingImport(null)}>
-                            <div className="w-[86%] max-w-[360px] rounded-3xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <p className="text-[15px] font-semibold text-black/85">选择导入方式</p>
-                                <p className="mt-1 text-[12px] text-black/50">文件：{pendingImport.name}</p>
-                                <button
-                                    type="button"
-                                    disabled={importing}
-                                    className="mt-4 w-full py-2.5 rounded-2xl bg-[#4f46e5] text-[13px] font-medium text-white active:scale-[0.985] transition-transform disabled:opacity-50"
-                                    onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "merge"); }}
-                                >
-                                    合并导入（保留原有记忆，不触发备份）
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={importing}
-                                    className="mt-2 w-full py-2.5 rounded-2xl bg-black/[0.06] text-[13px] font-medium text-black/70 active:scale-[0.985] transition-transform disabled:opacity-50"
-                                    onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "replace"); }}
-                                >
-                                    替换导入（清空后导入，先自动备份旧数据）
-                                </button>
-                                <button type="button" className="mt-2 w-full py-2 text-[12px] text-black/40" onClick={() => setPendingImport(null)}>取消</button>
+                        <div className="modal-overlay" data-ui="modal" onClick={() => setPendingImport(null)}>
+                            <div className="modal-card" data-ui="modal-card" onClick={event => event.stopPropagation()}>
+                                <h3 className="modal-title">选择导入方式</h3>
+                                <p className="ts-12 text-secondary">文件：{pendingImport.name}</p>
+                                <div className="flex flex-col gap-2 mt-3">
+                                    <button
+                                        type="button"
+                                        disabled={importing}
+                                        className="w-full rounded-xl py-2.5 ts-13 font-medium text-white"
+                                        style={{ background: "var(--c-icon-active)" }}
+                                        onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "merge"); }}
+                                    >
+                                        合并导入（保留原有记忆，不触发备份）
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={importing}
+                                        className="w-full rounded-xl py-2.5 ts-13 font-medium"
+                                        style={{ background: "var(--c-input)", color: "var(--c-text-title)" }}
+                                        onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "replace"); }}
+                                    >
+                                        替换导入（清空后导入，先自动备份旧数据）
+                                    </button>
+                                    <button type="button" className="w-full rounded-xl py-2.5 ts-13" style={{ color: "var(--c-text)" }} onClick={() => setPendingImport(null)}>取消</button>
+                                </div>
                             </div>
                         </div>
                     ) : null}

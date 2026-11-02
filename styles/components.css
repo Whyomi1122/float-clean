@@ -247,6 +247,46 @@
   to   { opacity: 1; }
 }
 
+@keyframes modalSoftRise {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 左对齐确认弹窗（删除/导入等），替代曾缺失定义的 modal-card */
+.modal-card {
+  width: 84%;
+  max-width: 340px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--c-panel);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+  animation: modalSoftRise 0.24s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-card .modal-title {
+  font-size: calc(16px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text-title);
+  margin: 0;
+}
+
+.modal-card .modal-body {
+  padding: 0;
+  font-size: calc(13px * var(--app-text-scale, 1));
+  line-height: 1.6;
+  color: var(--c-text);
+  overflow: visible;
+}
+
+.modal-card.danger .modal-title {
+  color: var(--c-danger);
+}
+
 @keyframes modalSlideUp {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
