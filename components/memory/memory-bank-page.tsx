@@ -380,6 +380,9 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
     // ── 导出/导入 ──
     const importFileInputRef = useRef<HTMLInputElement | null>(null);
     const importModeRef = useRef<"merge" | "replace">("merge");
+    // App 注入开关状态（组件顶层，避免条件分支内 hook 违规）
+    const [appInjectionState, setAppInjectionState] = useState<Record<string, boolean>>(() =>
+        Object.fromEntries(APP_INJECTION_APPS.map(app => [app.id, isAppInjectionEnabled(app.id)])));
     const [importing, setImporting] = useState(false);
     const disabledSourceCount = MEMORY_SOURCE_OPTIONS
         .filter(source => source.keys.some(key => (config.shortTermAllowedSources ?? {})[key] === false)).length;
@@ -1215,8 +1218,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         const currentPrompt = editingPrompt ?? config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT;
         const isModified = currentPrompt !== (config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT);
         const isDefault = (config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT) === DEFAULT_SUMMARIZATION_PROMPT;
-        const [appInjectionState, setAppInjectionState] = useState<Record<string, boolean>>(() =>
-            Object.fromEntries(APP_INJECTION_APPS.map(app => [app.id, isAppInjectionEnabled(app.id)])));
 
         return (
             <div className="page-menu memory-settings-menu">
