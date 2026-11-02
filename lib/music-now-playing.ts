@@ -126,6 +126,8 @@ export function buildNowPlayingPromptBlock(): string {
     const lines: string[] = [];
     lines.push("[music.now_playing]");
     lines.push(`正在播放:${s.title} - ${s.artist}(${fmtTime(s.currentTime)} / ${fmtTime(s.duration)}${s.isPlaying ? "" : ",已暂停"})`);
+    // 明确告知"你就是能从设备上看到",避免角色答"我不知道"或瞎猜歌单
+    lines.push("这些字段是系统直接提供的真实数据,你(角色)能像看到手机屏幕一样看到它——被问到「我在听什么歌」时,照此回答歌名/歌手即可,不要说不知道,不要猜别的歌单或别的场景。");
 
     if (s.lyrics) {
         const parsed = parseLrc(s.lyrics);

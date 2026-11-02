@@ -7,7 +7,7 @@ import { getAudioBlob, markTrackPlayed } from "./music-storage";
 import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail } from "./music-service";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
-import { setNowPlayingTrack, updateNowPlayingTime, setNowPlayingPlaying, clearNowPlaying } from "./music-now-playing";
+import { setNowPlayingTrack, updateNowPlayingTime, setNowPlayingPlaying, clearNowPlaying, getNowPlayingSnapshot } from "./music-now-playing";
 
 // ── Types ──
 
@@ -95,6 +95,8 @@ function persistQueue(q: MusicTrack[]): void {
 
 export function MusicProvider({ children }: { children: ReactNode }) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    // 同步镜像：供 now_playing 桥在直连播放分支读取最新曲目（state 闭包会过期）
+    const currentTrackRef = useRef<MusicTrack | null>(null);
     const blobUrlRef = useRef<string | null>(null);
 
     const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
@@ -217,11 +219,27 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             const playedAt = new Date().toISOString();
             void markTrackPlayed(track.id, playedAt).catch(() => undefined);
             track = { ...track, lastPlayedAt: playedAt };
+            // 本地曲优先用真实音频时长（元数据里的 duration 常为 0，导致提示里出现 00:00 / 03:48 这种对不上的时间）
+            audio.addEventListener("loadedmetadata", () => {
+                if (!audio.duration || !Number.isFinite(audio.duration)) return;
+                const np = getNowPlayingSnapshot();
+                if (np && np.trackId === track.id) {
+                    setNowPlayingTrack({
+                        trackId: track.id,
+                        title: track.title,
+                        artist: track.artist,
+                        duration: audio.duration,
+                        lyrics: track.lyrics,
+                    });
+                    setNowPlayingPlaying(np.isPlaying);
+                }
+            }, { once: true });
             // now_playing 桥:本地曲(歌词直接用元数据里的)
             setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, duration: track.duration || 0, lyrics: track.lyrics });
         }
 
         setCurrentTrack(track);
+        currentTrackRef.current = track;
         setCurrentTime(0);
 
         try {
@@ -244,8 +262,19 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         cleanupBlobUrl();
         audio.pause();
         audio.src = url;
+        currentTrackRef.current = track;
         setCurrentTrack(track);
         setCurrentTime(0);
+        // now_playing 桥：直连播放（在线搜索/自定义 URL）也注册曲目，
+        // 否则 getNowPlayingSnapshot 仍停留在上一首「加载中」的曲目，
+        // 导致一起听/聊天里 AI 回复与现实播放对不上。
+        setNowPlayingTrack({
+            trackId: track.id,
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration || 0,
+            lyrics: track.lyrics,
+        });
         audio.play().catch(() => {});
     }, [cleanupBlobUrl]);
 
@@ -317,6 +346,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             audio.currentTime = 0;
         }
         cleanupBlobUrl();
+        currentTrackRef.current = null;
         setCurrentTrack(null);
         setIsPlaying(false);
         setCurrentTime(0);
