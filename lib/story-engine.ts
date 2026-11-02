@@ -12,8 +12,9 @@ import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./se
 import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
 import { previewMessagesForApi, sendLLMRequestPreferStream, ChatEngineError } from "./chat-engine";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { buildCalendarScheduleMarker, getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
 import { getWeekStartIso } from "./calendar-utils";
@@ -195,9 +196,10 @@ async function buildStoryPromptMessages(
     history: historyMessages,
   });
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(characterId, wbActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
+    buildAppInjectionMemories(characterId, wbActivationContext, memConfig, "story"),
+    buildAppScriptWorldBookBlock(characterId, wbActivationContext, "story"),
   ]);
 
   const now = new Date();
@@ -213,7 +215,7 @@ async function buildStoryPromptMessages(
     scheduleSummary: buildCalendarScheduleMarker("character", characterId, getWeekStartIso(now)),
     currentSchedule: getCurrentCalendarScheduleForPrompt("character", characterId, now),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     worldBookActivationContext: wbActivationContext,
     recentBlocks,
     unifiedRecentItems,

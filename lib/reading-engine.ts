@@ -22,8 +22,9 @@ import {
 } from "./llm-prompt-assembler";
 import type { ApiConfig, PresetConfig, RegexConfig } from "./settings-types";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { previewMessagesForApi, sendLLMRequest } from "./chat-engine";
 import { DEFAULT_READING_BILINGUAL_PROMPT, resolveBilingualPrompt } from "./bilingual-prompt-defaults";
@@ -97,8 +98,11 @@ async function resolveReadingInput(
 
     // Memory
     const memConfig = loadMemoryConfig();
-    const coreMemories = await retrieveCoreMemoriesForPrompt(characterId, memConfig);
-    const longTermMemories = await retrieveMemoriesForPrompt(characterId, options.bookTitle, memConfig);
+    const [coreMemories, longTermText, scriptWbBlock] = await Promise.all([
+        retrieveCoreMemoriesForPrompt(characterId, memConfig),
+        buildAppInjectionMemories(characterId, options.bookTitle, memConfig, "reading"),
+        buildAppScriptWorldBookBlock(characterId, options.bookTitle, "reading"),
+    ]);
 
     // Short-term context
     const { recentBlocks, truncatedHistory, unifiedRecentItems } = prepareShortTermContext(characterId, "chat", {
@@ -117,7 +121,7 @@ async function resolveReadingInput(
         appId: "reading",
         appTags,
         coreMemories: formatCoreMemories(coreMemories),
-        longTermMemories: formatLongTermMemories(longTermMemories),
+        longTermMemories: [scriptWbBlock, longTermText].filter(s => s.trim()).join("\n"),
         recentBlocks,
         unifiedRecentItems,
         bookTitle: options.bookTitle,

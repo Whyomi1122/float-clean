@@ -6,7 +6,8 @@ import { getWeekStartIso } from "./calendar-utils";
 import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { prepareShortTermContext } from "./short-term-assembler";
 import {
   loadApiConfigs,
@@ -93,9 +94,10 @@ export async function buildGameRolePackage(input: {
     || configs.character.persona
     || configs.character.name;
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(input.characterId, activationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(input.characterId, memConfig).catch(() => null),
+    buildAppInjectionMemories(input.characterId, activationContext, memConfig, "game"),
+    buildAppScriptWorldBookBlock(input.characterId, activationContext, "game"),
   ]);
 
   const messages = assemblePromptPayload({
@@ -111,7 +113,7 @@ export async function buildGameRolePackage(input: {
       ? buildCalendarScheduleMarker("character", input.characterId, getWeekStartIso(new Date()))
       : "",
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     worldBookActivationContext: activationContext,
     recentBlocks: shortTerm?.recentBlocks ?? [],
     unifiedRecentItems: shortTerm?.unifiedRecentItems ?? [],

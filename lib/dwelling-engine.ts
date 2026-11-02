@@ -14,8 +14,9 @@ import {
 import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
 import { previewMessagesForApi, sendLLMRequest } from "./chat-engine";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { buildCalendarScheduleMarker } from "./calendar-storage";
 import { getWeekStartIso } from "./calendar-utils";
@@ -63,9 +64,10 @@ async function buildDwellingMessages(
         history: [],
     });
 
-    const [memories, coreMemories] = await Promise.all([
-        retrieveMemoriesForPrompt(characterId, wbActivationContext, memConfig).catch(() => null),
+    const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
         retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
+        buildAppInjectionMemories(characterId, wbActivationContext, memConfig, "dwelling"),
+        buildAppScriptWorldBookBlock(characterId, wbActivationContext, "dwelling"),
     ]);
 
     return assemblePromptPayload({
@@ -79,7 +81,7 @@ async function buildDwellingMessages(
         appTags,
         scheduleSummary: buildCalendarScheduleMarker("character", characterId, getWeekStartIso(new Date())),
         coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-        longTermMemories: memories ? formatLongTermMemories(memories) : "",
+        longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
         worldBookActivationContext: wbActivationContext,
         recentBlocks,
         unifiedRecentItems,

@@ -27,6 +27,7 @@ import { hydrateChatStorage } from "@/lib/chat-storage";
 import { loadNativeTimeline, filterTimelineByAllowedSources, applyShortTermUserEdits, setShortTermEntryHidden, setShortTermEntryOverride, getTimelineEntryMessageText, rebuildTimelineEntryContent, type NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { runSummarizationPipeline, getSummaryGroupProgress, type SummaryGroupProgress } from "@/lib/memory-summarizer";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
+import { APP_INJECTION_APPS, isAppInjectionEnabled, setAppInjectionEnabled } from "@/lib/app-injection";
 import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding";
 import { BINDING_ACCENTS } from "@/lib/ui-accent-colors";
 
@@ -1214,6 +1215,8 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         const currentPrompt = editingPrompt ?? config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT;
         const isModified = currentPrompt !== (config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT);
         const isDefault = (config.summarizationPrompt ?? DEFAULT_SUMMARIZATION_PROMPT) === DEFAULT_SUMMARIZATION_PROMPT;
+        const [appInjectionState, setAppInjectionState] = useState<Record<string, boolean>>(() =>
+            Object.fromEntries(APP_INJECTION_APPS.map(app => [app.id, isAppInjectionEnabled(app.id)])));
 
         return (
             <div className="page-menu memory-settings-menu">
@@ -1304,6 +1307,30 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                             }} />
                         </div>
                     </div>
+                </div>
+
+                {/* App 注入管理（2026-11-02 定稿：默认关，开了才给） */}
+                <p className="menu-group-desc mx-2 mt-4">App 注入管理</p>
+                <p className="menu-group-desc mx-2" style={{ opacity: 0.7 }}>开启后，对应 App 的 AI 将获得该角色的：长期记忆 + 群像剧情归档 + 剧本绑定世界书。默认全部关闭。</p>
+                <div className="menu-group">
+                    {APP_INJECTION_APPS.map(app => (
+                        <div className="menu-item" key={app.id}>
+                            <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
+                            <div className="menu-label-group">
+                                <span className="menu-label">{app.name}</span>
+                                <span className="menu-desc">{app.desc}</span>
+                            </div>
+                            <div className="menu-right">
+                                <Toggle
+                                    checked={appInjectionState[app.id] ?? false}
+                                    onChange={v => {
+                                        setAppInjectionEnabled(app.id, v);
+                                        setAppInjectionState(prev => ({ ...prev, [app.id]: v }));
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    ))}
                 </div>
 
                 {summarizeSheetOpen ? (() => {

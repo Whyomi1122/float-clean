@@ -9,8 +9,9 @@ import type { ApiConfig } from "./settings-types";
 import { loadCharacters } from "./character-storage";
 import { resolveBinding, loadBindingConfig, loadPresets, loadWorldBooks, loadRegexes, resolveUserIdentity, loadApiConfigs } from "./settings-storage";
 import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
-import { retrieveMemoriesForPrompt, retrieveCoreMemoriesForPrompt } from "./memory-service";
-import { formatLongTermMemories, formatCoreMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { loadMemoryConfig } from "./memory-storage";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { buildCalendarScheduleMarker } from "./calendar-storage";
@@ -1039,17 +1040,17 @@ async function buildCompanionDeclarePromptPayload(
   );
 
   const memConfig = loadMemoryConfig();
-  const [memResults, coreResults] = await Promise.all([
-    retrieveMemoriesForPrompt(characterId, wbActivationContext, memConfig).catch(() => null),
-    retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
+  const [longTermMemories, coreMemories, scriptWbBlock] = await Promise.all([
+    buildAppInjectionMemories(characterId, wbActivationContext, memConfig, "map"),
+    retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null).then(r => (r ? formatCoreMemories(r) : "")),
+    buildAppScriptWorldBookBlock(characterId, wbActivationContext, "map"),
   ]);
-  const longTermMemories = memResults ? formatLongTermMemories(memResults) : "";
-  const coreMemories = coreResults ? formatCoreMemories(coreResults) : "";
+  const longTermWithScript = [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n");
   const scheduleSummary = buildCalendarScheduleMarker("character", characterId, getWeekStartIso(new Date()));
 
   const llmMessages = assemblePromptPayload({
     character, history: truncatedHistory, preset, worldBooks, regexes, userIdentity, appId: "adventure",
-    longTermMemories, coreMemories, scheduleSummary,
+    longTermMemories: longTermWithScript, coreMemories, scheduleSummary,
     recentBlocks, unifiedRecentItems, worldBookActivationContext: wbActivationContext,
     affinity: overrideAffinity !== undefined ? String(overrideAffinity) : undefined,
     chatBilingualInstruction: buildAdventureCharacterBilingualInstruction(

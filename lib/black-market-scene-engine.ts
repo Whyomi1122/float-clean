@@ -8,7 +8,8 @@ import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { maybeRunSummarization } from "./memory-summarizer";
 import { prepareShortTermContext } from "./short-term-assembler";
 import {
@@ -131,9 +132,10 @@ async function buildScenePromptMessages(session: BlackMarketSceneSession, templa
     userName,
     history,
   });
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(session.characterId, wbActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(session.characterId, memConfig).catch(() => null),
+    buildAppInjectionMemories(session.characterId, wbActivationContext, memConfig, "black-market"),
+    buildAppScriptWorldBookBlock(session.characterId, wbActivationContext, "black-market"),
   ]);
 
   const messages = assemblePromptPayload({
@@ -147,7 +149,7 @@ async function buildScenePromptMessages(session: BlackMarketSceneSession, templa
     appTags: BLACK_MARKET_PROMPT_TAGS,
     scheduleSummary: buildCalendarScheduleMarker("character", session.characterId, getWeekStartIso(new Date())),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     worldBookActivationContext: wbActivationContext,
     recentBlocks,
     unifiedRecentItems,

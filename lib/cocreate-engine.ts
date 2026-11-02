@@ -2,8 +2,9 @@ import { loadCharacters } from "./character-storage";
 import { previewMessagesForApi, sendLLMRequest, sendLLMStreamRequest, sendLLMToolRequest, sendLLMToolStreamRequest, ChatEngineError } from "./chat-engine";
 import type { ChatMessage } from "./chat-storage";
 import { assemblePromptPayload } from "./llm-prompt-assembler";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { loadMemoryConfig } from "./memory-storage";
 import { prepareShortTermContext } from "./short-term-assembler";
 import {
@@ -497,9 +498,10 @@ export async function generateCoCreateReply(
     history.map((message) => message.content).join("\n"),
   ].filter(Boolean).join("\n");
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(runtime.character.id, cocreateActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(runtime.character.id, memConfig).catch(() => null),
+    buildAppInjectionMemories(runtime.character.id, cocreateActivationContext, memConfig, COCREATE_APP_ID),
+    buildAppScriptWorldBookBlock(runtime.character.id, cocreateActivationContext, COCREATE_APP_ID),
   ]);
 
   const llmMessages = assemblePromptPayload({
@@ -511,7 +513,7 @@ export async function generateCoCreateReply(
     userIdentity: resolveUserIdentity(runtime.character.id, COCREATE_APP_ID),
     appId: COCREATE_APP_ID,
     appTags,
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
     scheduleSummary: buildCalendarScheduleMarker("character", runtime.character.id, getWeekStartIso(new Date())),
     worldBookActivationContext: cocreateActivationContext,
@@ -780,9 +782,10 @@ export async function previewCoCreatePromptPayload(
     currentChapter,
     history.map((message) => message.content).join("\n"),
   ].filter(Boolean).join("\n");
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(runtime.character.id, cocreateActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(runtime.character.id, memConfig).catch(() => null),
+    buildAppInjectionMemories(runtime.character.id, cocreateActivationContext, memConfig, COCREATE_APP_ID),
+    buildAppScriptWorldBookBlock(runtime.character.id, cocreateActivationContext, COCREATE_APP_ID),
   ]);
   const llmMessages = assemblePromptPayload({
     character: runtime.character,
@@ -793,7 +796,7 @@ export async function previewCoCreatePromptPayload(
     userIdentity: resolveUserIdentity(runtime.character.id, COCREATE_APP_ID),
     appId: COCREATE_APP_ID,
     appTags,
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
     scheduleSummary: buildCalendarScheduleMarker("character", runtime.character.id, getWeekStartIso(new Date())),
     worldBookActivationContext: cocreateActivationContext,

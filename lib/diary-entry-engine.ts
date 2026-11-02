@@ -5,8 +5,9 @@ import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
 import { loadBindingConfig, loadApiConfigs, loadPresets, loadWorldBooks, loadRegexes, resolveBinding, resolveUserIdentity } from "./settings-storage";
 import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./settings-types";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { formatCoreMemories } from "./memory-injector";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { formatDiaryEntryContext, parseDiaryEntryContent, type ParsedDiaryEntry } from "./diary-entry-utils";
 import type { DiaryEntry, DiaryEntryTrigger } from "./diary-entry-types";
@@ -56,9 +57,10 @@ async function resolveDiaryEntryGeneration(
   const memConfig = loadMemoryConfig();
   const prepared = prepareShortTermContext(character.id, "diary", { history: [] });
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(character.id, prepared.wbActivationContext, memConfig).catch(() => []),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(character.id, memConfig).catch(() => []),
+    buildAppInjectionMemories(character.id, prepared.wbActivationContext, memConfig, "diary"),
+    buildAppScriptWorldBookBlock(character.id, prepared.wbActivationContext, "diary"),
   ]);
 
   const messages = assemblePromptPayload({
@@ -70,7 +72,7 @@ async function resolveDiaryEntryGeneration(
     userIdentity,
     appId: "diary",
     appTags: ["diary", "entries"],
-    longTermMemories: formatLongTermMemories(memories),
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     coreMemories: formatCoreMemories(coreMemories),
     worldBookActivationContext: prepared.wbActivationContext,
     recentBlocks: prepared.recentBlocks,
