@@ -190,6 +190,7 @@ export async function simpleLLMCall(
     if (!request) {
         return { content: null, error: "API 地址或密钥无效" };
     }
+    const sentMaxTokens: number | null = options?.max_tokens ?? null;
 
     try {
         const fetchUrl = request.url;
@@ -221,13 +222,14 @@ export async function simpleLLMCall(
         const content = extractLLMContent(data, config.provider);
         const finishReason = extractFinishReason(data);
         const wasTruncated = isTruncationFinishReason(finishReason);
+        const usage = extractUsage(data);
         pushApiLog({
             characterName: options?.label,
             source: "background",
             model: config.defaultModel,
             messages: messages.map(m => ({ role: m.role, content: m.content })),
             rawResponse: content ?? describeEmptyLLMResponse(data, finishReason, wasTruncated, config),
-            usage: extractUsage(data),
+            usage,
         });
         if (!content) {
             console.warn("[simpleLLMCall] Empty response. Keys:", JSON.stringify(Object.keys(data || {})),
@@ -235,7 +237,16 @@ export async function simpleLLMCall(
             return { content: null, error: describeEmptyLLMResponse(data, finishReason, wasTruncated, config), finishReason, wasTruncated };
         }
 
-        return { content, finishReason, wasTruncated };
+        // 2026-11-02 修复：护栏诊断字段此前从未回填，触发日志永远显示
+        // 「未传 / 未回报」，误判成「本地没发 max_tokens」。实际请求体里
+        // 一直带着（见 buildSimpleLLMRequest），这里把真实值补上。
+        return {
+            content,
+            finishReason,
+            wasTruncated,
+            sentMaxTokens,
+            completionTokens: usage?.completion_tokens ?? null,
+        };
     } catch (err) {
         console.warn("[simpleLLMCall] fetch error:", err);
         pushApiLog({
