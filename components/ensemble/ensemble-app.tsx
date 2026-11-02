@@ -3189,8 +3189,6 @@ ${lastSpeakerNote}
         if (result.failed > 0) {
           const firstError = Object.entries(result.errors)[0]?.[1] ?? "";
           setArchiveError(`同步：写入 ${result.synced} 份、失败 ${result.failed} 份${firstError ? `（${firstError}）` : ""}`);
-        } else if (result.tombstoned > 0) {
-          setToast(`同步完成：${result.synced} 份写入，${result.tombstoned} 份因你手动删过而跳过`);
         } else {
           setToast(`同步完成：${result.synced} 份归档已确认写入各角色记忆库`);
         }
@@ -3232,9 +3230,13 @@ ${lastSpeakerNote}
 
     // 记忆库那份是独立副本，改了群像归档就要同步过去。
     // 旧口径只删最后一条：前面被清空的条目之前镜像过的副本会成孤儿 → 现在把所有有内容的旧条目都回收。
-    const blanked = list.filter((a, i) => i !== lastIndex && a.content);
+    // 注意：内容完全没变时（点开编辑又直接保存）不能回收 —— 回收=进墓碑，会把自己要同步的那份也拦死。
+    const blanked = list.filter((a, i) => i !== lastIndex && a.content && a.content !== content);
     const oldEntry = list[lastIndex];
-    const toRemove = [...blanked, ...(oldEntry ? [oldEntry] : [])];
+    const toRemove = [
+      ...blanked,
+      ...(oldEntry && oldEntry.content && oldEntry.content !== content ? [oldEntry] : []),
+    ];
     void Promise.all(toRemove.map(a => removeEnsembleArchiveFromMemory(updated, a).catch(() => undefined)))
       .then(() => syncEnsembleArchiveToMemory(updated, next[lastIndex]))
       .then(result => {

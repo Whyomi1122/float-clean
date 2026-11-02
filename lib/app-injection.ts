@@ -23,16 +23,14 @@ import { buildEnsembleWorldBookBlock, pickBoundBooks, type StickyLedger } from "
 import { collectCastCharacterIds } from "./ensemble-memory-bridge";
 import type { WorldBookConfig } from "./settings-types";
 
-/** 可注入的 App 清单（设置页渲染用）。id 与引擎调用方传入的 appId 一致。 */
+/** 可注入的 App 清单（设置页渲染用）。id 与引擎调用方传入的 appId 一致。
+ *  2026-11-02 用户定稿：只这六个需要开关；其他引擎不在清单里，保持默认（不注入归档）。 */
 export const APP_INJECTION_APPS: { id: string; name: string; desc: string }[] = [
-    { id: "vn", name: "视觉小说", desc: "视觉小说 App 的 AI 对话" },
-    { id: "story", name: "故事", desc: "故事/剧情类 App 的 AI 对话" },
-    { id: "cocreate", name: "共创", desc: "共创 App 的 AI 对话" },
-    { id: "diary", name: "日记", desc: "AI 日记生成" },
-    { id: "dwelling", name: "栖所", desc: "栖所 App 的 AI 对话" },
     { id: "reading", name: "漫卷", desc: "漫卷/读书 App 的 AI 对话" },
-    { id: "map", name: "地图", desc: "地图冒险 App 的 AI 对话" },
-    { id: "black-market", name: "黑市", desc: "黑市场景的 AI 对话" },
+    { id: "diary", name: "手记", desc: "手记（AI 日记）生成" },
+    { id: "checkphone", name: "查手机", desc: "查手机 App 的 AI 对话" },
+    { id: "dwelling", name: "栖所", desc: "栖所 App 的 AI 对话" },
+    { id: "map", name: "冒险", desc: "冒险 App 的 AI 对话" },
     { id: "game", name: "游戏", desc: "游戏 App 的 AI 对话" },
 ];
 

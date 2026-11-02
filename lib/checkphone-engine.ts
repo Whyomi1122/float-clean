@@ -53,9 +53,10 @@ import {
 } from "./checkphone-json-repair";
 import type { LLMMessage } from "./llm-prompt-assembler";
 import { assemblePromptPayload } from "./llm-prompt-assembler";
-import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
+import { formatCoreMemories } from "./memory-injector";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
+import { retrieveCoreMemoriesForPrompt } from "./memory-service";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 import { getAllPosts, loadMomentComments } from "./moments-storage";
 import {
   canCharacterSeeMomentPost,
@@ -130,9 +131,10 @@ async function buildCheckPhoneManifestMessages(
     history: [],
   });
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(characterId, wbActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
+    buildAppInjectionMemories(characterId, wbActivationContext, memConfig, "checkphone"),
+    buildAppScriptWorldBookBlock(characterId, wbActivationContext, "checkphone"),
   ]);
 
   return assemblePromptPayload({
@@ -146,7 +148,7 @@ async function buildCheckPhoneManifestMessages(
     appTags: getCheckPhonePromptTags("manifest"),
     scheduleSummary: buildCalendarScheduleMarker("character", characterId, getWeekStartIso(new Date())),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     worldBookActivationContext: wbActivationContext,
     recentBlocks,
     unifiedRecentItems,
@@ -1187,9 +1189,10 @@ async function buildCheckPhoneAppMessages(
     history: [],
   });
 
-  const [memories, coreMemories] = await Promise.all([
-    retrieveMemoriesForPrompt(characterId, wbActivationContext, memConfig).catch(() => null),
+  const [coreMemories, longTermMemories, scriptWbBlock] = await Promise.all([
     retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
+    buildAppInjectionMemories(characterId, wbActivationContext, memConfig, "checkphone"),
+    buildAppScriptWorldBookBlock(characterId, wbActivationContext, "checkphone"),
   ]);
 
   return assemblePromptPayload({
@@ -1203,7 +1206,7 @@ async function buildCheckPhoneAppMessages(
     appTags: getCheckPhonePromptTags(appId),
     scheduleSummary: buildCalendarScheduleMarker("character", characterId, getWeekStartIso(new Date())),
     coreMemories: coreMemories ? formatCoreMemories(coreMemories) : "",
-    longTermMemories: memories ? formatLongTermMemories(memories) : "",
+    longTermMemories: [scriptWbBlock, longTermMemories].filter(s => s.trim()).join("\n"),
     worldBookActivationContext: wbActivationContext,
     recentBlocks,
     unifiedRecentItems,

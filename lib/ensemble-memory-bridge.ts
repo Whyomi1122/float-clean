@@ -66,46 +66,39 @@ export async function syncEnsembleArchiveToMemory(
 }
 
 /**
- * 把剧本全部归档按当前 cast 重灌一遍（档案面板"重新同步记忆库"按钮用）。
- * contentHash 幂等：已同步过的自动跳过（算入 synced），手动删过的会被墓碑拦截（算入 tombstoned）。
- * 撤销杀青→重新杀青导致墓碑误拦的场景，由 syncEnsembleArchiveAfterUndo 先解除墓碑解决。
+ * 把剧本全部归档按当前 cast **强制**重灌一遍（档案面板"重新同步记忆库"按钮用）。
+ * 剧本是唯一事实源：先解除各角色对应正文的墓碑再写入，所以手动在记忆库删过的归档
+ * 也会被恢复 —— 这是"修复"语义，用户点了就是要修齐。
+ * contentHash 幂等：本来就有且内容一致的，commitArchive 去重命中，不产生重复。
  */
 export async function resyncEnsembleArchivesToMemory(
     script: EnsembleScript,
     archives: EnsembleArchiveEntry[],
-): Promise<{ synced: number; tombstoned: number; failed: number; errors: Record<string, string> }> {
+): Promise<{ synced: number; failed: number; errors: Record<string, string> }> {
     const characterIds = collectCastCharacterIds(script);
     const bodyCache = archives
         .map(archive => ({ archive, body: buildEnsembleMemoryContent(script, archive) }))
         .filter(item => item.body);
     if (characterIds.length === 0 || bodyCache.length === 0) {
-        return { synced: 0, tombstoned: 0, failed: 0, errors: {} };
+        return { synced: 0, failed: 0, errors: {} };
     }
 
-    const { loadMemoryEntriesByType } = await import("./memory-storage");
-    const syncedByHash = new Map<string, number>();
-    for (const characterId of characterIds) {
-        try {
-            const entries = await loadMemoryEntriesByType(characterId, "archive");
-            for (const item of bodyCache) {
-                const hit = entries.find(e => e.metadata?.contentHash === item.body);
-                syncedByHash.set(item.body, (syncedByHash.get(item.body) ?? 0) + (hit ? 1 : 0));
-            }
-        } catch { /* 读取失败按未同步处理，交给 commitArchive */ }
-    }
+    const { removeDeletedHash } = await import("./memory-storage");
+    const { computeContentHash } = await import("./memory-types");
 
     let synced = 0;
-    let tombstoned = 0;
     let failed = 0;
     const errors: Record<string, string> = {};
     for (const { body } of bodyCache) {
+        const hash = computeContentHash(body);
         for (const characterId of characterIds) {
             try {
+                removeDeletedHash(characterId, hash);
                 const result = await commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE);
                 if (result.success) synced += 1;
                 else {
-                    tombstoned += 1;
-                    errors[characterId] = result.error || "被墓碑拦截";
+                    failed += 1;
+                    errors[characterId] = result.error || "写入被拒绝";
                 }
             } catch (error) {
                 failed += 1;
@@ -113,7 +106,7 @@ export async function resyncEnsembleArchivesToMemory(
             }
         }
     }
-    return { synced, tombstoned, failed, errors };
+    return { synced, failed, errors };
 }
 
 /**

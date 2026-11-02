@@ -379,7 +379,8 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
 
     // ── 导出/导入 ──
     const importFileInputRef = useRef<HTMLInputElement | null>(null);
-    const importModeRef = useRef<"merge" | "replace">("merge");
+    // 待确认导入的文件：选完文件先弹「合并/替换」确认
+    const [pendingImport, setPendingImport] = useState<File | null>(null);
     // App 注入开关状态（组件顶层，避免条件分支内 hook 违规）
     const [appInjectionState, setAppInjectionState] = useState<Record<string, boolean>>(() =>
         Object.fromEntries(APP_INJECTION_APPS.map(app => [app.id, isAppInjectionEnabled(app.id)])));
@@ -1440,22 +1441,11 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         </div>
                         <div className="menu-right"><ChevronRight size={16} /></div>
                     </button>
-                    <button type="button" className="menu-item" onClick={() => { importModeRef.current = "merge"; importFileInputRef.current?.click(); }} disabled={!selectedCharId || importing}>
+                    <button type="button" className="menu-item" onClick={() => importFileInputRef.current?.click()} disabled={!selectedCharId || importing}>
                         <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
-                            <span className="menu-label">导入记忆（合并）</span>
-                            <span className="menu-desc">导入 txt 或 JSON，与现有记忆合并；原有记忆全部保留，不触发备份下载</span>
-                        </div>
-                        <div className="menu-right">
-                            {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
-                            <ChevronRight size={16} />
-                        </div>
-                    </button>
-                    <button type="button" className="menu-item" onClick={() => { importModeRef.current = "replace"; importFileInputRef.current?.click(); }} disabled={!selectedCharId || importing}>
-                        <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
-                        <div className="menu-label-group">
-                            <span className="menu-label">导入记忆（替换）</span>
-                            <span className="menu-desc">清空当前角色长期记忆后导入文件内容；导入前会自动备份现有数据为 txt</span>
+                            <span className="menu-label">导入记忆</span>
+                            <span className="menu-desc">选择 txt 或 JSON 文件后，再确认「合并」或「替换」方式导入</span>
                         </div>
                         <div className="menu-right">
                             {importing ? <span className="menu-desc mr-1">导入中…</span> : null}
@@ -1469,9 +1459,35 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         style={{ display: "none" }}
                         onChange={event => {
                             const file = event.target.files?.[0];
-                            if (file) void handleImportFile(file, importModeRef.current);
+                            event.target.value = "";
+                            if (file) setPendingImport(file);
                         }}
                     />
+                    {pendingImport ? (
+                        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45" onClick={() => setPendingImport(null)}>
+                            <div className="w-[86%] max-w-[360px] rounded-3xl bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+                                <p className="text-[15px] font-semibold text-black/85">选择导入方式</p>
+                                <p className="mt-1 text-[12px] text-black/50">文件：{pendingImport.name}</p>
+                                <button
+                                    type="button"
+                                    disabled={importing}
+                                    className="mt-4 w-full py-2.5 rounded-2xl bg-[#4f46e5] text-[13px] font-medium text-white active:scale-[0.985] transition-transform disabled:opacity-50"
+                                    onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "merge"); }}
+                                >
+                                    合并导入（保留原有记忆，不触发备份）
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={importing}
+                                    className="mt-2 w-full py-2.5 rounded-2xl bg-black/[0.06] text-[13px] font-medium text-black/70 active:scale-[0.985] transition-transform disabled:opacity-50"
+                                    onClick={() => { const f = pendingImport; setPendingImport(null); if (f) void handleImportFile(f, "replace"); }}
+                                >
+                                    替换导入（清空后导入，先自动备份旧数据）
+                                </button>
+                                <button type="button" className="mt-2 w-full py-2 text-[12px] text-black/40" onClick={() => setPendingImport(null)}>取消</button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
                 {sourcePickerOpen ? (                    <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setSourcePickerOpen(false)}>
