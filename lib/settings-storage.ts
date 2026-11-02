@@ -738,6 +738,7 @@ function normalizeOpenAiPreset(preset: Partial<OpenAiImagePreset> | null | undef
         size: typeof preset?.size === "string" ? preset.size : DEFAULT_IMAGE_GENERATION_SETTINGS.size,
         quality: typeof preset?.quality === "string" ? preset.quality : DEFAULT_IMAGE_GENERATION_SETTINGS.quality,
         extraPrompt: typeof preset?.extraPrompt === "string" ? preset.extraPrompt : "",
+        extraPromptNegative: typeof preset?.extraPromptNegative === "string" ? preset.extraPromptNegative : "",
     };
 }
 
@@ -765,6 +766,8 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
             assetId: typeof raw.assetId === "string" ? raw.assetId : "",
             updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
             featurePrompt: typeof raw.featurePrompt === "string" ? raw.featurePrompt : "",
+            featurePromptPositive: typeof raw.featurePromptPositive === "string" ? raw.featurePromptPositive : "",
+            featurePromptNegative: typeof raw.featurePromptNegative === "string" ? raw.featurePromptNegative : "",
             novelAiFeaturePromptEnabled: raw.novelAiFeaturePromptEnabled !== false,
             enabled: raw.enabled !== false,
             ...(validCrop ? { faceCrop: validCrop } : {}),
@@ -798,6 +801,7 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
             size: settings?.size,
             quality: settings?.quality,
             extraPrompt: settings?.extraPrompt,
+            extraPromptNegative: settings?.extraPromptNegative,
         }, 0)];
     const activeOpenAiPresetId = typeof settings?.activeOpenAiPresetId === "string"
         && openaiPresets.some(preset => preset.id === settings.activeOpenAiPresetId)
@@ -831,6 +835,7 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
         size: activeOpenAiPreset.size,
         quality: activeOpenAiPreset.quality,
         extraPrompt: activeOpenAiPreset.extraPrompt,
+        extraPromptNegative: activeOpenAiPreset.extraPromptNegative ?? "",
         openaiPresets,
         activeOpenAiPresetId,
         novelai,

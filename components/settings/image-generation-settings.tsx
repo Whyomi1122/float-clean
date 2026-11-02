@@ -13,6 +13,7 @@ import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { getChatImageFromIndexedDB, saveChatImageToIndexedDB } from "@/lib/chat-asset-storage";
 import {
+    composeImagePrompt,
     fetchImageGenerationModels,
     fetchNovelAiModels,
     filterLikelyImageModels,
@@ -147,26 +148,26 @@ export function ImageGenerationSettings() {
     const updateOpenAiPreset = useCallback((patch: Partial<OpenAiImagePreset>) => {
         const nextPresets = openaiPresets.map(preset => preset.id === activeOpenAiPresetId ? { ...preset, ...patch } : preset);
         const active = nextPresets.find(preset => preset.id === activeOpenAiPresetId) || nextPresets[0];
-        persist({ ...settings, openaiPresets: nextPresets, activeOpenAiPresetId, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt });
+        persist({ ...settings, openaiPresets: nextPresets, activeOpenAiPresetId, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt, extraPromptNegative: active.extraPromptNegative });
     }, [activeOpenAiPresetId, openaiPresets, persist, settings]);
 
     const addOpenAiPreset = useCallback(() => {
         const newId = `preset_openai_${Date.now()}`;
         const newPreset = { ...activeOpenAiPreset, id: newId, name: `${activeOpenAiPreset.name || "默认方案"}（副本）` };
-        persist({ ...settings, openaiPresets: [...openaiPresets, newPreset], activeOpenAiPresetId: newId, requestMode: newPreset.requestMode, apiKey: newPreset.apiKey, baseUrl: newPreset.baseUrl, model: newPreset.model, size: newPreset.size, quality: newPreset.quality, extraPrompt: newPreset.extraPrompt });
+        persist({ ...settings, openaiPresets: [...openaiPresets, newPreset], activeOpenAiPresetId: newId, requestMode: newPreset.requestMode, apiKey: newPreset.apiKey, baseUrl: newPreset.baseUrl, model: newPreset.model, size: newPreset.size, quality: newPreset.quality, extraPrompt: newPreset.extraPrompt, extraPromptNegative: newPreset.extraPromptNegative });
     }, [activeOpenAiPreset, openaiPresets, persist, settings]);
 
     const deleteOpenAiPreset = useCallback(() => {
         if (openaiPresets.length <= 1) return;
         const next = openaiPresets.filter(preset => preset.id !== activeOpenAiPresetId);
         const active = next[0];
-        persist({ ...settings, openaiPresets: next, activeOpenAiPresetId: active.id, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt });
+        persist({ ...settings, openaiPresets: next, activeOpenAiPresetId: active.id, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt, extraPromptNegative: active.extraPromptNegative });
     }, [activeOpenAiPresetId, openaiPresets, persist, settings]);
 
     const selectOpenAiPreset = useCallback((id: string) => {
         const active = openaiPresets.find(preset => preset.id === id);
         if (!active) return;
-        persist({ ...settings, activeOpenAiPresetId: id, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt });
+        persist({ ...settings, activeOpenAiPresetId: id, requestMode: active.requestMode, apiKey: active.apiKey, baseUrl: active.baseUrl, model: active.model, size: active.size, quality: active.quality, extraPrompt: active.extraPrompt, extraPromptNegative: active.extraPromptNegative });
     }, [openaiPresets, persist, settings]);
 
     // NovelAI 预设管理与状态
@@ -324,6 +325,8 @@ export function ImageGenerationSettings() {
     /** 更新角色的生图档案（外观提示词 / 参考图开关 / 人脸框选） */
     const updateReferenceProfile = (characterId: string, patch: {
         featurePrompt?: string;
+        featurePromptPositive?: string;
+        featurePromptNegative?: string;
         novelAiFeaturePromptEnabled?: boolean;
         enabled?: boolean;
         faceCrop?: { x: number; y: number; size: number } | undefined;
@@ -756,6 +759,19 @@ export function ImageGenerationSettings() {
                                 选择尺寸后会自动在末尾追加一句「{RATIO_HINT_MARKER}…」构图提示，用于纠正部分不认 size 参数的接口（如 gpt-image-2）。可手动修改或删除。
                             </p>
                         </div>
+
+                        <div className="flex flex-col gap-1">
+                            <label className="menu-desc ml-1">负向提示词（不要什么）</label>
+                            <Textarea
+                                value={activeOpenAiPreset.extraPromptNegative ?? ""}
+                                onChange={(event) => updateOpenAiPreset({ extraPromptNegative: event.target.value })}
+                                placeholder="例如：anime, 2.5D, CGI, plastic skin, doll-like face, extra fingers"
+                                rows={3}
+                            />
+                            <p className="menu-desc ml-1 opacity-70">
+                                GPT 系模型没有原生负向参数，会以「Avoid: …」的形式拼在提示词末尾。关键词用逗号分隔，越短越有效。
+                            </p>
+                        </div>
                     </>
                 )}
 
@@ -901,7 +917,12 @@ export function ImageGenerationSettings() {
                     ) : characters.map(character => {
                         const preview = referencePreviews[character.id];
                         const ref = settings.characterReferences?.[character.id];
-                        const hasProfile = Boolean(ref?.featurePrompt?.trim() || ref?.faceCrop);
+                        const hasProfile = Boolean(
+                            ref?.featurePrompt?.trim()
+                            || ref?.featurePromptPositive?.trim()
+                            || ref?.featurePromptNegative?.trim()
+                            || ref?.faceCrop
+                        );
                         return (
                             <div key={character.id} className="menu-item">
                             <span className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--c-input)]">
@@ -1039,17 +1060,35 @@ function CharacterImageProfileDialog({
     onClose: () => void;
     onSave: (patch: {
         featurePrompt: string;
+        featurePromptPositive: string;
+        featurePromptNegative: string;
         novelAiFeaturePromptEnabled: boolean;
         enabled: boolean;
         faceCrop?: { x: number; y: number; size: number };
     }) => void;
 }) {
-    const [featurePrompt, setFeaturePrompt] = useState(reference?.featurePrompt ?? "");
+    const [featurePositive, setFeaturePositive] = useState(
+        reference?.featurePromptPositive?.trim()
+        ?? (reference?.featurePrompt?.split(/反向|negative/i)[0] ?? "").trim()
+        ?? ""
+    );
+    const [featureNegative, setFeatureNegative] = useState(
+        reference?.featurePromptNegative?.trim()
+        ?? (reference?.featurePrompt?.match(/(?:反向|negative)([\s\S]*)/i)?.[1] ?? "").trim()
+    );
+    const [showPreview, setShowPreview] = useState(false);
     const [enabled, setEnabled] = useState(reference?.enabled !== false);
     const [novelAiEnabled, setNovelAiEnabled] = useState(reference?.novelAiFeaturePromptEnabled !== false);
     const [crop, setCrop] = useState<{ x: number; y: number; size: number } | undefined>(reference?.faceCrop);
     const [cropSize, setCropSize] = useState(reference?.faceCrop?.size ?? 0.45);
     const frameRef = useRef<HTMLDivElement | null>(null);
+
+    const previewPrompt = useMemo(() => composeImagePrompt({
+        description: "（这里会是角色输出的画面描述，如：他坐在窗边喝咖啡，看向镜头）",
+        extraNegative: "",
+        featurePrompt: featurePositive,
+        featureNegative: featureNegative,
+    }), [featurePositive, featureNegative]);
 
     const hasCrop = Boolean(crop && crop.size > 0);
 
@@ -1149,18 +1188,47 @@ function CharacterImageProfileDialog({
                 )}
 
                 <label className="flex flex-col gap-1">
-                    <span className="menu-label">专属外观提示词</span>
+                    <span className="menu-label">外观提示词 · 正向</span>
                     <textarea
-                        value={featurePrompt}
-                        onChange={event => setFeaturePrompt(event.target.value)}
+                        value={featurePositive}
+                        onChange={event => setFeaturePositive(event.target.value)}
                         rows={4}
-                        placeholder={"例如：1boy, 男性, 25岁, 黑色短发, 单眼皮, 高瘦, 深色大衣\n反向写法：正向1boy, male 反向feminine, girl, long hair"}
+                        placeholder={"例如：1boy, 男性, 25岁, 黑色短发, 单眼皮, 高瘦, 深色大衣"}
                         className="ui-input w-full resize-y"
                     />
                     <span className="menu-desc">
-                        每次生图自动追加到提示词末尾，用来固定性别与外貌。「反向xxx」部分会作为负面提示（OpenAI 兼容接口以「避免：xxx」拼接）。
+                        每次生图自动追加，用来固定性别与外貌。
                     </span>
                 </label>
+
+                <label className="flex flex-col gap-1">
+                    <span className="menu-label">外观提示词 · 负向（不要什么）</span>
+                    <textarea
+                        value={featureNegative}
+                        onChange={event => setFeatureNegative(event.target.value)}
+                        rows={3}
+                        placeholder={"例如：feminine, girl, long hair, breasts"}
+                        className="ui-input w-full resize-y"
+                    />
+                    <span className="menu-desc">
+                        专门防止男角色被画成女生。OpenAI 兼容接口以「Avoid: …」拼到提示词末尾；NovelAI 会并入原生负向参数。
+                    </span>
+                </label>
+
+                <div className="flex flex-col gap-1">
+                    <button
+                        type="button"
+                        className="ui-link-btn self-start"
+                        onClick={() => setShowPreview(v => !v)}
+                    >
+                        {showPreview ? "收起预览 ▲" : "预览最终提示词 ▼"}
+                    </button>
+                    {showPreview && (
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--c-input)]/60 p-3 ts-12 leading-relaxed text-[var(--c-text)]">
+{previewPrompt}
+                        </pre>
+                    )}
+                </div>
 
                 <div className="flex items-center justify-between">
                     <span className="menu-label">使用参考图（锁脸）</span>
@@ -1188,7 +1256,9 @@ function CharacterImageProfileDialog({
                         className="flex-1 rounded-xl py-2.5 ts-13 font-medium text-white"
                         style={{ background: "var(--c-icon-active)" }}
                         onClick={() => onSave({
-                            featurePrompt,
+                            featurePrompt: "",
+                            featurePromptPositive: featurePositive,
+                            featurePromptNegative: featureNegative,
                             novelAiFeaturePromptEnabled: novelAiEnabled,
                             enabled,
                             faceCrop: crop,

@@ -193,6 +193,8 @@ export type OpenAiImagePreset = {
     size: string;
     quality: string;
     extraPrompt: string;
+    /** 全局负向提示词（OpenAI 兼容以「Avoid: …」拼接） */
+    extraPromptNegative?: string;
 };
 
 export type ImageHostingProvider = "none" | "imgbb";
@@ -239,6 +241,8 @@ export type ImageGenerationSettings = {
     size: string;
     quality: string;
     extraPrompt: string;
+    /** 全局负向提示词（OpenAI 兼容以「Avoid: …」拼到末尾；NovelAI 进 uc） */
+    extraPromptNegative?: string;
     openaiPresets?: OpenAiImagePreset[];
     activeOpenAiPresetId?: string;
     // NovelAI 模式配置
@@ -246,8 +250,11 @@ export type ImageGenerationSettings = {
     characterReferences: Record<string, {
         assetId: string;
         updatedAt: number;
-        /** 角色专属外观提示词：每次生图自动追加（支持「正向xxx 反向xxx」写法）。移植自二改 f969e4b。 */
+        /** 角色专属外观提示词（正向）：每次生图自动追加。移植自二改 f969e4b。 */
         featurePrompt?: string;
+        /** 角色专属外观提示词（负向）：OpenAI 兼容以 Avoid 句拼接，NovelAI 进 uc。 */
+        featurePromptPositive?: string;
+        featurePromptNegative?: string;
         /** NovelAI 分支是否启用外观提示词（OpenAI 兼容分支始终使用） */
         novelAiFeaturePromptEnabled?: boolean;
         /** 参考图单独开关：false = 暂不使用参考图（保留 assetId 与 faceCrop） */

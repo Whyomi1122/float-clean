@@ -58,6 +58,36 @@ function mergePrompt(description: string, extraPrompt: string, featurePrompt = "
   return feature ? `${base}\n\n${feature}` : base;
 }
 
+/** 把多段负向词合成一句「Avoid: ...」，OpenAI 兼容接口没有原生 negative 时的折中做法。 */
+export function composeNegativeSentence(...negatives: (string | undefined)[]): string {
+  const merged = negatives
+    .map(item => (item ?? "").replace(/\s*\n\s*/g, ", ").trim())
+    .filter(Boolean)
+    .join(", ");
+  if (!merged) return "";
+  return `Avoid: ${merged}`;
+}
+
+/**
+ * 组装最终生图提示词（UI 预览与实际请求共用，保证「看到的就是发出去的」）。
+ * 顺序：本张画面描述 → 全局正向 → 角色正向 → Avoid（全局负向 + 角色负向）
+ */
+export function composeImagePrompt(params: {
+  description: string;
+  extraPrompt?: string;
+  extraNegative?: string;
+  featurePrompt?: string;
+  featureNegative?: string;
+}): string {
+  const parts = [
+    params.description.trim(),
+    (params.extraPrompt ?? "").trim(),
+    (params.featurePrompt ?? "").trim(),
+  ].filter(Boolean);
+  const avoid = composeNegativeSentence(params.extraNegative, params.featureNegative);
+  return avoid ? `${parts.join("\n\n")}\n\n${avoid}` : parts.join("\n\n");
+}
+
 /** 专属提示词支持「正向xxx 反向xxx」写法，拆成两段分别使用（移植自二改 c404aec）。 */
 export function splitFeaturePrompt(raw: string): { positive: string; negative: string } {
   const text = (raw ?? "").trim();
@@ -770,6 +800,12 @@ export async function generateImageFromConfiguredApi(params: {
   const description = params.description.trim();
   if (!description) return null;
 
+  // 角色专属外观提示词：正向/负向分别取字段，旧数据的单框「正向…反向…」写法仍兼容
+  const characterRef = params.characterId ? settings.characterReferences[params.characterId] : undefined;
+  const featureSplit = splitFeaturePrompt(characterRef?.featurePrompt ?? "");
+  const featurePositive = (characterRef?.featurePromptPositive ?? featureSplit.positive).trim();
+  const featureNegative = (characterRef?.featurePromptNegative ?? featureSplit.negative).trim();
+
   // NovelAI 模式
   if (settings.provider === "novelai") {
     const naiApiKey = settings.novelai?.apiKey?.trim();
@@ -780,21 +816,27 @@ export async function generateImageFromConfiguredApi(params: {
       : [DEFAULT_NOVELAI_PRESET];
     const activePreset = presets.find(p => p.id === settings.novelai?.activePresetId) || presets[0];
 
-    // 角色专属外观提示词（可单独控制在 NovelAI 是否启用）
-    const characterRef = params.characterId ? settings.characterReferences[params.characterId] : undefined;
-    const featurePrompt = characterRef?.novelAiFeaturePromptEnabled === false
-      ? ""
-      : characterRef?.featurePrompt ?? "";
+    const naiFeaturePositive = characterRef?.novelAiFeaturePromptEnabled === false ? "" : featurePositive;
 
     const positiveParts: string[] = [];
     if (activePreset.positivePrompt?.trim()) positiveParts.push(activePreset.positivePrompt.trim());
     if (description) positiveParts.push(description);
     const fullPrompt = positiveParts.join(", ");
-    const finalPrompt = mergePrompt(fullPrompt, "", featurePrompt);
+    const finalPrompt = mergePrompt(fullPrompt, "", naiFeaturePositive);
+
+    // NovelAI 有原生 negative，负向统一进 uc
+    const negativeParts = [
+      activePreset.negativePrompt?.trim(),
+      (settings.extraPromptNegative ?? "").trim(),
+      (characterRef?.novelAiFeaturePromptEnabled === false ? "" : featureNegative),
+    ].filter(Boolean);
+    const presetForRequest = negativeParts.length > 0
+      ? { ...activePreset, negativePrompt: negativeParts.join(", ") }
+      : activePreset;
 
     const data = settings.requestMode === "direct"
-      ? await generateNovelAiDirect({ apiKey: naiApiKey, preset: activePreset, prompt: finalPrompt, signal: params.signal })
-      : await generateNovelAiViaServer({ apiKey: naiApiKey, preset: activePreset, prompt: finalPrompt, signal: params.signal });
+      ? await generateNovelAiDirect({ apiKey: naiApiKey, preset: presetForRequest, prompt: finalPrompt, signal: params.signal })
+      : await generateNovelAiViaServer({ apiKey: naiApiKey, preset: presetForRequest, prompt: finalPrompt, signal: params.signal });
 
     throwIfAborted(params.signal);
     const mimeType = data.mimeType || "image/png";
@@ -831,10 +873,14 @@ export async function generateImageFromConfiguredApi(params: {
     : null;
   throwIfAborted(params.signal);
 
-  // 专属外观提示词：正向追加到提示词末尾；反向词以「避免：xxx」拼进正向（OpenAI 兼容接口无原生 negative）
-  const { positive: featurePositive, negative: featureNegative } = splitFeaturePrompt(reference?.featurePrompt ?? "");
-  const negativeSuffix = featureNegative ? `。避免：${featureNegative}` : "";
-  const prompt = mergePrompt(description, openaiSettings.extraPrompt, `${featurePositive}${negativeSuffix}`);
+  // 专属外观提示词已在上方解析；负向以 Avoid 句拼在末尾（OpenAI 兼容接口无原生 negative）
+  const prompt = composeImagePrompt({
+    description,
+    extraPrompt: openaiSettings.extraPrompt,
+    extraNegative: openaiSettings.extraPromptNegative,
+    featurePrompt: featurePositive,
+    featureNegative,
+  });
 
   const data = openaiSettings.requestMode === "direct"
     ? await generateImageDirect({ settings: openaiSettings, prompt, referenceImageDataUrl, signal: params.signal })
