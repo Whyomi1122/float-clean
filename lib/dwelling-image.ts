@@ -2,6 +2,9 @@ import type { DwellingRoom } from "./dwelling-storage";
 import { loadDwellingImageEnabled } from "./dwelling-storage";
 import { loadImageGenerationSettings } from "./settings-storage";
 import { generateImageFromConfiguredApi } from "./image-generation-service";
+import { loadCharacters } from "./character-storage";
+import { loadMemoryConfig } from "./memory-storage";
+import { buildAppInjectionMemories, buildAppScriptWorldBookBlock } from "./app-injection";
 
 // ── Availability ──────────────────────────────
 
@@ -45,6 +48,43 @@ function buildRoomImagePrompt(room: DwellingRoom): string {
         ? `画面细节参考（从中挑选有画面感的自然呈现，小物件只需模糊暗示，画面中不要出现任何可读的文字、字母或数字）：${details}。`
         : "";
     return `${base}。${mustLine}${detailLine}${DWELLING_IMAGE_STYLE_SUFFIX}`;
+}
+
+// ── 角色与剧情氛围注入（2026-11-02）──────────────
+// 房间不该是凭空的房子：人设（职业/性格→装修风格）、长期记忆、剧情归档、
+// 剧本世界书都应影响画面，否则与故事线割裂。
+// 口径与栖所对话一致：长期记忆/人设始终注入；归档+世界书跟随「栖所」注入开关（默认关）。
+
+/** 各段上限，防止生图提示词被撑爆（生图模型吃不了长上下文） */
+const ROOM_CONTEXT_LIMITS = { persona: 200, memories: 400, worldBook: 250 } as const;
+
+async function buildRoomStoryContext(characterId: string): Promise<string> {
+    const parts: string[] = [];
+
+    // 1. 人设（角色卡）：性格与职业决定房间气质
+    try {
+        const character = loadCharacters().find(c => c.id === characterId);
+        const persona = (character?.persona ?? "").trim();
+        if (persona) {
+            parts.push(`角色设定（房间应反映其职业、性格与生活习惯）：${persona.slice(0, ROOM_CONTEXT_LIMITS.persona)}`);
+        }
+    } catch { /* 人设缺失不阻塞生图 */ }
+
+    // 2. 长期记忆 + 归档（归档跟随栖所注入开关）+ 3. 剧本世界书（同开关）
+    try {
+        const memConfig = loadMemoryConfig();
+        const [memories, worldBookBlock] = await Promise.all([
+            buildAppInjectionMemories(characterId, "房间布置与近期生活", memConfig, "dwelling"),
+            buildAppScriptWorldBookBlock(characterId, "房间布置与近期生活", "dwelling"),
+        ]);
+        const memText = memories.trim();
+        if (memText) parts.push(`近期经历与生活痕迹（可体现在房间的细节里）：${memText.slice(0, ROOM_CONTEXT_LIMITS.memories)}`);
+        const wbText = worldBookBlock.trim();
+        if (wbText) parts.push(`世界设定参考（影响房间风格与物品）：${wbText.slice(0, ROOM_CONTEXT_LIMITS.worldBook)}`);
+    } catch { /* 记忆缺失不阻塞生图 */ }
+
+    if (parts.length === 0) return "";
+    return `【角色与剧情氛围参考——通过房间陈设、摆放状态与生活痕迹自然体现，不要出现任何人物】\n${parts.join("\n")}`;
 }
 
 export type DwellingRoomImageResult = { assetId: string | null; error?: string };
@@ -95,8 +135,11 @@ export async function generateDwellingRoomImage(
         try {
             const availability = getDwellingImageAvailability();
             if (!availability.available) return { assetId: null, error: "生图未开启" };
+            // 房间图注入角色与剧情氛围（人设+记忆+归档+世界书，按栖所开关口径）
+            const storyContext = await buildRoomStoryContext(characterId).catch(() => "");
             const result = await generateImageFromConfiguredApi({
-                description: buildRoomImagePrompt(room),
+                description: [buildRoomImagePrompt(room), storyContext].filter(Boolean).join("\n\n"),
+                characterId,
                 signal: controller.signal,
             });
             if (!result) return { assetId: null, error: "生图未配置或已关闭" };
