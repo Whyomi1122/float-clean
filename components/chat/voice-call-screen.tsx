@@ -105,6 +105,22 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
     const sttRef = useRef<STTSession | null>(null);
     const audioAbortRef = useRef<(() => void) | null>(null);
+    // 扬声器 = 出声总开关（参考设计的核心心智模型）：关 = TTS 全部跳过播放，只出字幕。
+    // 环境音将来也挂这个开关下。
+    const [speakerOn, setSpeakerOn] = useState(true);
+    const speakerOnRef = useRef(true);
+    useEffect(() => { speakerOnRef.current = speakerOn; }, [speakerOn]);
+    const toggleSpeaker = useCallback(() => {
+        setSpeakerOn(prev => {
+            const next = !prev;
+            speakerOnRef.current = next;
+            if (!next && audioAbortRef.current) {
+                audioAbortRef.current();
+                audioAbortRef.current = null;
+            }
+            return next;
+        });
+    }, []);
     const requestAbortRef = useRef<AbortController | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const callStartRef = useRef<number>(0);
@@ -421,6 +437,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             }
                         } catch (error) { console.warn("[VoiceCall] 保存原音失败", error); }
                         if (stateRef.current === "ENDED") break;
+                        // 扬声器总开关（参考设计）：关 = 只出字幕不出声，直接跳过播放
+                        if (!speakerOnRef.current) continue;
                         const { promise, abort } = playCallAudio(audioBlob);
                         audioAbortRef.current = abort;
                         await promise;
@@ -1035,7 +1053,23 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 </svg>
                             </button>
 
-                            <CallVolumeControl inBottomBar />
+                            {/* 扬声器 = 出声总开关：关 = 角色只出字幕不出声（环境音将来也挂这里） */}
+                            <button
+                                onClick={toggleSpeaker}
+                                className="ui-call-btn ui-call-btn-muted"
+                                {...(speakerOn ? {} : { "data-checked": "" })}
+                                aria-label={speakerOn ? "关闭声音（只看字幕）" : "开启声音"}
+                                title={speakerOn ? "关闭声音（只看字幕）" : "开启声音"}
+                            >
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                                    {speakerOn ? (
+                                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" />
+                                    ) : (
+                                        <><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></>
+                                    )}
+                                </svg>
+                            </button>
                         </>
                     ) : androidTextInputOnly ? (
                         <>
