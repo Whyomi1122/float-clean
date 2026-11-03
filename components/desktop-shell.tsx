@@ -1039,6 +1039,13 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   const [desktopReady, setDesktopReady] = useState(false);
   const [glassPaintPass, setGlassPaintPass] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // 通知序号：每次弹通知 +1，保证同文案重复弹出时也会重置自动消失定时器
+  // （修复「已删除」等提示一直挂着不消失：同字符串 setState 不触发 effect 重跑）
+  const [noticeSeq, setNoticeSeq] = useState(0);
+  const pushNotice = useCallback((text: string) => {
+    setNotice(text);
+    setNoticeSeq(seq => seq + 1);
+  }, []);
   const [activeApp, setActiveApp] = useState<DesktopIconId | null>(null);
   const [customApps, setCustomApps] = useState<InstalledCustomApp[]>([]);
   // 自定义 APP 桌面图标样式偏好（global = 忽略上传图标走全局效果）
@@ -1110,6 +1117,7 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
           setActiveApp(e.data.appId as DesktopIconId);
         } else if (e.data.action === "show_notice" && typeof e.data.message === "string") {
           setNotice(e.data.message);
+          setNoticeSeq(seq => seq + 1);
         } else if (e.data.action === "simulate_call" && typeof e.data.charName === "string") {
           setIncomingCall({
             sessionId: `diy-${Date.now()}`,
@@ -2088,13 +2096,16 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     }
     const timeout = window.setTimeout(() => setNotice(null), 2200);
     return () => window.clearTimeout(timeout);
-  }, [notice]);
+  }, [notice, noticeSeq]);
 
   // Global notice from mascot (or other non-prop sources)
   useEffect(() => {
     const onGlobalNotice = (e: Event) => {
       const text = (e as CustomEvent).detail;
-      if (text) setNotice(text);
+      if (text) {
+        setNotice(text);
+        setNoticeSeq(seq => seq + 1);
+      }
     };
     window.addEventListener("global-notice", onGlobalNotice);
     return () => window.removeEventListener("global-notice", onGlobalNotice);
@@ -2105,9 +2116,9 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     void completePendingMcpOAuthCallback().then((result) => {
       if (cancelled || !result.completed) return;
       if (result.success) {
-        setNotice(result.serverName ? `${result.serverName} 授权成功` : "MCP 授权成功");
+        pushNotice(result.serverName ? `${result.serverName} 授权成功` : "MCP 授权成功");
       } else {
-        setNotice(`MCP 授权失败：${result.error || "未知错误"}`);
+        pushNotice(`MCP 授权失败：${result.error || "未知错误"}`);
       }
     });
     return () => {
@@ -2292,7 +2303,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     if (!appId) return;
     const app = getFreshInstalledCustomApp(appId);
     if (!app) {
-      setNotice("这个 APP 已被卸载或不存在。");
+      pushNotice("这个 APP 已被卸载或不存在。");
       return;
     }
     activateCustomApp(app.id, launchContext);
@@ -3842,7 +3853,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     const shouldKeepMounted = isBusy ?? xiaohongshuBusy;
     setActiveApp(null);
     if (shouldKeepMounted) {
-      setNotice("小红书正在后台生成，完成后会自动更新。");
+      pushNotice("小红书正在后台生成，完成后会自动更新。");
       return;
     }
     setXiaohongshuBusy(false);
@@ -3853,7 +3864,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     const shouldKeepMounted = isBusy ?? shoppingBusy;
     setActiveApp(null);
     if (shouldKeepMounted) {
-      setNotice("购物正在后台生成，完成后会自动更新。");
+      pushNotice("购物正在后台生成，完成后会自动更新。");
       return;
     }
     setShoppingBusy(false);
@@ -3892,12 +3903,12 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       });
       setCustomApps(loadInstalledCustomApps());
       setCustomAppUpdatePrompt(null);
-      setNotice(result.previousVersion === result.installed.version
+      pushNotice(result.previousVersion === result.installed.version
         ? `已同步「${result.installed.name}」`
         : `已更新「${result.installed.name}」到 v${result.installed.version}`);
       activateCustomApp(result.installed.id, pending.launchContext);
     } catch (err) {
-      setNotice(`更新失败：${err instanceof Error ? err.message : String(err)}`);
+      pushNotice(`更新失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCustomAppUpdateBusy(false);
     }
@@ -4851,7 +4862,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                                 }
                               }
                             }
-                            if (!placed) setNotice("当前页面没有足够空间");
+                            if (!placed) pushNotice("当前页面没有足够空间");
                             setShowWidgetPicker(false);
                           }}
                         >
@@ -4890,7 +4901,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                                 }
                               }
                             }
-                            if (!placed) setNotice("当前页面没有足够空间");
+                            if (!placed) pushNotice("当前页面没有足够空间");
                             setShowWidgetPicker(false);
                           }}
                         >
