@@ -13,6 +13,12 @@ export type CloudSttConfig = {
     baseUrl: string;
     apiKey: string;
     model: string;
+    /** 识别通道：openai = OpenAI 兼容 /audio/transcriptions；aliyun = 阿里云一句话识别 */
+    provider?: "openai" | "aliyun";
+    /** 阿里云智能语音交互项目的 appkey（provider=aliyun 时必填） */
+    aliyunAppKey?: string;
+    /** 阿里云一句话识别模型：通用/识音石V1 等，默认 general */
+    aliyunModel?: string;
 };
 
 const DEFAULT_STT_MODEL = "whisper-1";
@@ -21,10 +27,27 @@ const TRANSCRIBE_TIMEOUT_MS = 60_000;
 const MAX_RECORDING_MS = 60_000;
 
 function toCloudSttConfig(config: VoiceApiConfig | undefined | null): CloudSttConfig | null {
-    if (!config || config.provider !== "OpenAI") return null;
+    if (!config || config.enableSTT === false) return null;
+
+    // 阿里云一句话识别：密钥由服务端托管（/api/asr/aliyun-token），
+    // 前端只需要 appkey + 系统级 AK 配置是否存在（由路由返回 501 判定）。
+    if (config.provider === "Aliyun") {
+        const appKey = config.apiKey?.trim();
+        if (!appKey) return null;
+        return {
+            provider: "aliyun",
+            baseUrl: "",
+            apiKey: "",
+            model: "",
+            aliyunAppKey: appKey,
+            aliyunModel: config.sttModel?.trim() || "general",
+        };
+    }
+
+    if (config.provider !== "OpenAI") return null;
     if (!config.apiKey?.trim()) return null;
-    if (config.enableSTT === false) return null;
     return {
+        provider: "openai",
         baseUrl: (config.baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, ""),
         apiKey: config.apiKey.trim(),
         model: config.sttModel?.trim() || DEFAULT_STT_MODEL,
@@ -134,6 +157,9 @@ export async function startCallRecording(): Promise<ActiveCallRecording> {
 
 /** 调 OpenAI 兼容 /audio/transcriptions 把录音转文字。 */
 export async function transcribeAudioBlob(blob: Blob, config: CloudSttConfig): Promise<string> {
+    if (config.provider === "aliyun") {
+        return transcribeWithAliyun(blob, config);
+    }
     const type = (blob.type || "").toLowerCase();
     const ext = type.includes("mp4") ? "mp4"
         : type.includes("ogg") ? "ogg"
@@ -163,6 +189,119 @@ export async function transcribeAudioBlob(blob: Blob, config: CloudSttConfig): P
         }
         // response_format=text 风格的中转直接回纯文本
         return (await res.text()).trim();
+    } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") {
+            throw new Error(`语音识别超时（超过 ${Math.round(TRANSCRIBE_TIMEOUT_MS / 1000)} 秒无响应）`);
+        }
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// ── 阿里云一句话识别（2026-11-02 接入）─────────────────────────
+// 链路：录音 blob → 解码重采样成 16k 单声道 WAV → 取 Token（服务端 /api/asr/aliyun-token）
+//       → POST nls-gateway 一句话识别 RESTful → 文本
+// Token 与 AccessKey 都由服务端托管，前端只带 appkey。
+
+const ALIYUN_TOKEN_ENDPOINT = "/api/asr/aliyun-token";
+const ALIYUN_ASR_ENDPOINT = "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr";
+
+/** 16k 单声道 PCM(16bit) 与阿里云格式码对应：pcm；这里统一编码成 wav */
+async function blobToWav16kMono(blob: Blob): Promise<Blob> {
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    try {
+        const decoded = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+        const channels = decoded.numberOfChannels;
+        const frames = decoded.length;
+        // 多声道下混成单声道
+        const mono = new Float32Array(frames);
+        for (let ch = 0; ch < channels; ch++) {
+            const data = decoded.getChannelData(ch);
+            for (let i = 0; i < frames; i++) mono[i] += data[i] / channels;
+        }
+        // 简单的最近邻重采样到 16k（一句话识别对采样率敏感，AI 语音输入足够用）
+        const targetRate = 16000;
+        const ratio = decoded.sampleRate / targetRate;
+        const outLen = Math.max(1, Math.floor(frames / ratio));
+        const pcm = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+            const src = Math.min(frames - 1, Math.floor(i * ratio));
+            const sample = Math.max(-1, Math.min(1, mono[src]));
+            pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        // 组装最小 WAV 头（RIFF / PCM / 16bit / 单声道 / 16k）
+        const header = new ArrayBuffer(44);
+        const view = new DataView(header);
+        const writeStr = (offset: number, str: string) => {
+            for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+        };
+        const dataSize = pcm.byteLength;
+        writeStr(0, "RIFF");
+        view.setUint32(4, 36 + dataSize, true);
+        writeStr(8, "WAVE");
+        writeStr(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);          // PCM
+        view.setUint16(22, 1, true);          // 单声道
+        view.setUint32(24, targetRate, true);
+        view.setUint32(28, targetRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, "data");
+        view.setUint32(40, dataSize, true);
+        return new Blob([header, pcm.buffer], { type: "audio/wav" });
+    } finally {
+        void audioCtx.close();
+    }
+}
+
+async function fetchAliyunToken(): Promise<string> {
+    const res = await fetch(ALIYUN_TOKEN_ENDPOINT, { cache: "no-store" });
+    const data = await res.json().catch(() => null) as { token?: string; error?: string } | null;
+    if (!res.ok || !data?.token) {
+        if (res.status === 501) {
+            throw new Error("阿里云语音未配置：请在 Vercel 环境变量里设置 ALIYUN_AK_ID / ALIYUN_AK_SECRET");
+        }
+        throw new Error(data?.error || `获取阿里云 Token 失败（HTTP ${res.status}）`);
+    }
+    return data.token;
+}
+
+async function transcribeWithAliyun(blob: Blob, config: CloudSttConfig): Promise<string> {
+    const appKey = config.aliyunAppKey?.trim();
+    if (!appKey) throw new Error("请先在设置里填写阿里云项目的 appkey");
+
+    const [token, wav] = await Promise.all([fetchAliyunToken(), blobToWav16kMono(blob)]);
+    const url = `${ALIYUN_ASR_ENDPOINT}?appkey=${encodeURIComponent(appKey)}`
+        + `&format=wav&sample_rate=16000&enable_punctuation_prediction=true`
+        + `&enable_inverse_text_normalization=true&enable_voice_detection=false`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "X-NLS-Token": token,
+                "Content-Type": "application/octet-stream",
+            },
+            body: wav,
+            signal: controller.signal,
+        });
+        const data = await res.json().catch(() => null) as {
+            status?: number;
+            message?: string;
+            result?: string;
+        } | null;
+        if (!res.ok || !data || data.status !== 20000000) {
+            const msg = data?.message || `HTTP ${res.status}`;
+            if (data?.status === 40000001) {
+                throw new Error("阿里云识别失败：Token 无效或服务未开通（40000001）");
+            }
+            throw new Error(`阿里云一句话识别失败：${msg}`);
+        }
+        return (data.result ?? "").trim();
     } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
             throw new Error(`语音识别超时（超过 ${Math.round(TRANSCRIBE_TIMEOUT_MS / 1000)} 秒无响应）`);

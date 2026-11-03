@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
 import { Alert } from "@/components/ui/feedback";
 
-const SUPPORTED_VOICE_PROVIDERS = new Set(["Minimax", "OpenAI"]);
+const SUPPORTED_VOICE_PROVIDERS = new Set(["Minimax", "OpenAI", "Aliyun"]);
 const MINIMAX_BASE_URL_OPTIONS = [
     { id: "cn", label: "国内版", baseUrl: "https://api.minimaxi.com/v1" },
     { id: "global", label: "海外版", baseUrl: "https://api.minimax.io/v1" },
@@ -30,6 +30,7 @@ const VOICE_PROVIDER_OPTIONS = [
     { value: "OpenAI", label: "OpenAI TTS" },
     { value: "MinimaxCN", label: "Minimax 语音国内版" },
     { value: "MinimaxGlobal", label: "Minimax 语音海外版" },
+    { value: "Aliyun", label: "阿里云一句话识别（仅 STT）" },
 ];
 
 const DEFAULT_VOICE_CONFIGS: VoiceApiConfig[] = [
@@ -736,6 +737,37 @@ export function VoiceSettings() {
                                                         placeholder="whisper-1（留空使用默认）"
                                                     />
                                                     <span className="menu-desc ml-1">通话「按住说话」用它把录音转成文字（非 iOS 设备生效），走同一个接口地址与密钥</span>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {config.provider === "Aliyun" && (
+                                            <>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="menu-desc ml-1">项目 AppKey</label>
+                                                    <Input
+                                                        type="text"
+                                                        value={config.apiKey}
+                                                        onChange={(e) => updateConfig(config.id, { apiKey: e.target.value })}
+                                                        placeholder="阿里云智能语音交互项目的 appkey"
+                                                    />
+                                                    <span className="menu-desc ml-1">
+                                                        在阿里云「智能语音交互 → 全部项目」里复制 appkey。AccessKey 不放这里——由服务端环境变量
+                                                        ALIYUN_AK_ID / ALIYUN_AK_SECRET 托管，前端只拿 24 小时有效的临时 Token。
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="menu-desc ml-1">识别模型</label>
+                                                    <select
+                                                        value={config.sttModel || "general"}
+                                                        onChange={(e) => updateConfig(config.id, { sttModel: e.target.value })}
+                                                        className="ui-select"
+                                                    >
+                                                        <option value="general">通用（中文普通话）</option>
+                                                    </select>
+                                                    <span className="menu-desc ml-1">
+                                                        仅用于通话「按住说话」。录音自动转 16k 单声道 WAV 上传，单段上限 60 秒。
+                                                    </span>
                                                 </div>
                                             </>
                                         )}
