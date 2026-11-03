@@ -467,7 +467,10 @@ export function BindingManager() {
             case "apiConfigId":
                 return apiConfigs.map(c => ({ id: c.id, name: c.name || c.provider }));
             case "voiceConfigId":
-                return voiceConfigs.map(c => ({ id: c.id, name: c.name || c.provider }));
+                // 阿里云配置只负责语音识别（STT），不参与角色发声，不能绑成角色音色
+                return voiceConfigs
+                    .filter(c => c.provider !== "Aliyun")
+                    .map(c => ({ id: c.id, name: c.name || c.provider }));
             case "presetId":
                 return presets.map(p => ({ id: p.id, name: p.name }));
             case "userIdentityId":
