@@ -7643,3 +7643,102 @@
   color: #ff9d9d;
 }
 .call-replay-text { white-space: pre-wrap; }
+
+/* ===== 通话页：台词旁 ✏️ 编辑按钮 + 行内编辑 + 右上「···」菜单 ===== */
+.call-subtitle { position: relative; }
+.call-subtitle-edit-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+.call-subtitle[data-role="assistant"] { padding-right: 32px; }
+.call-subtitle-edit-btn:active { background: rgba(255, 255, 255, 0.24); }
+.call-subtitle-edit {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 14.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+.call-subtitle-edit::placeholder { color: rgba(255, 255, 255, 0.45); }
+.call-subtitle-cleared { opacity: 0.55; font-style: italic; }
+.call-subtitle-edit-hint {
+  align-self: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.call-more-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+.call-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+}
+.call-more-panel {
+  position: absolute;
+  top: 52px;
+  right: 12px;
+  z-index: 41;
+  min-width: 210px;
+  background: #1c2230;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.call-more-panel button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 14px;
+  color: #e8eaf0;
+  cursor: pointer;
+}
+.call-more-panel button:hover { background: rgba(255, 255, 255, 0.07); }
+.call-more-value { font-size: 12.5px; color: rgba(232, 234, 240, 0.65); }
+.call-more-hint {
+  margin: 0 12px 6px;
+  font-size: 11.5px;
+  color: rgba(232, 234, 240, 0.5);
+}
+.call-subtitle[data-subtitles-hidden] {
+  text-align: center;
+  opacity: 0.55;
+  font-style: italic;
+}

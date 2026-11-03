@@ -97,6 +97,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [selectedSubtitle, setSelectedSubtitle] = useState<SubtitleEntry | null>(null);
     const [editText, setEditText] = useState("");
     const [editingSubtitle, setEditingSubtitle] = useState(false);
+    const [callMenuOpen, setCallMenuOpen] = useState(false);
+    const [subtitlesHidden, setSubtitlesHidden] = useState(false);
     const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestReplyIdsRef = useRef<string[]>([]);
     const [miniPosition, setMiniPosition] = useState<{ left: number; top: number } | null>(null);
@@ -671,13 +673,26 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         return () => clearTimeout(timer);
     }, [autoChat, autoCount, callState, pendingCount, typedText, minimized]);
 
-    const applySubtitleEdit = () => {
-        if (!selectedSubtitle || !editText.trim()) return;
-        updateChatMessage(selectedSubtitle.id, { content: editText.trim(), mediaType: undefined, mediaUrl: undefined, mediaData: undefined });
+    // 台词编辑：允许保存为空（清空 = 放弃用户创作，空台词只是中间态）；
+    // regenerate=true 表示"清空后按发送键让角色重说"——删除本轮 AI 台词并重新开一轮。
+    const applySubtitleEdit = (regenerate = false) => {
+        if (!selectedSubtitle) return;
+        const next = editText.trim();
+        if (regenerate && next) return; // 重新生成只针对已清空的台词
+        updateChatMessage(selectedSubtitle.id, { content: next, mediaType: undefined, mediaUrl: undefined, mediaData: undefined });
         messagesRef.current = loadChatMessages(session.id);
-        setSubtitles(items => items.map(item => item.id === selectedSubtitle.id ? { ...item, text: editText.trim() } : item));
+        setSubtitles(items => items.map(item => item.id === selectedSubtitle.id ? { ...item, text: next } : item));
         setSelectedSubtitle(null);
         setEditingSubtitle(false);
+        if (regenerate) {
+            // 与原"重新生成"一致：删掉本轮 AI 台词（含这条已清空的），再开一轮
+            const ids = new Set(latestReplyIdsRef.current);
+            ids.add(selectedSubtitle.id);
+            for (const id of ids) deleteChatMessage(id);
+            messagesRef.current = loadChatMessages(session.id);
+            setSubtitles(items => items.filter(item => !ids.has(item.id)));
+            void turnRef.current();
+        }
     };
 
     // ── Hangup ──────────────────────────────────────
@@ -781,7 +796,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
             {/* Content wrapper — force white text so themes don't override call UI */}
             <div className="voicecall-controls gcall-body">
-                {/* Top: Duration + Status */}
+                {/* Top: Duration + Status + 「···」通话菜单（自动搭话 / 字幕显隐；通话偏好将来也放这） */}
                 <div className="gcall-topbar">
                     <div className="gcall-topbar-title">
                         {character.name}
@@ -793,6 +808,46 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         {callState !== "CONNECTING" && callState !== "ENDED" ? `${formatTime(callDuration)} · ` : ""}
                         {stateLabel()}
                     </div>
+                    <button
+                        type="button"
+                        className="call-more-btn"
+                        onClick={() => setCallMenuOpen(value => !value)}
+                        aria-expanded={callMenuOpen}
+                        aria-label="通话选项"
+                    >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" />
+                        </svg>
+                    </button>
+                    {callMenuOpen && (
+                        <>
+                            <div className="call-more-backdrop" onClick={() => setCallMenuOpen(false)} aria-hidden="true" />
+                            <div className="call-more-panel" role="menu" aria-label="通话选项">
+                                <button
+                                    type="button"
+                                    role="menuitemcheckbox"
+                                    aria-checked={autoChat}
+                                    onClick={() => setAutoChat(value => !value)}
+                                >
+                                    <span>自动搭话{autoChat ? ` · ${autoCount}/3` : ""}</span>
+                                    <span className="call-more-value">{autoChat ? "开" : "关"}</span>
+                                </button>
+                                {autoChat && <p className="call-more-hint">安静 45–75 秒后开口，本次最多 3 次</p>}
+                                <button
+                                    type="button"
+                                    role="menuitemcheckbox"
+                                    aria-checked={!subtitlesHidden}
+                                    onClick={() => setSubtitlesHidden(value => !value)}
+                                >
+                                    <span>字幕显示</span>
+                                    <span className="call-more-value">{subtitlesHidden ? "隐藏" : "显示"}</span>
+                                </button>
+                                <button type="button" onClick={() => setCallMenuOpen(false)}>
+                                    <span>收起</span>
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Center: Avatar + connecting ring */}
@@ -839,37 +894,60 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     {character.name}
                 </div>
 
-                <div className="call-quiet-options">
-                    <button type="button" aria-pressed={autoChat} onClick={() => setAutoChat(value => !value)}>
-                        {autoChat ? `自动搭话 ${autoCount}/3` : "自动搭话 · 关"}
-                    </button>
-                    {autoChat && <span>安静 45–75 秒后开口，本次最多 3 次</span>}
-                    {pendingCount > 0 && <span>{pendingCount} 条待发送</span>}
-                </div>
+                {pendingCount > 0 && (
+                    <div className="text-center ts-12 opacity-80 px-5">
+                        {pendingCount} 条待发送
+                    </div>
+                )}
 
-                {/* Subtitle area — top fade via mask */}
+                {/* Subtitle area — top fade via mask（字幕可隐藏；长按已取消，编辑走台词旁 ✏️） */}
                 <div
                     ref={subtitleScrollRef}
                     className="voicecall-subtitle-mask flex-1 min-h-0 overflow-auto px-5 py-[10px] flex flex-col gap-2 relative"
                     {...(callState !== "CONNECTING" && callState !== "ENDED" ? { "data-text-input": "" } : {})}
                 >
-                    {subtitles.map((sub) => (
-                        <div
-                            key={sub.id}
-                            className="call-subtitle"
-                            data-role={sub.role}
-                            role="button" tabIndex={0} aria-label="台词操作"
-                            onPointerDown={() => { longPressRef.current = setTimeout(() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }, 500); }}
-                            onPointerUp={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
-                            onPointerCancel={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
-                            onPointerMove={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
-                            onContextMenu={e => { e.preventDefault(); setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }}
-                            onDoubleClick={() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); }}
-                            onKeyDown={e => { if (e.key === "Enter") { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(false); } }}
-                        >
-                            <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                    {subtitlesHidden && subtitles.length > 0 && (
+                        <div className="call-subtitle" data-subtitles-hidden="">
+                            字幕已隐藏 · 可在右上「···」恢复
                         </div>
-                    ))}
+                    )}
+                    {!subtitlesHidden && subtitles.map((sub) => {
+                        const isEditing = editingSubtitle && selectedSubtitle?.id === sub.id;
+                        const isLatestAssistant = sub.role === "assistant" && subtitles[subtitles.length - 1]?.id === sub.id;
+                        return (
+                            <div key={sub.id} className="call-subtitle" data-role={sub.role}>
+                                {isEditing ? (
+                                    <textarea
+                                        className="call-subtitle-edit"
+                                        autoFocus
+                                        value={editText}
+                                        onChange={e => setEditText(e.target.value)}
+                                        placeholder="编辑台词（自动保存）；清空后按发送键让角色重说"
+                                    />
+                                ) : (
+                                    <>
+                                        {!sub.text && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
+                                        {sub.text && (
+                                            <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                                        )}
+                                    </>
+                                )}
+                                {isLatestAssistant && !editingSubtitle && callState !== "ENDED" && !callMenuOpen && (
+                                    <button
+                                        type="button"
+                                        className="call-subtitle-edit-btn"
+                                        aria-label="编辑台词"
+                                        onClick={() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(true); }}
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
 
                     {/* Interim STT text */}
                     {interimText && callState === "USER_SPEAKING" && (
@@ -885,6 +963,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         className="call-text-input-panel voicecall-text-input-panel call-text-input-row"
                         onSubmit={(e) => {
                             e.preventDefault();
+                            // 编辑态独占发送键：非空 = 完成编辑；空 = 让角色重说（重新生成）
+                            if (editingSubtitle && selectedSubtitle) {
+                                applySubtitleEdit(!editText.trim());
+                                return;
+                            }
                             handleTextSubmit();
                         }}
                     >
@@ -893,100 +976,46 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 value={typedText}
                                 onChange={e => setTypedText(e.target.value)}
                                 className="call-text-input"
-                                placeholder={pendingCount >= 5 ? "待发已满，文字会保留" : busyRef.current ? "输入后排队发送…" : "输入你想说的话…"}
+                                placeholder={editingSubtitle ? "编辑台词中（在上方气泡里改）…" : pendingCount >= 5 ? "待发已满，文字会保留" : busyRef.current ? "输入后排队发送…" : "输入你想说的话…"}
+                                tabIndex={editingSubtitle ? -1 : 0}
                             />
                             <button
                                 type="submit"
                                 className="call-text-send-btn"
-                                disabled={!typedText.trim() || pendingCount >= 5}
-                                aria-label="发送"
+                                {...(editingSubtitle ? { "data-editing": "" } : {})}
+                                disabled={editingSubtitle ? false : (!typedText.trim() || pendingCount >= 5)}
+                                aria-label={editingSubtitle ? (editText.trim() ? "完成编辑" : "让角色重说") : "发送"}
                             >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 19V5" />
-                                    <path d="M5 12l7-7 7 7" />
-                                </svg>
+                                {editingSubtitle && !editText.trim() ? (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 12a9 9 0 1 1-3.5-7.1" />
+                                        <polyline points="21 3 21 9 15 9" />
+                                    </svg>
+                                ) : editingSubtitle ? (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                ) : (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 19V5" />
+                                        <path d="M5 12l7-7 7 7" />
+                                    </svg>
+                                )}
                             </button>
                         </div>
                     </form>
                 )}
 
-                {selectedSubtitle && <>
-                    {/* 点空白处关闭菜单（此前只能挂断电话才消失） */}
-                    <div
-                        className="call-subtitle-menu-backdrop"
-                        aria-hidden="true"
-                        onClick={() => { setSelectedSubtitle(null); setEditingSubtitle(false); }}
-                    />
-                    <div className="call-subtitle-menu" role="dialog" aria-label="台词操作">
-                    {editingSubtitle ? <>
-                        <textarea aria-label="编辑台词" value={editText} onChange={e => setEditText(e.target.value)} />
-                        <button type="button" onClick={applySubtitleEdit} disabled={busyRef.current || !editText.trim()}>保存</button>
-                    </> : <>
-                        <button type="button" disabled={busyRef.current || !speakerOn || selectedSubtitle.role !== "assistant"} onClick={async () => {
-                            if (!selectedSubtitle || !speakerOnRef.current) return;
-                            const chosen = selectedSubtitle;
-                            setSelectedSubtitle(null);
-                            busyRef.current = true;
-                            sttRef.current?.abort();
-                            sttRef.current = null;
-                            setCallState("AI_SPEAKING");
-                            const message = loadChatMessages(session.id).find(m => m.id === chosen.id);
-                            const config = resolveVoiceConfig(session.contactId);
-                            try {
-                                const saved = message?.mediaUrl;
-                                let blob: Blob | null = null;
-                                if (saved?.startsWith("idb://")) {
-                                    const { getChatImageFromIndexedDB } = await import("@/lib/chat-asset-storage");
-                                    const data = await getChatImageFromIndexedDB(saved.slice(6));
-                                    if (data) blob = await (await fetch(data)).blob();
-                                } else if (saved) {
-                                    blob = await (await fetch(saved)).blob();
-                                }
-                                if (!blob && config && speakerOnRef.current && stateRef.current !== "ENDED") {
-                                    blob = await synthesizeSpeech(stripBilingualForSpeech(chosen.text), config);
-                                    if (blob && message && stateRef.current !== "ENDED") {
-                                        const audio = await prepareChatVoiceAudio(blob, chosen.text);
-                                        updateChatMessage(message.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: stripBilingualForSpeech(chosen.text) } });
-                                        messagesRef.current = loadChatMessages(session.id);
-                                    }
-                                }
-                                if (blob && speakerOnRef.current && stateRef.current !== "ENDED") {
-                                    audioAbortRef.current?.();
-                                    const audio = playCallAudio(blob);
-                                    audioAbortRef.current = audio.abort;
-                                    await audio.promise;
-                                }
-                            } catch (error) { console.warn("[VoiceCall] 重听失败", error); }
-                            finally {
-                                busyRef.current = false;
-                                audioAbortRef.current = null;
-                                if (stateRef.current !== "ENDED") {
-                                    setCallState("IDLE");
-                                    const next = pendingRef.current.shift();
-                                    setPendingCount(pendingRef.current.length);
-                                    if (next) queueMicrotask(() => { void turnRef.current(next); });
-                                }
-                            }
-                        }}>重听</button>
-                        <button type="button" disabled={busyRef.current} onClick={() => setEditingSubtitle(true)}>编辑</button>
-                        <button type="button" disabled={busyRef.current} onClick={() => {
-                            deleteChatMessage(selectedSubtitle.id);
-                            messagesRef.current = loadChatMessages(session.id);
-                            setSubtitles(items => items.filter(item => item.id !== selectedSubtitle.id));
-                            setSelectedSubtitle(null);
-                        }}>删除</button>
-                        <button type="button" disabled={busyRef.current || selectedSubtitle.role !== "assistant" || subtitles[subtitles.length - 1]?.id !== selectedSubtitle.id} onClick={() => {
-                            const ids = new Set(latestReplyIdsRef.current);
-                            for (const id of ids) deleteChatMessage(id);
-                            messagesRef.current = loadChatMessages(session.id);
-                            setSubtitles(items => items.filter(item => !ids.has(item.id)));
-                            setSelectedSubtitle(null);
-                            void turnRef.current();
-                        }}>重新生成</button>
-                    </>}
-                    <button type="button" onClick={() => { setSelectedSubtitle(null); setEditingSubtitle(false); }}>关闭</button>
-                </div>
-                </>}
+                {/* 编辑态提示条：点它 = 自动保存并退出（生成唯一入口是发送键，见下方表单） */}
+                {editingSubtitle && selectedSubtitle && (
+                    <button
+                        type="button"
+                        className="call-subtitle-edit-hint"
+                        onClick={() => applySubtitleEdit(false)}
+                    >
+                        正在编辑台词 · 点此自动保存{editText.trim() ? "" : "；或按发送键让角色重说"}
+                    </button>
+                )}
 
                 {/* 按住说话提示/错误行 */}
                 {holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
