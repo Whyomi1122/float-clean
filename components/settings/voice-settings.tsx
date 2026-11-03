@@ -743,6 +743,14 @@ export function VoiceSettings() {
 
                                         {config.provider === "Aliyun" && (
                                             <>
+                                                <div className="rounded-xl bg-[var(--c-input)]/50 p-3">
+                                                    <p className="menu-desc leading-relaxed">
+                                                        <strong className="text-[var(--c-text)]">阿里云只负责「听你说」，不负责角色发声。</strong>
+                                                        识别与发声是两条独立通道：这里填好 AppKey 后，通话里的「按住说话」走阿里云识别；
+                                                        角色的声音仍然由<strong className="text-[var(--c-text)]">角色绑定的 MiniMax 配置</strong>决定，
+                                                        两条配置可以并存，不需要二选一。
+                                                    </p>
+                                                </div>
                                                 <div className="flex flex-col gap-1">
                                                     <label className="menu-desc ml-1">项目 AppKey</label>
                                                     <Input

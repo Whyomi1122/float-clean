@@ -55,8 +55,14 @@ function toCloudSttConfig(config: VoiceApiConfig | undefined | null): CloudSttCo
 }
 
 /**
- * 解析可用的云端识别配置：优先角色绑定的语音配置（须为 OpenAI 兼容且启用 STT），
- * 否则取第一个满足条件的语音配置。没有则返回 null（通话回落到旧输入方式）。
+ * 解析可用的云端识别配置（STT）。
+ *
+ * 「识别」与「发声」是两条独立通道：
+ *   · TTS  = 角色绑定 voiceConfigId（通常 MiniMax，管音色）
+ *   · STT  = 本函数，只要某条语音配置兼容识别即可
+ * 所以这里不要求角色绑定哪条——先用绑定那条试试（阿里云 / OpenAI 兼容），
+ * 不行再扫全表：**优先阿里云配置**（专用识别），其次 OpenAI 兼容。
+ * 这样 Minimax 管角色音色、阿里云管识别，可以同时存在。
  */
 export function resolveCloudSttConfig(characterId?: string): CloudSttConfig | null {
     const configs = loadVoiceConfigs();
@@ -67,6 +73,12 @@ export function resolveCloudSttConfig(characterId?: string): CloudSttConfig | nu
         const fromBound = toCloudSttConfig(bound);
         if (fromBound) return fromBound;
     }
+
+    // 优先阿里云专用识别配置
+    const aliyun = configs.find(c => c.provider === "Aliyun" && c.enableSTT !== false);
+    const fromAliyun = toCloudSttConfig(aliyun);
+    if (fromAliyun) return fromAliyun;
+
     for (const config of configs) {
         const cloud = toCloudSttConfig(config);
         if (cloud) return cloud;
