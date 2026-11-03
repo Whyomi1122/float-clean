@@ -7519,3 +7519,127 @@
   background: currentColor;
   animation: chat-stream-cursor-blink 1s steps(2, start) infinite;
 }
+
+/* ===== 通话回放页（call-replay）：只读回放，口径见《语音通话 · 参考视频口径.md》三之三 ===== */
+.call-replay-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 18, 26, 0.97);
+  color: #e8eaf0;
+}
+.call-replay-topbar {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 10px 8px;
+}
+.call-replay-back {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+}
+.call-replay-title {
+  text-align: center;
+  line-height: 1.25;
+}
+.call-replay-duration {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.call-replay-sub {
+  font-size: 11px;
+  color: rgba(232, 234, 240, 0.55);
+}
+.call-replay-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  justify-self: end;
+}
+.call-replay-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+}
+.call-replay-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.call-replay-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.call-replay-row-user { justify-content: flex-end; }
+.call-replay-row-assistant { justify-content: flex-start; }
+.call-replay-bubble {
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.call-replay-bubble-user {
+  background: #2f6fed;
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+.call-replay-bubble-assistant {
+  background: rgba(255, 255, 255, 0.10);
+  color: #eceef4;
+  border-bottom-left-radius: 6px;
+}
+.call-replay-play {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.14);
+  color: #dfe3ec;
+  cursor: pointer;
+}
+.call-replay-play:disabled { opacity: 0.4; cursor: default; }
+.call-replay-play-active { background: rgba(47, 111, 237, 0.85); color: #fff; }
+.call-replay-play svg { width: 14px; height: 14px; }
+.call-replay-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: call-replay-spin 0.8s linear infinite;
+}
+@keyframes call-replay-spin { to { transform: rotate(360deg); } }
+.call-replay-empty {
+  margin: auto;
+  color: rgba(232, 234, 240, 0.5);
+  font-size: 13px;
+}
+.call-replay-error {
+  text-align: center;
+  font-size: 12px;
+  color: #ff9d9d;
+}
+.call-replay-text { white-space: pre-wrap; }

@@ -246,10 +246,19 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         // Load existing messages for context
         messagesRef.current = loadChatMessages(session.id);
 
-        // Insert system message (skip if already exists from strict mode remount)
-        const lastMsg = messagesRef.current[messagesRef.current.length - 1];
+        // Insert system message (skip if a call is already open)
+        // 只向前找"最近一次通话的开始/结束"，避免重挂载时因最后一条是普通消息而重复插入，
+        // 造成聊天流出现两张通话卡片、消息被拆成两组。
         const initRole = initiator === "character" ? "assistant" : "user";
-        if (!lastMsg || !(lastMsg.content.includes("发起了语音通话"))) {
+        const hasOpenCallMarker = (() => {
+            for (let mi = messagesRef.current.length - 1; mi >= 0; mi--) {
+                const c = messagesRef.current[mi].content || "";
+                if (c.includes("挂断了语音通话") || c.includes("拒绝了语音通话") || c.includes("取消了语音通话")) return false;
+                if (c.includes("发起了语音通话")) return true;
+            }
+            return false;
+        })();
+        if (!hasOpenCallMarker) {
             const callMsg = initiator === "character"
                 ? `[我向${userNameRef.current}发起了语音通话]`
                 : `[我向${character.name}发起了语音通话]`;

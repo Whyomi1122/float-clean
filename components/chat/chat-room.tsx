@@ -37,6 +37,7 @@ import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-
 
 import { ChatSettingsPanel } from "./chat-settings-panel";
 import { startPersistentVoiceCall, VOICE_CALL_ENDED } from "./persistent-voice-call";
+import CallReplayScreen from "./call-replay-screen";
 import { VideoCallScreen } from "./video-call-screen";
 import { GroupCallScreen } from "./group-call-screen";
 import { TransferTargetModal } from "./transfer-target-modal";
@@ -1418,6 +1419,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [editingResponseRoundId, setEditingResponseRoundId] = useState<string | null>(null);
     const [editingResponseContent, setEditingResponseContent] = useState("");
     const [expandedVoiceCallIds, setExpandedVoiceCallIds] = useState<Set<string>>(new Set());
+    // A 方案：卡片点击进回放页（不再原地展开）
+    const [replayCall, setReplayCall] = useState<{ startId: string; memberIds: string[]; duration: string; callType: "voice" | "video" } | null>(null);
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const INITIAL_LOAD = CHAT_INITIAL_VISIBLE_MESSAGE_COUNT;
@@ -5308,7 +5311,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     if (c.includes(`挂断了${kw}`) || c.includes(`挂断了群${kw}`) || c.includes(`拒绝了${kw}`) || c.includes(`拒绝了群${kw}`) || c.includes(`取消了${kw}`) || c.includes(`取消了群${kw}`)) {
                         endIdx = j;
                         const match = c.match(/时长\s*(\d+:\d+)/);
-                        duration = match ? match[1] : "";
+                        // 单聊挂断只把时长写进 mediaData.callDuration，content 里没有"时长 mm:ss"
+                        duration = match ? match[1] : (projectedMessages[j].mediaData?.callDuration || "");
                         break;
                     }
                 }
@@ -5536,6 +5540,19 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
     return (
         <div ref={wrapperRef} className={`session-${session.id} chat-room-wrapper page-shell inset-0 flex flex-col z-20`} style={chatRoomBackgroundStyle} {...(bgLoading ? { "data-loading": "" } : {})} {...(bgImageResolved ? { "data-has-bg-image": "" } : {})} {...(showSettings ? { "data-settings-open": "" } : {})}>
+            {/* 通话回放页（只读）：由通话卡片点击进入 */}
+            {replayCall && character && (() => {
+                const vcMessages = messages.filter(m => replayCall.memberIds.includes(m.id) || m.id === replayCall.startId);
+                return (
+                    <CallReplayScreen
+                        session={session}
+                        character={character}
+                        messages={vcMessages}
+                        duration={replayCall.duration}
+                        onClose={() => setReplayCall(null)}
+                    />
+                );
+            })()}
             {/* Custom CSS Injection for this session — scoped to prevent leaking */}
             {liveCSS && (
                 <SessionCustomCSS css={liveCSS} scope={`.session-${session.id}`} />
@@ -5791,7 +5808,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     // ── Voice call group: collapsed widget ──
                     const vcGroup = voiceCallGroups.groups.find(g => g.startIdx === idx);
                     if (vcGroup) {
-                        const isExpanded = expandedVoiceCallIds.has(vcGroup.startId);
                         const groupMessages = projectedMessages.slice(vcGroup.startIdx, vcGroup.endIdx + 1);
                         const chatCount = groupMessages.filter(m => uiRole(m) !== "system").length;
                         return (
@@ -5811,12 +5827,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     onContextMenu={(e) => { e.preventDefault(); openMessageContextMenu(`vc-${vcGroup.startId}`, { x: e.clientX, y: e.clientY }); }}
                                     onClick={() => {
                                         if (activeMessageId === `vc-${vcGroup.startId}`) return;
-                                        setExpandedVoiceCallIds(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(vcGroup.startId)) next.delete(vcGroup.startId);
-                                            else next.add(vcGroup.startId);
-                                            return next;
-                                        });
+                                        // A 方案：点击进回放页，不再原地展开
+                                        setReplayCall({ startId: vcGroup.startId, memberIds: groupMessages.filter(m => uiRole(m) !== "system").map(m => m.id), duration: vcGroup.duration, callType: vcGroup.callType });
                                     }}
                                     className="chat-sys-msg flex items-center justify-center gap-[6px] py-[6px] px-[14px] mx-auto rounded-2xl cursor-pointer relative"
                                     {...(activeMessageId === `vc-${vcGroup.startId}` ? { "data-active": "" } : {})}
@@ -5831,9 +5843,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                         </svg>
                                     )}
                                     <span>{vcGroup.callType === "video" ? "视频通话" : "语音通话"}{vcGroup.duration ? ` ${vcGroup.duration}` : ""}{chatCount > 0 ? ` · ${chatCount}条消息` : ""}</span>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                                        className="ui-chevron-down-flip" {...(isExpanded ? { "data-open": "" } : {})}>
-                                        <polyline points="6 9 12 15 18 9" />
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="9 6 15 12 9 18" />
                                     </svg>
                                     {activeMessageId === `vc-${vcGroup.startId}` && renderDeleteOnlyContextMenu(() => {
                                         const groupMsgIds = groupMessages.map(m => m.id);
@@ -5843,66 +5854,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                         });
                                     })}
                                 </div>
-                                {isExpanded && (
-                                    <div className="chat-vc-group-border">
-                                        {groupMessages.map((gMsg) => (
-                                            uiRole(gMsg) === "system" ? (
-                                                <div key={gMsg.id} className="flex justify-center">
-                                                    <div
-                                                        onPointerDown={(e) => { e.stopPropagation(); handleMessagePointerDown(e, gMsg.id); }}
-                                                        onPointerUp={(e) => handleMessagePointerUp(e)}
-                                                        onPointerCancel={handleMessagePointerCancel}
-                                                        onPointerLeave={handleMessagePointerCancel}
-                                                        onPointerMove={(e) => {
-                                                            if (startPosRef.current) {
-                                                                const dx = Math.abs(e.clientX - startPosRef.current.x);
-                                                                const dy = Math.abs(e.clientY - startPosRef.current.y);
-                                                                if (dx > 10 || dy > 10) handleMessagePointerCancel();
-                                                            }
-                                                        }}
-                                                        onContextMenu={(e) => { e.preventDefault(); openMessageContextMenu(gMsg.id, { x: e.clientX, y: e.clientY }); }}
-                                                        className="chat-sys-msg relative cursor-pointer"
-                                                        {...(activeMessageId === gMsg.id ? { "data-active": "" } : {})}
-                                                    >
-                                                        {formatSysMsgForUI(gMsg.content, gMsg)}
-                                                        {activeMessageId === gMsg.id && renderDeleteOnlyContextMenu(() => handleDeleteMessage(getStoredActionMessageId(gMsg)))}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div key={gMsg.id} className={`flex ${gMsg.role === "user" ? "justify-end" : "justify-start"}`}>
-                                                    <div className="flex flex-col min-w-0 max-w-[75%]">
-                                                        {session.isGroup && gMsg.role !== "user" && (
-                                                            <span className="chat-group-sender-name">{gMsg.senderName || ""}{renderGroupRoleBadge(gMsg.senderCharacterId)}</span>
-                                                        )}
-                                                        <div
-                                                            onPointerDown={(e) => { e.stopPropagation(); handleMessagePointerDown(e, gMsg.id); }}
-                                                            onPointerUp={(e) => handleMessagePointerUp(e)}
-                                                            onPointerCancel={handleMessagePointerCancel}
-                                                            onPointerLeave={handleMessagePointerCancel}
-                                                            onPointerMove={(e) => {
-                                                                if (startPosRef.current) {
-                                                                    const dx = Math.abs(e.clientX - startPosRef.current.x);
-                                                                    const dy = Math.abs(e.clientY - startPosRef.current.y);
-                                                                    if (dx > 10 || dy > 10) handleMessagePointerCancel();
-                                                                }
-                                                            }}
-                                                            onContextMenu={(e) => { e.preventDefault(); openMessageContextMenu(gMsg.id, { x: e.clientX, y: e.clientY }); }}
-                                                            className={`chat-bubble-role-${gMsg.role} py-2 px-3 rounded-md break-words relative cursor-pointer`}
-                                                            {...(activeMessageId === gMsg.id ? { "data-active": "" } : {})}
-                                                        >
-                                                            <BilingualTextBlock
-                                                                text={gMsg.displayProjected ? gMsg.content : renderDisplayText(gMsg.content, gMsg.role === "user" ? 1 : 2, false)}
-                                                                mode="markdown"
-                                                                defaultExpanded={session.collapseBilingualTranslation !== false ? false : true}
-                                                            />
-                                                            {activeMessageId === gMsg.id && renderBubbleContextMenu(gMsg, { allowMultiSelect: false })}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )
-                                        ))}
-                                    </div>
-                                )}
                             </div>
                         );
                     }
