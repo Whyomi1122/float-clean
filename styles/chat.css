@@ -5293,40 +5293,56 @@
   padding: 3px 9px;
   color: inherit;
 }
+/* 台词操作菜单：通话页是深色场景，这里用固定深色调，不跟随浅色主题，
+   否则会出现「白底白字」看不见按钮文字的问题。
+   另外配一层透明遮罩，点空白处即可关闭（此前只能挂断电话才消失）。 */
+.call-subtitle-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  background: transparent;
+}
 .call-subtitle-menu {
   position: absolute;
   z-index: 35;
   left: 20px;
   right: 20px;
-  bottom: max(115px, env(safe-area-inset-bottom));
+  bottom: max(132px, calc(env(safe-area-inset-bottom) + 112px));
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   padding: 14px;
-  border: 1px solid var(--c-card-border);
+  border: 1px solid rgba(255, 255, 255, .16);
   border-radius: 18px;
-  background: var(--c-page-body-bg);
-  color: var(--c-text-title);
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--c-overlay) 15%, transparent);
+  background: rgba(22, 28, 45, .96);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: #eef2ff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45);
   animation: modalSoftRise .2s ease-out;
 }
 .call-subtitle-menu button {
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--c-card);
-  color: inherit;
-  border: 1px solid var(--c-card-border);
-  font-size: 12px;
+  flex: 1 1 calc(50% - 8px);
+  min-width: 96px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .10);
+  color: #eef2ff;
+  border: 1px solid rgba(255, 255, 255, .16);
+  font-size: 13px;
+  font-weight: 500;
 }
+.call-subtitle-menu button:active { background: rgba(255, 255, 255, .18); }
 .call-subtitle-menu button:disabled { opacity: .4; }
 .call-subtitle-menu textarea {
   width: 100%;
   min-height: 80px;
-  color: inherit;
-  background: var(--c-card);
-  border: 1px solid var(--c-card-border);
-  border-radius: 10px;
+  color: #eef2ff;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
   padding: 10px;
+  font-size: 13px;
 }
 .call-mini-window.call-mini-compact {
   top: auto;

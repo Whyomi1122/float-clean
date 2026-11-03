@@ -212,12 +212,13 @@ export async function transcribeAudioBlob(blob: Blob, config: CloudSttConfig): P
 }
 
 // ── 阿里云一句话识别（2026-11-02 接入）─────────────────────────
-// 链路：录音 blob → 解码重采样成 16k 单声道 WAV → 取 Token（服务端 /api/asr/aliyun-token）
-//       → POST nls-gateway 一句话识别 RESTful → 文本
-// Token 与 AccessKey 都由服务端托管，前端只带 appkey。
+// 链路：录音 blob → 解码重采样成 16k 单声道 WAV
+//       → POST /api/asr/aliyun-transcribe（同源代理，服务端带 Token 转发到阿里云）
+//       → 文本
+// 走代理的原因：浏览器直连 nls-gateway 会被 CORS 拦（报 "Failed to fetch"）。
+// AccessKey / Token 全在服务端，前端只带 appkey。
 
-const ALIYUN_TOKEN_ENDPOINT = "/api/asr/aliyun-token";
-const ALIYUN_ASR_ENDPOINT = "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr";
+const ALIYUN_TRANSCRIBE_ENDPOINT = "/api/asr/aliyun-transcribe";
 
 /** 16k 单声道 PCM(16bit) 与阿里云格式码对应：pcm；这里统一编码成 wav */
 async function blobToWav16kMono(blob: Blob): Promise<Blob> {
@@ -268,55 +269,43 @@ async function blobToWav16kMono(blob: Blob): Promise<Blob> {
     }
 }
 
-async function fetchAliyunToken(): Promise<string> {
-    const res = await fetch(ALIYUN_TOKEN_ENDPOINT, { cache: "no-store" });
-    const data = await res.json().catch(() => null) as { token?: string; error?: string } | null;
-    if (!res.ok || !data?.token) {
-        if (res.status === 501) {
-            throw new Error("阿里云语音未配置：请在 Vercel 环境变量里设置 ALIYUN_AK_ID / ALIYUN_AK_SECRET");
-        }
-        throw new Error(data?.error || `获取阿里云 Token 失败（HTTP ${res.status}）`);
-    }
-    return data.token;
-}
-
 async function transcribeWithAliyun(blob: Blob, config: CloudSttConfig): Promise<string> {
     const appKey = config.aliyunAppKey?.trim();
     if (!appKey) throw new Error("请先在设置里填写阿里云项目的 appkey");
 
-    const [token, wav] = await Promise.all([fetchAliyunToken(), blobToWav16kMono(blob)]);
-    const url = `${ALIYUN_ASR_ENDPOINT}?appkey=${encodeURIComponent(appKey)}`
-        + `&format=wav&sample_rate=16000&enable_punctuation_prediction=true`
-        + `&enable_inverse_text_normalization=true&enable_voice_detection=false`;
-
+    // 浏览器直连 nls-gateway 会被 CORS 拦（"Failed to fetch"），
+    // 一律走同源代理：/api/asr/aliyun-transcribe（服务端带 Token 转发）
+    const wav = await blobToWav16kMono(blob);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
     try {
-        const res = await fetch(url, {
-            method: "POST",
-            headers: {
-                "X-NLS-Token": token,
-                "Content-Type": "application/octet-stream",
+        const res = await fetch(
+            `${ALIYUN_TRANSCRIBE_ENDPOINT}?appkey=${encodeURIComponent(appKey)}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/octet-stream" },
+                body: wav,
+                signal: controller.signal,
             },
-            body: wav,
-            signal: controller.signal,
-        });
+        );
         const data = await res.json().catch(() => null) as {
-            status?: number;
-            message?: string;
-            result?: string;
+            text?: string;
+            error?: string;
         } | null;
-        if (!res.ok || !data || data.status !== 20000000) {
-            const msg = data?.message || `HTTP ${res.status}`;
-            if (data?.status === 40000001) {
-                throw new Error("阿里云识别失败：Token 无效或服务未开通（40000001）");
+        if (!res.ok) {
+            if (res.status === 501) {
+                throw new Error("阿里云语音未配置：请在 Vercel 环境变量里设置 ALIYUN_AK_ID / ALIYUN_AK_SECRET，然后重新部署");
             }
-            throw new Error(`阿里云一句话识别失败：${msg}`);
+            throw new Error(data?.error || `阿里云识别失败（HTTP ${res.status}）`);
         }
-        return (data.result ?? "").trim();
+        return (data?.text ?? "").trim();
     } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
             throw new Error(`语音识别超时（超过 ${Math.round(TRANSCRIBE_TIMEOUT_MS / 1000)} 秒无响应）`);
+        }
+        if (e instanceof TypeError) {
+            // fetch 本身失败（断网 / 代理路由不存在 / 部署未完成）
+            throw new Error("无法连接识别服务，请检查网络或确认最新版本已部署");
         }
         throw e;
     } finally {

@@ -890,7 +890,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     </form>
                 )}
 
-                {selectedSubtitle && <div className="call-subtitle-menu" role="dialog" aria-label="台词操作">
+                {selectedSubtitle && <>
+                    {/* 点空白处关闭菜单（此前只能挂断电话才消失） */}
+                    <div
+                        className="call-subtitle-menu-backdrop"
+                        aria-hidden="true"
+                        onClick={() => { setSelectedSubtitle(null); setEditingSubtitle(false); }}
+                    />
+                    <div className="call-subtitle-menu" role="dialog" aria-label="台词操作">
                     {editingSubtitle ? <>
                         <textarea aria-label="编辑台词" value={editText} onChange={e => setEditText(e.target.value)} />
                         <button type="button" onClick={applySubtitleEdit} disabled={busyRef.current || !editText.trim()}>保存</button>
@@ -957,8 +964,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             void turnRef.current();
                         }}>重新生成</button>
                     </>}
-                    <button type="button" onClick={() => setSelectedSubtitle(null)}>关闭</button>
-                </div>}
+                    <button type="button" onClick={() => { setSelectedSubtitle(null); setEditingSubtitle(false); }}>关闭</button>
+                </div>
+                </>}
 
                 {/* 按住说话提示/错误行 */}
                 {holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
@@ -973,15 +981,15 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
                 {/* Bottom controls */}
                 <div
-                    className="relative flex justify-center items-center gap-[34px] p-5"
+                    className={`relative flex justify-center items-center gap-[34px] p-5 ${holdToTalk ? "pl-24 pr-6" : ""}`}
                     style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
-                            {/* 输入方式 Aa：靠左独立，不占通话三键的位置 */}
+                            {/* 输入方式 Aa：独立落在最左侧，靠容器 pl-24 预留空间，不与麦克风重叠 */}
                             <button
                                 onClick={handleInputModeToggle}
-                                className="ui-call-btn ui-call-btn-muted absolute left-5"
+                                className="ui-call-btn ui-call-btn-muted absolute left-4"
                                 aria-label={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
                                 title={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
                             >
