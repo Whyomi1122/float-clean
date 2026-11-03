@@ -823,7 +823,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 <div
                     ref={subtitleScrollRef}
                     className="voicecall-subtitle-mask flex-1 min-h-0 overflow-auto px-5 py-[10px] flex flex-col gap-2 relative"
-                    {...(inputMode === "text" && callState !== "CONNECTING" && callState !== "ENDED" ? { "data-text-input": "" } : {})}
+                    {...(callState !== "CONNECTING" && callState !== "ENDED" ? { "data-text-input": "" } : {})}
                 >
                     {subtitles.map((sub) => (
                         <div
@@ -851,7 +851,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     )}
                 </div>
 
-                {inputMode === "text" && callState !== "CONNECTING" && callState !== "ENDED" && (
+                {/* 常驻文字输入框（参考设计：通话界面始终可打字，语音与文字混用不用切模式） */}
+                {callState !== "CONNECTING" && callState !== "ENDED" && (
                     <form
                         className="call-text-input-panel voicecall-text-input-panel call-text-input-row"
                         onSubmit={(e) => {
@@ -859,15 +860,6 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             handleTextSubmit();
                         }}
                     >
-                        <button
-                            type="button"
-                            onClick={handleInputModeToggle}
-                            className="call-text-input-close-btn"
-                            aria-label="切换到语音输入"
-                            title="切换到语音输入"
-                        >
-                            <span className="ui-call-input-text-icon">Aa</span>
-                        </button>
                         <div className="call-text-input-shell">
                             <input
                                 value={typedText}
@@ -981,44 +973,54 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
                 {/* Bottom controls */}
                 <div
-                    className={`relative flex justify-center items-center gap-[34px] p-5 ${holdToTalk ? "pl-24 pr-6" : ""}`}
+                    className="relative flex justify-center items-center gap-[26px] px-4 py-5"
                     style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
-                            {/* 输入方式 Aa：独立落在最左侧，靠容器 pl-24 预留空间，不与麦克风重叠 */}
+                            {/* 静音（按住说话模式下静音 = 禁用麦克风按键） */}
                             <button
-                                onClick={handleInputModeToggle}
-                                className="ui-call-btn ui-call-btn-muted absolute left-4"
-                                aria-label={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
-                                title={inputMode === "voice" ? "切换到文字输入" : "切换到语音输入"}
+                                onClick={() => setIsMuted(!isMuted)}
+                                className="ui-call-btn ui-call-btn-muted"
+                                {...(isMuted ? { "data-checked": "" } : {})}
+                                aria-label={isMuted ? "取消静音" : "静音"}
                             >
-                                <span className="ui-call-input-text-icon">Aa</span>
-                            </button>
-
-                            {/* 按住说话主按钮（文字模式下点按切回语音） */}
-                            <button
-                                className="ui-call-mic ui-call-mic-lg"
-                                style={{ touchAction: "none" }}
-                                data-state={
-                                    inputMode === "text" ? "text"
-                                        : holdInput.recState === "recording" ? "speaking"
-                                        : callState === "IDLE" ? "idle"
-                                        : "busy"
-                                }
-                                aria-label={inputMode === "text" ? "切换到语音输入" : "按住说话"}
-                                title={inputMode === "text" ? "切换到语音输入" : "按住说话"}
-                                {...(inputMode === "voice" ? holdInput.pressHandlers : { onClick: handleInputModeToggle })}
-                            >
-                                {inputMode === "text" ? (
-                                    <span className="ui-call-input-text-icon">Aa</span>
+                                {isMuted ? (
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                                        <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.48-.35 2.15" />
+                                        <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+                                    </svg>
                                 ) : (
-                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                                         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                                         <line x1="12" y1="19" x2="12" y2="22" />
                                     </svg>
                                 )}
+                            </button>
+
+                            {/* 按住说话主按钮（常驻输入框上方的文字输入不冲突：想说就按住，想打就打字） */}
+                            <button
+                                className="ui-call-mic ui-call-mic-lg"
+                                style={{ touchAction: "none" }}
+                                disabled={isMuted}
+                                data-state={
+                                    isMuted ? "idle-muted"
+                                        : holdInput.recState === "recording" ? "speaking"
+                                        : callState === "IDLE" ? "idle"
+                                        : "busy"
+                                }
+                                aria-label={isMuted ? "已静音" : "按住说话"}
+                                title={isMuted ? "已静音" : "按住说话"}
+                                {...(isMuted ? {} : holdInput.pressHandlers)}
+                            >
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                    <line x1="12" y1="19" x2="12" y2="22" />
+                                </svg>
                             </button>
 
                             {/* Hangup */}
