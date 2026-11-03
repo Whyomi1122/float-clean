@@ -78,7 +78,8 @@ async function createToken(akId: string, akSecret: string): Promise<CachedToken>
     const url = `${TOKEN_ENDPOINT}?Signature=${percentEncode(signature)}&${query}`;
 
     const res = await fetch(url, { method: "GET", cache: "no-store" });
-    const data = await res.json().catch(() => null) as {
+    const responseBody = await res.text();
+    const data = await Promise.resolve().then(() => JSON.parse(responseBody)).catch(() => null) as {
         Token?: { Id?: string; ExpireTime?: number };
         Code?: string;
         Message?: string;
@@ -87,7 +88,12 @@ async function createToken(akId: string, akSecret: string): Promise<CachedToken>
     const id = data?.Token?.Id;
     const expireTime = data?.Token?.ExpireTime;
     if (!res.ok || !id || !expireTime) {
-        throw new Error(data?.Message || data?.Code || `CreateToken 失败（HTTP ${res.status}）`);
+        // 保留上游错误码与完整响应，但不能把凭据或 Token 带回浏览器。
+        let diagnostic = responseBody;
+        for (const secret of [akId, akSecret, id]) {
+            if (secret) diagnostic = diagnostic.split(secret).join("[REDACTED]");
+        }
+        throw new Error(`CreateToken 失败（HTTP ${res.status}，Code ${data?.Code ?? "未返回"}）：${diagnostic}`);
     }
     return { token: id, expireTime };
 }
@@ -133,19 +139,15 @@ export async function recognizeShortSpeech(audio: ArrayBuffer, appKey: string): 
             body: audio,
             signal: controller.signal,
         });
-        const data = await res.json().catch(() => null) as {
+        const responseBody = await res.text();
+        const data = await Promise.resolve().then(() => JSON.parse(responseBody)).catch(() => null) as {
             status?: number;
             message?: string;
             result?: string;
         } | null;
-        if (!res.ok || !data) {
-            throw new Error(`阿里云识别请求失败（HTTP ${res.status}）`);
-        }
-        if (data.status !== 20000000) {
-            if (data.status === 40000001) {
-                throw new Error("Token 无效或一句话识别服务未开通（40000001）");
-            }
-            throw new Error(data.message || `阿里云识别失败（status ${data.status}）`);
+        if (!res.ok || !data || data.status !== 20000000) {
+            const diagnostic = responseBody.split(token).join("[REDACTED]");
+            throw new Error(`阿里云识别失败（HTTP ${res.status}，status ${data?.status ?? "未返回"}）：${diagnostic}`);
         }
         return (data.result ?? "").trim();
     } catch (e) {

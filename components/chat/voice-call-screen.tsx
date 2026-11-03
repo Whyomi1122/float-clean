@@ -424,6 +424,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 try {
                     for (const message of replyMessages) {
                         if (stateRef.current === "ENDED") break;
+                        if (!speakerOnRef.current) continue;
                         const spoken = stripBilingualForSpeech(message.content);
                         const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
                         if (stateRef.current === "ENDED") break;
@@ -912,8 +913,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         <textarea aria-label="编辑台词" value={editText} onChange={e => setEditText(e.target.value)} />
                         <button type="button" onClick={applySubtitleEdit} disabled={busyRef.current || !editText.trim()}>保存</button>
                     </> : <>
-                        <button type="button" disabled={busyRef.current || selectedSubtitle.role !== "assistant"} onClick={async () => {
-                            if (!selectedSubtitle) return;
+                        <button type="button" disabled={busyRef.current || !speakerOn || selectedSubtitle.role !== "assistant"} onClick={async () => {
+                            if (!selectedSubtitle || !speakerOnRef.current) return;
                             const chosen = selectedSubtitle;
                             setSelectedSubtitle(null);
                             busyRef.current = true;
@@ -932,7 +933,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 } else if (saved) {
                                     blob = await (await fetch(saved)).blob();
                                 }
-                                if (!blob && config) {
+                                if (!blob && config && speakerOnRef.current && stateRef.current !== "ENDED") {
                                     blob = await synthesizeSpeech(stripBilingualForSpeech(chosen.text), config);
                                     if (blob && message && stateRef.current !== "ENDED") {
                                         const audio = await prepareChatVoiceAudio(blob, chosen.text);
@@ -940,7 +941,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                         messagesRef.current = loadChatMessages(session.id);
                                     }
                                 }
-                                if (blob && stateRef.current !== "ENDED") {
+                                if (blob && speakerOnRef.current && stateRef.current !== "ENDED") {
                                     audioAbortRef.current?.();
                                     const audio = playCallAudio(blob);
                                     audioAbortRef.current = audio.abort;
