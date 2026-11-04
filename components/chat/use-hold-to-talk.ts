@@ -11,6 +11,11 @@ import {
     transcribeAudioBlob,
     type ActiveCallRecording,
 } from "@/lib/stt-cloud";
+import {
+    isStreamingSttSupported,
+    startAliyunStreamingStt,
+    type ActiveStreamingStt,
+} from "@/lib/aliyun-streaming-stt";
 
 export type HoldToTalkRecState = "idle" | "recording" | "transcribing";
 
@@ -29,11 +34,15 @@ export type HoldToTalkOptions = {
     onTranscript: (text: string) => void;
     /** 录音/转写失败或被丢弃（太短、没声音）。UI 应回到待命态 */
     onError?: (message: string) => void;
+    /** 流式识别的实时中间结果（边说话边上屏）；不传则只走松手后的一次性结果 */
+    onPartial?: (text: string) => void;
 };
 
 export type HoldToTalkHandle = {
     recState: HoldToTalkRecState;
     error: string;
+    /** 采集音量 0..1（流式识别时实时更新，供波形 UI） */
+    level: number;
     /** 铺到按钮上的指针事件（含防止长按弹菜单） */
     pressHandlers: {
         onPointerDown: (e: React.PointerEvent) => void;
@@ -46,7 +55,10 @@ export type HoldToTalkHandle = {
 export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
     const [recState, setRecState] = useState<HoldToTalkRecState>("idle");
     const [error, setError] = useState("");
+    const [level, setLevel] = useState(0);
     const recordingRef = useRef<ActiveCallRecording | null>(null);
+    const streamingRef = useRef<ActiveStreamingStt | null>(null);
+    const streamingErrorRef = useRef("");
     const startedAtRef = useRef(0);
     const startingRef = useRef(false);
     const mountedRef = useRef(true);
@@ -59,6 +71,8 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
             mountedRef.current = false;
             recordingRef.current?.cancel();
             recordingRef.current = null;
+            streamingRef.current?.cancel();
+            streamingRef.current = null;
         };
     }, []);
 
@@ -70,10 +84,34 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
     }, []);
 
     const handlePress = useCallback(async () => {
-        if (startingRef.current || recordingRef.current) return;
+        if (startingRef.current || recordingRef.current || streamingRef.current) return;
         if (!optionsRef.current.canStart()) return;
         setError("");
         startingRef.current = true;
+        const config = resolveCloudSttConfig(optionsRef.current.characterId);
+
+        // 档 2：阿里云实时流式——随说随识别。失败或环境不支持则回退一句话识别。
+        if (config?.provider === "aliyun" && config.aliyunAppKey && isStreamingSttSupported()) {
+            try {
+                const streaming = await startAliyunStreamingStt(config.aliyunAppKey, {
+                    onPartial: (text) => { optionsRef.current.onPartial?.(text); },
+                    onLevel: (level) => { setLevel(level); },
+                    onError: (message) => { streamingErrorRef.current = message; },
+                });
+                startingRef.current = false;
+                if (!mountedRef.current) { streaming.cancel(); return; }
+                streamingRef.current = streaming;
+                streamingErrorRef.current = "";
+                startedAtRef.current = Date.now();
+                setRecState("recording");
+                optionsRef.current.onRecordingStart?.();
+                return;
+            } catch (e) {
+                // 连接失败：不打断用户，直接走一句话识别
+                streamingErrorRef.current = e instanceof Error ? e.message : String(e);
+            }
+        }
+
         try {
             const recording = await startCallRecording();
             startingRef.current = false;
@@ -89,6 +127,33 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
     }, [fail]);
 
     const handleRelease = useCallback(async () => {
+        // 流式：松手即收尾，文本已经在 partial 里了
+        const streaming = streamingRef.current;
+        if (streaming) {
+            streamingRef.current = null;
+            const heldMs = Date.now() - startedAtRef.current;
+            setLevel(0);
+            if (heldMs < MIN_RECORDING_MS) {
+                streaming.cancel();
+                fail("说话时间太短，请按住说完再松开");
+                return;
+            }
+            setRecState("transcribing");
+            optionsRef.current.onTranscribeStart?.();
+            try {
+                const text = await streaming.stop();
+                if (!mountedRef.current) return;
+                setRecState("idle");
+                const finalText = text.trim() || streamingErrorRef.current;
+                if (!text.trim()) { fail(streamingErrorRef.current || "没有识别到内容"); return; }
+                setError("");
+                optionsRef.current.onTranscript(finalText);
+            } catch (e) {
+                fail(e instanceof Error ? e.message : String(e));
+            }
+            return;
+        }
+
         const recording = recordingRef.current;
         if (!recording) return;
         recordingRef.current = null;
@@ -121,6 +186,7 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
     return {
         recState,
         error,
+        level,
         pressHandlers: {
             onPointerDown: (e) => {
                 e.preventDefault();
