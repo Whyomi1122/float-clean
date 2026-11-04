@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { BilingualTextBlock } from "./message-bubble";
-import { splitBilingualText } from "@/lib/bilingual-text";
+import { splitNarration, speechTextForContent } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -59,46 +59,17 @@ type VoiceCallScreenProps = {
     onRestore?: () => void;
 };
 
-function stripBilingualForSpeech(text: string): string {
-    return text
-        .split("\n")
-        .map(line => splitBilingualText(line)?.original || line)
-        .join("\n");
-}
-
-// 旁白判定：独立成段、不带「名|」前缀、非括号开头的行视为旁白（旁白不配音是硬口径）
-function isNarrationLine(line: string): boolean {
-    const trimmed = line.trim();
-    if (!trimmed) return false;
-    if (trimmed.startsWith("（") || trimmed.startsWith("(")) return false; // 括号行是动作残留，交给 TTS 警示
-    if (/^["「『“]/.test(trimmed)) return false;
-    if (/^[^\s|：:]{1,12}[|：:]/.test(trimmed)) return false; // 有角色名前缀 = 台词
-    return true;
-}
-
-// TTS 取文：只念台词，剥掉旁白行（旁白只上屏）
+// 旁白判定 / TTS 取文统一在 lib/call-text.ts：旁白必须「正向识别」，
+// 整段没有「名|」前缀时一律当正文，避免正文被掏空、角色哑掉。
 function stripNarrationForSpeech(text: string): string {
-    return stripBilingualForSpeech(text)
-        .split("\n")
-        .filter(line => !isNarrationLine(line))
-        .join("\n")
-        .trim();
+    return speechTextForContent(text);
 }
 
-// 字幕拆分：旁白行抽出来居中显示，台词行留在 text（朗读+气泡）
+// 字幕拆分：有真旁白时抽出来单独淡字显示，台词留在 text（朗读 + 气泡）
 function splitSubtitleContent(content: string): { text: string; narration?: string } {
-    const lines = content.split("\n");
-    const speech: string[] = [];
-    const narration: string[] = [];
-    for (const line of lines) {
-        if (isNarrationLine(line)) narration.push(line.trim());
-        else speech.push(line);
-    }
-    const text = speech.join("\n").trim();
-    return {
-        text,
-        ...(narration.length ? { narration: narration.join("\n").trim() } : {}),
-    };
+    const { dialogue, narration } = splitNarration(content);
+    const text = dialogue.trim();
+    return { text, ...(narration ? { narration } : {}) };
 }
 
 // ── Component ───────────────────────────────────────
@@ -138,6 +109,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [callMenuOpen, setCallMenuOpen] = useState(false);
     const [subtitlesHidden, setSubtitlesHidden] = useState(false);
     const [speakingId, setSpeakingId] = useState<string | null>(null);
+    // 语音合成侧的可见提示（没绑语音 / 合成失败），避免"角色没声但毫无提示"
+    const [ttsNotice, setTtsNotice] = useState<string | null>(null);
     // 通话偏好：接通后谁先开口（参考视频口径）。默认随发起方：我打的=我先说，她打来的=她先说。
     const [firstSpeaker, setFirstSpeaker] = useState<"user" | "character">(initiator === "character" ? "character" : "user");
     const firstSpeakerRef = useRef(firstSpeaker);
@@ -451,6 +424,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         // 2. Switch to PROCESSING
         setCallState("PROCESSING");
         setInterimText("");
+        setTtsNotice(null);
 
         try {
             recordCallDiagnostic(`通话开始请求 · 输入 ${userText?.length ?? 0} 字 · 历史 ${messagesRef.current.length} 条 · 安卓文字降级 ${androidTextInputOnly}`);
@@ -481,6 +455,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             setCallState("AI_SPEAKING");
 
             const voiceConfig = resolveVoiceConfig(session.contactId);
+            if (!voiceConfig) {
+                setTtsNotice("未绑定语音：本次通话只有字幕（去角色设置里配一个 MiniMax 音色）");
+                recordCallDiagnostic("TTS 跳过：resolveVoiceConfig 返回空（角色未绑定语音）");
+            }
             if (voiceConfig) {
                 try {
                     for (const message of replyMessages) {
@@ -488,9 +466,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         if (!speakerOnRef.current) continue;
                         setSpeakingId(message.id);
                         const spoken = stripNarrationForSpeech(message.content);
+                        recordCallDiagnostic(`TTS 取文 ${spoken.length} 字：${spoken.slice(0, 40)}`);
                         const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
                         if (stateRef.current === "ENDED") break;
-                        if (!audioBlob) continue;
+                        if (!audioBlob) {
+                            setTtsNotice("语音合成返回空音频（检查音色配置 / 额度）");
+                            recordCallDiagnostic("TTS 返回空音频");
+                            continue;
+                        }
                         try {
                             const current = loadChatMessages(session.id).find(m => m.id === message.id);
                             if (current?.content === message.content) {
@@ -508,8 +491,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         audioAbortRef.current = null;
                         setSpeakingId(null);
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.warn("[VoiceCall] TTS failed:", e);
+                    setTtsNotice(`语音合成失败：${e?.message || String(e)}`);
+                    recordCallDiagnostic(`TTS 失败：${e?.message || String(e)}`);
                 }
             }
             setSpeakingId(null);
@@ -1148,6 +1133,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 )}
 
                 {/* 按住说话提示/错误行 */}
+                {ttsNotice && (
+                    <div className="text-center ts-12 px-5" style={{ color: "#ffc2c2" }}>{ttsNotice}</div>
+                )}
                 {holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
                     <div className="text-center ts-12 opacity-80 px-5">
                         {holdInput.recState === "recording" ? "松开发送"

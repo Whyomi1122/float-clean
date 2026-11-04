@@ -12,6 +12,7 @@ import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
+import { splitNarration } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -665,29 +666,9 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     );
 });
 
-// 从消息内容里抽出旁白行（独立成段、无「名|」前缀、非括号/引号开头）
-// 保险：只在内容符合语音通话格式（存在「名|」台词行）时才启用提取，
-// 否则整段按正文处理，避免普通聊天文本被误判成旁白。
+// 旁白抽取统一走 lib/call-text.ts（旁白必须正向识别，绝不允许掏空正文）
 function extractNarration(text: string): { dialogue: string; narration?: string } {
-    if (!/^[^\s|：:]{1,12}\|/m.test(text)) return { dialogue: text };
-    const lines = text.split("\n");
-    const dialogue: string[] = [];
-    const narration: string[] = [];
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (
-            trimmed
-            && !trimmed.startsWith("（") && !trimmed.startsWith("(")
-            && !/^["「『“]/.test(trimmed)
-            && !/^[^\s|：:]{1,12}[|：:]/.test(trimmed)
-        ) narration.push(trimmed);
-        else dialogue.push(line);
-    }
-    if (!dialogue.join("").trim()) return { dialogue: text };
-    return {
-        dialogue: dialogue.join("\n").trim(),
-        ...(narration.length ? { narration: narration.join("\n").trim() } : {}),
-    };
+    return splitNarration(text);
 }
 
 // 正文 + 居中旁白（旁白行渲染成独立淡字块）

@@ -143,11 +143,33 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
             try {
                 const text = await streaming.stop();
                 if (!mountedRef.current) return;
+                if (text.trim()) {
+                    setRecState("idle");
+                    setError("");
+                    optionsRef.current.onTranscript(text.trim());
+                    return;
+                }
+                // 流式没结果（协议/网络/静音）→ 用同一段录音走一次性识别兜底，
+                // 保证「按住说话」在任何情况下都能出字
+                const wav = streaming.snapshotWav();
+                const config = resolveCloudSttConfig(optionsRef.current.characterId);
+                if (wav && config) {
+                    try {
+                        const fallbackText = await transcribeAudioBlob(wav, config);
+                        if (!mountedRef.current) return;
+                        if (fallbackText.trim()) {
+                            setRecState("idle");
+                            setError("");
+                            optionsRef.current.onTranscript(fallbackText.trim());
+                            return;
+                        }
+                    } catch (e) {
+                        const reason = e instanceof Error ? e.message : String(e);
+                        streamingErrorRef.current = `${streamingErrorRef.current ? `${streamingErrorRef.current}；` : ""}兜底转写失败：${reason}`;
+                    }
+                }
                 setRecState("idle");
-                const finalText = text.trim() || streamingErrorRef.current;
-                if (!text.trim()) { fail(streamingErrorRef.current || "没有识别到内容"); return; }
-                setError("");
-                optionsRef.current.onTranscript(finalText);
+                fail(streamingErrorRef.current || "没有识别到内容");
             } catch (e) {
                 fail(e instanceof Error ? e.message : String(e));
             }

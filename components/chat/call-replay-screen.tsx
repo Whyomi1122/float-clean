@@ -14,6 +14,7 @@ import { updateChatMessage } from "@/lib/chat-storage";
 import { prepareChatVoiceAudio } from "@/lib/chat-asset-storage";
 import { resolveVoiceConfig, synthesizeSpeech, playAudioBlobViaMediaElement } from "@/lib/tts-service";
 import { splitBilingualText } from "@/lib/bilingual-text";
+import { speechTextForContent } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 
 type CallReplayScreenProps = {
@@ -25,18 +26,9 @@ type CallReplayScreenProps = {
 };
 
 // 只保留台词部分用于 TTS：剥掉译本行与旁白行（旁白不配音是硬口径）
+// 与通话页共用 lib/call-text.ts，保证「有内容就一定有声音」
 function pickSpokenText(content: string): string {
-    return content
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .filter((line) => !/^\(tr[:：]/i.test(line) && !/^（tr[:：]/i.test(line))
-        .filter((line) => {
-            // 无角色名前缀且非引号开头的行视为旁白
-            const looksLikeNarration = !/^["「『“]/.test(line) && !/^[^\s|：:]{1,12}[|：:]/.test(line) && !line.startsWith("（") && !line.startsWith("(");
-            return !looksLikeNarration;
-        })
-        .join("\n");
+    return speechTextForContent(content);
 }
 
 export default function CallReplayScreen({ session, character, messages, duration, onClose }: CallReplayScreenProps) {

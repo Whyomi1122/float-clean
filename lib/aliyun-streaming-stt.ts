@@ -42,6 +42,8 @@ export type ActiveStreamingStt = {
     stop: () => Promise<string>;
     /** 放弃：不返回结果，立即释放麦克风 */
     cancel: () => void;
+    /** 本次采集的音频（16k WAV），流式失败时用于一次性识别兜底 */
+    snapshotWav: () => Blob | null;
 };
 
 // ── Token ────────────────────────────────────────────────
@@ -153,6 +155,8 @@ export async function startAliyunStreamingStt(
     let capture: Capture | null = null;
     let pendingAudio: Int16Array[] = [];
     let fatalError: Error | null = null;
+    // 全程保留采集到的 PCM：流式失败/空结果时用它走一次性识别兜底
+    const capturedPcm: Int16Array[] = [];
     // NLS 协议：同一次识别任务共用一个 task_id，每条指令单独一个 message_id
     const taskId = crypto.randomUUID();
 
@@ -274,6 +278,7 @@ export async function startAliyunStreamingStt(
     capture = await startCapture((pcm, level) => {
         handlers.onLevel?.(level);
         if (pcm.length === 0) return;
+        capturedPcm.push(pcm);
         lastAudioAt = Date.now();
         if (!taskStarted || ws.readyState !== WebSocket.OPEN) {
             pendingAudio.push(pcm);
@@ -305,6 +310,38 @@ export async function startAliyunStreamingStt(
         }),
         cancel: () => {
             finish("");
+        },
+        /** 本次采集到的音频（16k/16bit/mono WAV），流式失败时用于一次性识别兜底 */
+        snapshotWav: () => {
+            if (!capturedPcm.length) return null;
+            const total = capturedPcm.reduce((sum, chunk) => sum + chunk.length, 0);
+            if (total < SAMPLE_RATE * 0.2) return null; // 少于 0.2 秒没有意义
+            const buffer = new ArrayBuffer(44 + total * 2);
+            const view = new DataView(buffer);
+            const writeString = (offset: number, text: string) => {
+                for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+            };
+            writeString(0, "RIFF");
+            view.setUint32(4, 36 + total * 2, true);
+            writeString(8, "WAVE");
+            writeString(12, "fmt ");
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, SAMPLE_RATE, true);
+            view.setUint32(28, SAMPLE_RATE * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, "data");
+            view.setUint32(40, total * 2, true);
+            let offset = 44;
+            for (const chunk of capturedPcm) {
+                for (let i = 0; i < chunk.length; i += 1) {
+                    view.setInt16(offset, chunk[i], true);
+                    offset += 2;
+                }
+            }
+            return new Blob([buffer], { type: "audio/wav" });
         },
     };
 }

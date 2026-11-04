@@ -7557,11 +7557,13 @@
 .call-replay-screen {
   position: absolute;
   inset: 0;
-  z-index: 130;
+  /* 高于聊天室所有浮层（音乐卡/铃铛/心跳卡等），否则底下的控件会穿到回放页上 */
+  z-index: 900;
   display: flex;
   flex-direction: column;
-  background: rgba(15, 18, 26, 0.97);
-  color: #e8eaf0;
+  /* 与通话页一致：浅灰毛玻璃质感（此处用不透明近似，避免下层内容透出） */
+  background: linear-gradient(160deg, #b7bdc9 0%, #a2a9b6 55%, #8d94a2 100%);
+  color: #262b33;
 }
 .call-replay-topbar {
   flex: none;
@@ -7577,8 +7579,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.5);
+  color: #262b33;
   cursor: pointer;
 }
 .call-replay-title {
@@ -7592,7 +7594,7 @@
 }
 .call-replay-sub {
   font-size: 11px;
-  color: rgba(232, 234, 240, 0.55);
+  color: rgba(38, 43, 51, 0.55);
 }
 .call-replay-avatar {
   width: 34px;
@@ -7605,7 +7607,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.55);
   font-size: 14px;
 }
 .call-replay-body {
@@ -7637,8 +7639,8 @@
   border-bottom-right-radius: 6px;
 }
 .call-replay-bubble-assistant {
-  background: rgba(255, 255, 255, 0.10);
-  color: #eceef4;
+  background: rgba(255, 255, 255, 0.72);
+  color: #242931;
   border-bottom-left-radius: 6px;
 }
 .call-replay-play {
@@ -7649,8 +7651,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.14);
-  color: #dfe3ec;
+  background: rgba(255, 255, 255, 0.65);
+  color: #2b3138;
   cursor: pointer;
 }
 .call-replay-play:disabled { opacity: 0.4; cursor: default; }
@@ -7660,20 +7662,20 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border: 2px solid rgba(43, 49, 56, 0.28);
+  border-top-color: #2b3138;
   animation: call-replay-spin 0.8s linear infinite;
 }
 @keyframes call-replay-spin { to { transform: rotate(360deg); } }
 .call-replay-empty {
   margin: auto;
-  color: rgba(232, 234, 240, 0.5);
+  color: rgba(38, 43, 51, 0.5);
   font-size: 13px;
 }
 .call-replay-error {
   text-align: center;
   font-size: 12px;
-  color: #ff9d9d;
+  color: #b3392f;
 }
 .call-replay-text { white-space: pre-wrap; }
 
@@ -7797,7 +7799,7 @@
 .call-more-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .call-more-main b { font-size: 15px; font-weight: 600; color: #fff; }
 .call-more-main small { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
-.call-more-check { flex: none; color: #e8a; color: rgba(255, 255, 255, 0.9); display: inline-flex; }
+.call-more-check { flex: none; color: rgba(255, 255, 255, 0.92); display: inline-flex; }
 .call-more-switch {
   flex: none;
   width: 44px;
@@ -7817,8 +7819,8 @@
   background: #fff;
   transition: transform 0.2s ease;
 }
-.call-more-switch.on { background: #e58b9c; }
-.call-more-switch.on i { transform: translateX(18px); }
+.call-more-switch.on { background: rgba(255, 255, 255, 0.88); }
+.call-more-switch.on i { background: #2c313b; transform: translateX(18px); }
 .call-more-hint {
   margin: 2px 4px 4px;
   font-size: 11.5px;
