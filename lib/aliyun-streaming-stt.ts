@@ -153,6 +153,20 @@ export async function startAliyunStreamingStt(
     let capture: Capture | null = null;
     let pendingAudio: Int16Array[] = [];
     let fatalError: Error | null = null;
+    // NLS 协议：同一次识别任务共用一个 task_id，每条指令单独一个 message_id
+    const taskId = crypto.randomUUID();
+
+    const sendCommand = (name: "StartTranscription" | "StopTranscription") => {
+        sendJson({
+            header: {
+                message_id: crypto.randomUUID(),
+                task_id: taskId,
+                namespace: "SpeechTranscriber",
+                name,
+                appkey: appKey.trim(),
+            },
+        });
+    };
 
     const fail = (message: string) => {
         if (closed) return;
@@ -188,9 +202,11 @@ export async function startAliyunStreamingStt(
             window.clearTimeout(openTimer);
             sendJson({
                 header: {
-                    appkey: appKey.trim(),
                     message_id: crypto.randomUUID(),
-                    task: "transcription",
+                    task_id: taskId,
+                    namespace: "SpeechTranscriber",
+                    name: "StartTranscription",
+                    appkey: appKey.trim(),
                 },
                 payload: {
                     format: "pcm",
@@ -275,14 +291,14 @@ export async function startAliyunStreamingStt(
     }, 400);
 
     stopTimer = window.setTimeout(() => {
-        sendJson({ header: { appkey: appKey.trim(), message_id: crypto.randomUUID(), task: "StopTranscription" } });
+        sendCommand("StopTranscription");
     }, MAX_STREAM_MS);
 
     return {
         stop: () => new Promise<string>((resolve) => {
             resolveDone = resolve;
             if (closed) { resolve(sentences.join("").trim()); return; }
-            sendJson({ header: { appkey: appKey.trim(), message_id: crypto.randomUUID(), task: "StopTranscription" } });
+            sendCommand("StopTranscription");
             // 等 TranscriptionCompleted；3 秒还没回就自己收
             window.setTimeout(() => { if (!closed) finish(sentences.join("") + partial); }, 3000);
             if (fatalError) finish(sentences.join(""));
