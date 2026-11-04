@@ -872,45 +872,102 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         <>
                             <div className="call-more-backdrop" onClick={() => setCallMenuOpen(false)} aria-hidden="true" />
                             <div className="call-more-panel" role="menu" aria-label="通话选项">
-                                <button
-                                    type="button"
-                                    role="menuitemcheckbox"
-                                    aria-checked={autoChat}
-                                    onClick={() => setAutoChat(value => !value)}
-                                >
-                                    <span>自动搭话{autoChat ? ` · ${autoCount}/3` : ""}</span>
-                                    <span className="call-more-value">{autoChat ? "开" : "关"}</span>
-                                </button>
-                                {autoChat && <p className="call-more-hint">安静 45–75 秒后开口，本次最多 3 次</p>}
+                                <p className="call-more-title">通话偏好</p>
+                                {(() => {
+                                    const speakerLocked = !hasConnectedRef.current || subtitles.some(s => s.role === "assistant" && s.text);
+                                    const setSpeaker = (v: "character" | "user") => {
+                                        if (speakerLocked || v === firstSpeaker) return;
+                                        setFirstSpeaker(v);
+                                    };
+                                    return (
+                                        <>
+                                            <button
+                                                type="button"
+                                                role="menuitemradio"
+                                                aria-checked={firstSpeaker === "character"}
+                                                disabled={speakerLocked}
+                                                onClick={() => setSpeaker("character")}
+                                            >
+                                                <span className="call-more-ico" aria-hidden="true">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                                                    </svg>
+                                                </span>
+                                                <span className="call-more-main">
+                                                    <b>对方先说</b>
+                                                    <small>等待对方先开口{speakerLocked ? " · 已定" : ""}</small>
+                                                </span>
+                                                {firstSpeaker === "character" && (
+                                                    <span className="call-more-check" aria-hidden="true">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                                                    </span>
+                                                )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitemradio"
+                                                aria-checked={firstSpeaker === "user"}
+                                                disabled={speakerLocked}
+                                                onClick={() => setSpeaker("user")}
+                                            >
+                                                <span className="call-more-ico" aria-hidden="true">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                                        <path d="M12 19v3" />
+                                                    </svg>
+                                                </span>
+                                                <span className="call-more-main">
+                                                    <b>你先说</b>
+                                                    <small>由你先发起对话{speakerLocked ? " · 已定" : ""}</small>
+                                                </span>
+                                                {firstSpeaker === "user" && (
+                                                    <span className="call-more-check" aria-hidden="true">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </>
+                                    );
+                                })()}
+                                <div className="call-more-divider" aria-hidden="true" />
                                 <button
                                     type="button"
                                     role="menuitemcheckbox"
                                     aria-checked={!subtitlesHidden}
                                     onClick={() => setSubtitlesHidden(value => !value)}
                                 >
-                                    <span>字幕显示</span>
-                                    <span className="call-more-value">{subtitlesHidden ? "隐藏" : "显示"}</span>
+                                    <span className="call-more-ico" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="2" y="5" width="20" height="14" rx="3" />
+                                            <path d="M6 15h4" /><path d="M12 15h6" /><path d="M6 11h12" />
+                                        </svg>
+                                    </span>
+                                    <span className="call-more-main">
+                                        <b>字幕显示</b>
+                                        <small>在台词区展示文字内容</small>
+                                    </span>
+                                    <span className={`call-more-switch ${subtitlesHidden ? "" : "on"}`} aria-hidden="true"><i /></span>
                                 </button>
-                                {/* 通话偏好：谁先开口（只在还没人说第一句时可切） */}
-                                {!hasConnectedRef.current || subtitles.some(s => s.role === "assistant" && s.text) ? (
-                                    <button type="button" disabled>
-                                        <span>先开口的</span>
-                                        <span className="call-more-value">{firstSpeaker === "character" ? "对方" : "你"}（已定）</span>
-                                    </button>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFirstSpeaker(value => value === "character" ? "user" : "character");
-                                        }}
-                                    >
-                                        <span>先开口的</span>
-                                        <span className="call-more-value">{firstSpeaker === "character" ? "对方先说" : "你先说"} › 切换</span>
-                                    </button>
-                                )}
-                                <button type="button" onClick={() => setCallMenuOpen(false)}>
-                                    <span>收起</span>
+                                <button
+                                    type="button"
+                                    role="menuitemcheckbox"
+                                    aria-checked={autoChat}
+                                    onClick={() => setAutoChat(value => !value)}
+                                >
+                                    <span className="call-more-ico" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+                                            <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />
+                                        </svg>
+                                    </span>
+                                    <span className="call-more-main">
+                                        <b>自动搭话</b>
+                                        <small>安静时替你接话{autoChat ? ` · 最多 3 次` : ""}</small>
+                                    </span>
+                                    <span className={`call-more-switch ${autoChat ? "on" : ""}`} aria-hidden="true"><i /></span>
                                 </button>
+                                {autoChat && <p className="call-more-hint">安静 45–75 秒后开口，本次通话最多 3 次</p>}
                             </div>
                         </>
                     )}
