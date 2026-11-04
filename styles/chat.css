@@ -5091,9 +5091,18 @@
 }
 
 /* ── Call subtitle bubble (shared by voice + video) ── */
+.call-subtitle {
+  text-align: left;
+}
+.call-subtitle .chat-bilingual-content,
+.call-subtitle .chat-msg-content,
+.call-subtitle .chat-bilingual-section {
+  text-align: left;
+}
 .call-subtitle .call-subtitle-bilingual,
 .gcall-subtitle-bubble .call-subtitle-bilingual {
   gap: 4px;
+  text-align: left;
 }
 .call-subtitle .call-subtitle-bilingual .chat-bilingual-toggle,
 .gcall-subtitle-bubble .call-subtitle-bilingual .chat-bilingual-toggle {
@@ -5108,6 +5117,23 @@
 .gcall-subtitle-bubble .call-subtitle-bilingual .chat-bilingual-section-translation {
   font-size: 0.88em;
   opacity: 0.86;
+}
+
+/* 台词正在合成/播放时的转圈指示 */
+.call-subtitle[data-speaking]::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  vertical-align: -1px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  animation: callSpin 0.8s linear infinite;
+}
+@keyframes callSpin {
+  to { transform: rotate(360deg); }
 }
 
 .call-stt-warning-dialog {

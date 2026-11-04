@@ -137,6 +137,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
     const [subtitlesHidden, setSubtitlesHidden] = useState(false);
+    const [speakingId, setSpeakingId] = useState<string | null>(null);
     // 通话偏好：接通后谁先开口（参考视频口径）。默认随发起方：我打的=我先说，她打来的=她先说。
     const [firstSpeaker, setFirstSpeaker] = useState<"user" | "character">(initiator === "character" ? "character" : "user");
     const firstSpeakerRef = useRef(firstSpeaker);
@@ -485,6 +486,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     for (const message of replyMessages) {
                         if (stateRef.current === "ENDED") break;
                         if (!speakerOnRef.current) continue;
+                        setSpeakingId(message.id);
                         const spoken = stripNarrationForSpeech(message.content);
                         const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
                         if (stateRef.current === "ENDED") break;
@@ -504,11 +506,13 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         audioAbortRef.current = abort;
                         await promise;
                         audioAbortRef.current = null;
+                        setSpeakingId(null);
                     }
                 } catch (e) {
                     console.warn("[VoiceCall] TTS failed:", e);
                 }
             }
+            setSpeakingId(null);
 
             if (stateRef.current !== "ENDED") {
                 setCallState("IDLE");
@@ -1038,7 +1042,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         const isEditing = editingSubtitle && selectedSubtitle?.id === sub.id;
                         const isLatestAssistant = sub.role === "assistant" && !!sub.text && subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id === sub.id;
                         return (
-                            <div key={sub.id} className="call-subtitle" data-role={sub.role}>
+                            <div key={sub.id} className="call-subtitle" data-role={sub.role} data-speaking={speakingId === sub.id || undefined}>
                                 {isEditing ? (
                                     <textarea
                                         className="call-subtitle-edit"
