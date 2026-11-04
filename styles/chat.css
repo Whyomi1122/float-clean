@@ -5169,10 +5169,17 @@
 
 /* ── Call background ── */
 .call-bg-default {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  /* 毛玻璃：透出底下聊天界面，模糊成浅灰调，白字仍可读 */
+  background: linear-gradient(160deg, rgba(168, 174, 186, 0.38) 0%, rgba(120, 127, 140, 0.46) 55%, rgba(92, 99, 112, 0.5) 100%);
+  -webkit-backdrop-filter: blur(28px) saturate(1.15);
+  backdrop-filter: blur(28px) saturate(1.15);
 }
 .call-overlay {
   background: transparent;
+}
+/* 无背景图时叠一层极淡的白雾，让毛玻璃更接近浅色质感 */
+.call-bg-default ~ .call-overlay:not([data-has-image]) {
+  background: rgba(255, 255, 255, 0.06);
 }
 .call-overlay[data-has-image] {
   background: rgba(0,0,0,0.55);
