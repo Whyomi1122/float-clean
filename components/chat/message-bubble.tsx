@@ -666,7 +666,10 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
 });
 
 // 从消息内容里抽出旁白行（独立成段、无「名|」前缀、非括号/引号开头）
+// 保险：只在内容符合语音通话格式（存在「名|」台词行）时才启用提取，
+// 否则整段按正文处理，避免普通聊天文本被误判成旁白。
 function extractNarration(text: string): { dialogue: string; narration?: string } {
+    if (!/^[^\s|：:]{1,12}\|/m.test(text)) return { dialogue: text };
     const lines = text.split("\n");
     const dialogue: string[] = [];
     const narration: string[] = [];
@@ -680,6 +683,7 @@ function extractNarration(text: string): { dialogue: string; narration?: string 
         ) narration.push(trimmed);
         else dialogue.push(line);
     }
+    if (!dialogue.join("").trim()) return { dialogue: text };
     return {
         dialogue: dialogue.join("\n").trim(),
         ...(narration.length ? { narration: narration.join("\n").trim() } : {}),
