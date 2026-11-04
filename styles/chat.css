@@ -7672,6 +7672,10 @@
   color: rgba(38, 43, 51, 0.5);
   font-size: 13px;
 }
+.call-replay-text { display: flex; flex-direction: column; gap: 2px; }
+.call-replay-original { color: #242931; }
+.call-replay-translation { font-size: 12.5px; color: rgba(36, 41, 49, 0.62); }
+.call-replay-narration { font-size: 12.5px; color: rgba(36, 41, 49, 0.45); font-style: italic; }
 .call-replay-error {
   text-align: center;
   font-size: 12px;

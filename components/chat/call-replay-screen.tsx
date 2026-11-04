@@ -14,7 +14,7 @@ import { updateChatMessage } from "@/lib/chat-storage";
 import { prepareChatVoiceAudio } from "@/lib/chat-asset-storage";
 import { resolveVoiceConfig, synthesizeSpeech, playAudioBlobViaMediaElement } from "@/lib/tts-service";
 import { splitBilingualText } from "@/lib/bilingual-text";
-import { speechTextForContent } from "@/lib/call-text";
+import { speechTextForContent, splitNarration } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 
 type CallReplayScreenProps = {
@@ -158,8 +158,21 @@ function spokenStorageText(_msg: ChatMessage, spoken: string) {
 }
 void spokenStorageText;
 
-// 简单渲染：只保留台词；旁白行样式在旁白任务上线后再接入
+// 回放台词渲染：和聊天室一致——原文一行 + 中文译文一行；旁白行单独淡字
 function MessagePlain({ content }: { content: string }) {
-    const split = splitBilingualText(content);
-    return <span className="call-replay-text">{split ? split.original : content}</span>;
+    const { dialogue, narration } = splitNarration(content);
+    const split = splitBilingualText(dialogue);
+    return (
+        <span className="call-replay-text">
+            {split ? (
+                <>
+                    <span className="call-replay-original">{split.original}</span>
+                    <span className="call-replay-translation">{split.translated}</span>
+                </>
+            ) : (
+                <span className="call-replay-original">{dialogue}</span>
+            )}
+            {narration && <span className="call-replay-narration">{narration}</span>}
+        </span>
+    );
 }
