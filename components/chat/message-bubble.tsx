@@ -45,6 +45,8 @@ interface MessageBubbleProps {
     onActionSelect?: (text: string) => void;
     displayContent?: string;
     defaultTranslationExpanded?: boolean;
+    /** 旁白模式：旁白行抽出来居中淡字显示（聊天室/通话共用，旁白不配音口径） */
+    narrationMode?: boolean;
 }
 
 /** 聊天插件自定义消息气泡：把裸 DOM 容器交给注册了该 kind 的插件渲染 */
@@ -88,7 +90,7 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Renders a message bubble based on its mediaType.
  * Falls back to ReactMarkdown for plain text messages.
  */
-export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, displayContent, defaultTranslationExpanded = false, narrationMode = false }: MessageBubbleProps) {
     switch (msg.mediaType) {
         case "red_packet":
             return <RedPacketBubble msg={msg} charName={charName} userName={userName} groupSize={groupSize} onShowDetail={onShowDetail} />;
@@ -127,7 +129,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
             if (msg.mediaType?.startsWith("plugin:")) {
                 return <PluginKindBubble msg={msg} kind={msg.mediaType.slice("plugin:".length)} />;
             }
-            const textBubble = <TextBubble content={displayContent ?? msg.content} onActionSelect={onActionSelect} defaultTranslationExpanded={defaultTranslationExpanded} />;
+            const textBubble = <TextBubble content={displayContent ?? msg.content} onActionSelect={onActionSelect} defaultTranslationExpanded={defaultTranslationExpanded} narrationMode={narrationMode && msg.role === "assistant"} />;
             return (
                 <>
                     {textBubble}
@@ -590,6 +592,7 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     className,
     defaultExpanded = false,
     htmlFrameVariant,
+    narrationMode = false,
 }: {
     text: string;
     onActionSelect?: (text: string) => void;
@@ -597,8 +600,10 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     className?: string;
     defaultExpanded?: boolean;
     htmlFrameVariant?: ChatHtmlFrameVariant;
+    /** true 时把旁白行从正文抽出、居中淡字渲染（旁白不上屏在气泡内，而是独立展示） */
+    narrationMode?: boolean;
 }) {
-    const bilingual = splitBilingualText(text);
+    const bilingual = splitBilingualText(narrationMode ? extractNarration(text).dialogue : text);
     const [expanded, setExpanded] = useState(defaultExpanded);
     useEffect(() => {
         setExpanded(defaultExpanded);
@@ -613,14 +618,30 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     };
 
     if (!bilingual) {
-        return renderContent(text, className);
+        return (
+            <NarrationAwareText
+                text={narrationMode ? extractNarration(text).dialogue : text}
+                narration={narrationMode ? extractNarration(text).narration : undefined}
+                mode={mode}
+                className={className}
+                onActionSelect={onActionSelect}
+                htmlFrameVariant={htmlFrameVariant}
+                defaultExpanded={defaultExpanded}
+            />
+        );
     }
 
     return (
         <div className={`chat-bilingual-block ${className ?? ""}`.trim()}>
-            <div className="chat-bilingual-section">
-                {renderContent(bilingual.original, "chat-bilingual-content")}
-            </div>
+            <NarrationAwareText
+                text={bilingual.original}
+                narration={narrationMode ? extractNarration(text).narration : undefined}
+                mode={mode}
+                className="chat-bilingual-content"
+                onActionSelect={onActionSelect}
+                htmlFrameVariant={htmlFrameVariant}
+                defaultExpanded={defaultExpanded}
+            />
             <button
                 type="button"
                 className="chat-bilingual-toggle"
@@ -644,8 +665,59 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     );
 });
 
-function TextBubble({ content, onActionSelect, defaultTranslationExpanded = false }: { content: string; onActionSelect?: (text: string) => void; defaultTranslationExpanded?: boolean }) {
-    return <BilingualTextBlock text={content} onActionSelect={onActionSelect} mode="markdown" defaultExpanded={defaultTranslationExpanded} />;
+// 从消息内容里抽出旁白行（独立成段、无「名|」前缀、非括号/引号开头）
+function extractNarration(text: string): { dialogue: string; narration?: string } {
+    const lines = text.split("\n");
+    const dialogue: string[] = [];
+    const narration: string[] = [];
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (
+            trimmed
+            && !trimmed.startsWith("（") && !trimmed.startsWith("(")
+            && !/^["「『“]/.test(trimmed)
+            && !/^[^\s|：:]{1,12}[|：:]/.test(trimmed)
+        ) narration.push(trimmed);
+        else dialogue.push(line);
+    }
+    return {
+        dialogue: dialogue.join("\n").trim(),
+        ...(narration.length ? { narration: narration.join("\n").trim() } : {}),
+    };
+}
+
+// 正文 + 居中旁白（旁白行渲染成独立淡字块）
+function NarrationAwareText({ text, narration, mode, className, onActionSelect, htmlFrameVariant, defaultExpanded }: {
+    text: string;
+    narration?: string;
+    mode: "markdown" | "plain";
+    className?: string;
+    onActionSelect?: (text: string) => void;
+    htmlFrameVariant?: ChatHtmlFrameVariant;
+    defaultExpanded?: boolean;
+}) {
+    return (
+        <>
+            {renderContentExternal(text, mode, className, onActionSelect, htmlFrameVariant, defaultExpanded)}
+            {narration && <div className="chat-narration-line">{narration}</div>}
+        </>
+    );
+}
+
+// BilingualTextBlock 内部的 renderContent 逻辑抽出（避免闭包依赖）
+function renderContentExternal(text: string, mode: "markdown" | "plain", className?: string, onActionSelect?: (text: string) => void, htmlFrameVariant?: ChatHtmlFrameVariant, defaultExpanded?: boolean) {
+    const extraClass = `chat-msg-content ${className ?? ""}`.trim();
+    if (mode === "plain") return <PlainTextContent content={text} className={extraClass} />;
+    return (
+        <div className={extraClass}>
+            <MarkdownTextContent content={text} onActionSelect={onActionSelect} htmlFrameVariant={htmlFrameVariant} />
+        </div>
+    );
+    void defaultExpanded;
+}
+
+function TextBubble({ content, onActionSelect, defaultTranslationExpanded = false, narrationMode = false }: { content: string; onActionSelect?: (text: string) => void; defaultTranslationExpanded?: boolean; narrationMode?: boolean }) {
+    return <BilingualTextBlock text={content} onActionSelect={onActionSelect} mode="markdown" defaultExpanded={defaultTranslationExpanded} narrationMode={narrationMode} />;
 }
 
 // ── Red Packet ─────────────────────────────

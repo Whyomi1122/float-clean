@@ -39,7 +39,10 @@ type CallState =
 type SubtitleEntry = {
     id: string;
     role: "user" | "assistant";
+    /** 台词部分（会朗读） */
     text: string;
+    /** 旁白部分（只上屏、居中灰字、不朗读） */
+    narration?: string;
 };
 
 type VoiceCallScreenProps = {
@@ -61,6 +64,41 @@ function stripBilingualForSpeech(text: string): string {
         .split("\n")
         .map(line => splitBilingualText(line)?.original || line)
         .join("\n");
+}
+
+// 旁白判定：独立成段、不带「名|」前缀、非括号开头的行视为旁白（旁白不配音是硬口径）
+function isNarrationLine(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith("（") || trimmed.startsWith("(")) return false; // 括号行是动作残留，交给 TTS 警示
+    if (/^["「『“]/.test(trimmed)) return false;
+    if (/^[^\s|：:]{1,12}[|：:]/.test(trimmed)) return false; // 有角色名前缀 = 台词
+    return true;
+}
+
+// TTS 取文：只念台词，剥掉旁白行（旁白只上屏）
+function stripNarrationForSpeech(text: string): string {
+    return stripBilingualForSpeech(text)
+        .split("\n")
+        .filter(line => !isNarrationLine(line))
+        .join("\n")
+        .trim();
+}
+
+// 字幕拆分：旁白行抽出来居中显示，台词行留在 text（朗读+气泡）
+function splitSubtitleContent(content: string): { text: string; narration?: string } {
+    const lines = content.split("\n");
+    const speech: string[] = [];
+    const narration: string[] = [];
+    for (const line of lines) {
+        if (isNarrationLine(line)) narration.push(line.trim());
+        else speech.push(line);
+    }
+    const text = speech.join("\n").trim();
+    return {
+        text,
+        ...(narration.length ? { narration: narration.join("\n").trim() } : {}),
+    };
 }
 
 // ── Component ───────────────────────────────────────
@@ -365,7 +403,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 })
             );
             messagesRef.current = [...messagesRef.current, ...newMsgs];
-            setSubtitles(prev => [...prev, ...newMsgs.filter(m => !m.mediaType && m.content.trim()).map(m => ({ id: m.id, role: "assistant" as const, text: m.content }))]);
+            setSubtitles(prev => [...prev, ...newMsgs.filter(m => !m.mediaType && m.content.trim()).map(m => ({ id: m.id, role: "assistant" as const, ...splitSubtitleContent(m.content) }))]);
         }
 
         // Return clean text parts for TTS (exclude rich media content)
@@ -418,7 +456,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
             recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
-            const speechText = stripBilingualForSpeech(displayText);
+            const speechText = stripNarrationForSpeech(displayText);
 
             if (!displayText.trim()) {
                 throw new Error("本次通话回复没有可显示的文字，请重试或检查模型返回内容。");
@@ -436,7 +474,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     for (const message of replyMessages) {
                         if (stateRef.current === "ENDED") break;
                         if (!speakerOnRef.current) continue;
-                        const spoken = stripBilingualForSpeech(message.content);
+                        const spoken = stripNarrationForSpeech(message.content);
                         const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
                         if (stateRef.current === "ENDED") break;
                         if (!audioBlob) continue;
@@ -913,7 +951,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     )}
                     {!subtitlesHidden && subtitles.map((sub) => {
                         const isEditing = editingSubtitle && selectedSubtitle?.id === sub.id;
-                        const isLatestAssistant = sub.role === "assistant" && subtitles[subtitles.length - 1]?.id === sub.id;
+                        const isLatestAssistant = sub.role === "assistant" && !!sub.text && subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id === sub.id;
                         return (
                             <div key={sub.id} className="call-subtitle" data-role={sub.role}>
                                 {isEditing ? (
@@ -926,13 +964,16 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     />
                                 ) : (
                                     <>
-                                        {!sub.text && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
+                                        {!sub.text && !sub.narration && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
                                         {sub.text && (
                                             <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
                                         )}
+                                        {sub.narration && (
+                                            <div className="call-subtitle-narration">{sub.narration}</div>
+                                        )}
                                     </>
                                 )}
-                                {isLatestAssistant && !editingSubtitle && callState !== "ENDED" && !callMenuOpen && (
+                                {isLatestAssistant && !editingSubtitle && callState !== "ENDED" && !callMenuOpen && !!sub.text && (
                                     <button
                                         type="button"
                                         className="call-subtitle-edit-btn"

@@ -7742,3 +7742,26 @@
   opacity: 0.55;
   font-style: italic;
 }
+
+/* ===== 通话旁白：居中灰字、无气泡、不朗读（口径见《语音通话 · 参考视频口径.md》三之二） ===== */
+.call-subtitle[data-role="assistant"] .call-subtitle-narration {
+  margin: 2px auto 6px;
+  max-width: 88%;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(235, 238, 245, 0.62);
+  white-space: pre-wrap;
+}
+.call-subtitle[data-role="user"] .call-subtitle-narration { display: none; }
+
+/* ===== 旁白行（聊天室气泡内居中淡字；通话页另有 .call-subtitle-narration） ===== */
+.chat-narration-line {
+  margin: 6px auto 2px;
+  max-width: 92%;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2, rgba(120, 128, 140, 0.9));
+  white-space: pre-wrap;
+}
