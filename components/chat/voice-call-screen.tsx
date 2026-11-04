@@ -137,6 +137,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
     const [subtitlesHidden, setSubtitlesHidden] = useState(false);
+    // 通话偏好：接通后谁先开口（参考视频口径）。默认随发起方：我打的=我先说，她打来的=她先说。
+    const [firstSpeaker, setFirstSpeaker] = useState<"user" | "character">(initiator === "character" ? "character" : "user");
+    const firstSpeakerRef = useRef(firstSpeaker);
+    useEffect(() => { firstSpeakerRef.current = firstSpeaker; }, [firstSpeaker]);
     const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestReplyIdsRef = useRef<string[]>([]);
     const [miniPosition, setMiniPosition] = useState<{ left: number; top: number } | null>(null);
@@ -326,10 +330,17 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Track first connect
+    // Track first connect + 通话偏好"对方先说"
     useEffect(() => {
         if (callState !== "CONNECTING" && !hasConnectedRef.current) {
             hasConnectedRef.current = true;
+            // 接通瞬间：偏好"对方先说"且本轮还没有角色台词 → 立刻让她开口（不等用户说话，也不等自动搭话）
+            const hasCallDialogue = messagesRef.current.some(m =>
+                m.role === "assistant" && m.content && !m.content.includes("发起了语音通话") && !m.content.startsWith("[")
+            );
+            if (firstSpeakerRef.current === "character" && !hasCallDialogue) {
+                void turnRef.current();
+            }
         }
     }, [callState]);
 
@@ -880,6 +891,23 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     <span>字幕显示</span>
                                     <span className="call-more-value">{subtitlesHidden ? "隐藏" : "显示"}</span>
                                 </button>
+                                {/* 通话偏好：谁先开口（只在还没人说第一句时可切） */}
+                                {!hasConnectedRef.current || subtitles.some(s => s.role === "assistant" && s.text) ? (
+                                    <button type="button" disabled>
+                                        <span>先开口的</span>
+                                        <span className="call-more-value">{firstSpeaker === "character" ? "对方" : "你"}（已定）</span>
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFirstSpeaker(value => value === "character" ? "user" : "character");
+                                        }}
+                                    >
+                                        <span>先开口的</span>
+                                        <span className="call-more-value">{firstSpeaker === "character" ? "对方先说" : "你先说"} › 切换</span>
+                                    </button>
+                                )}
                                 <button type="button" onClick={() => setCallMenuOpen(false)}>
                                     <span>收起</span>
                                 </button>
