@@ -73,3 +73,31 @@ export function speechTextForContent(content: string): string {
     if (translated) return translated;
     return content.trim();
 }
+
+/**
+ * 把一段回复切成适合分段合成的短句：先合成第一句就能开播，
+ * 后面几句在播放的同时并行合成，首字出声延迟明显降低。
+ */
+export function splitSpeechChunks(text: string, maxLen = 40): string[] {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    if (!cleaned) return [];
+    const pieces = cleaned.match(/[^。！？!?…；;\n]+[。！？!?…；;]?/g) || [cleaned];
+    const chunks: string[] = [];
+    let buffer = "";
+    for (const raw of pieces) {
+        const piece = raw.trim();
+        if (!piece) continue;
+        if (buffer && buffer.length + piece.length > maxLen) {
+            chunks.push(buffer);
+            buffer = piece;
+        } else {
+            buffer += piece;
+        }
+        if (buffer.length >= maxLen) {
+            chunks.push(buffer);
+            buffer = "";
+        }
+    }
+    if (buffer.trim()) chunks.push(buffer.trim());
+    return chunks.length ? chunks : [cleaned];
+}

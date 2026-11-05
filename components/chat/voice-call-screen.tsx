@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechChunks } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -480,35 +480,51 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         setSpeakingId(message.id);
                         const spoken = stripNarrationForSpeech(message.content);
                         recordCallDiagnostic(`TTS 取文 ${spoken.length} 字：${spoken.slice(0, 40)}`);
-                        const audioBlob = await synthesizeSpeech(spoken, voiceConfig);
-                        if (stateRef.current === "ENDED") break;
-                        if (!audioBlob) {
-                            setTtsNotice("语音合成返回空音频（检查音色配置 / 额度）");
-                            recordCallDiagnostic("TTS 返回空音频");
-                            continue;
-                        }
-                        try {
-                            const current = loadChatMessages(session.id).find(m => m.id === message.id);
-                            if (current?.content === message.content) {
-                                const audio = await prepareChatVoiceAudio(audioBlob, message.content);
-                                updateChatMessage(message.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: spoken } });
-                                messagesRef.current = loadChatMessages(session.id);
+                        const chunks = splitSpeechChunks(spoken);
+                        const audioParts: Blob[] = [];
+                        let pendingChunk: Promise<Blob | null> | null = null;
+                        for (let i = 0; i < chunks.length; i++) {
+                            if (stateRef.current === "ENDED") break;
+                            const chunkStartedAt = Date.now();
+                            const audioBlob = pendingChunk ? await pendingChunk : await synthesizeSpeech(chunks[i], voiceConfig);
+                            // 播放这一句的同时，先把下一句送去合成
+                            pendingChunk = i + 1 < chunks.length
+                                ? synthesizeSpeech(chunks[i + 1], voiceConfig).catch(() => null)
+                                : null;
+                            recordCallDiagnostic(`合成第 ${i + 1}/${chunks.length} 段：${Date.now() - chunkStartedAt}ms · ${chunks[i].length} 字`);
+                            if (stateRef.current === "ENDED") break;
+                            if (!audioBlob) {
+                                setTtsNotice("语音合成返回空音频（检查音色配置 / 额度）");
+                                recordCallDiagnostic(`TTS 第 ${i + 1} 段返回空音频`);
+                                continue;
                             }
-                        } catch (error) { console.warn("[VoiceCall] 保存原音失败", error); }
-                        if (stateRef.current === "ENDED") break;
-                        // 扬声器总开关（参考设计）：关 = 只出字幕不出声，直接跳过播放
-                        if (!speakerOnRef.current) continue;
-                        const { promise, abort } = playCallAudio(audioBlob);
-                        audioAbortRef.current = abort;
-                        const playStarted = Date.now();
-                        try {
-                            await promise;
-                            recordCallDiagnostic(`播放完成：${Date.now() - playStarted}ms · ${audioBlob.size} bytes · ${audioBlob.type || "未知类型"}`);
-                        } catch (playError: any) {
-                            recordCallDiagnostic(`播放失败：${playError?.message || String(playError)}`);
-                            setTtsNotice(`语音播放失败：${playError?.message || String(playError)}`);
+                            audioParts.push(audioBlob);
+                            // 扬声器总开关（参考设计）：关 = 只出字幕不出声，直接跳过播放
+                            if (!speakerOnRef.current) continue;
+                            const { promise, abort } = playCallAudio(audioBlob);
+                            audioAbortRef.current = abort;
+                            const playStarted = Date.now();
+                            try {
+                                await promise;
+                                recordCallDiagnostic(`播放完成：${Date.now() - playStarted}ms · ${audioBlob.size} bytes · ${audioBlob.type || "未知类型"}`);
+                            } catch (playError: any) {
+                                recordCallDiagnostic(`播放失败：${playError?.message || String(playError)}`);
+                                setTtsNotice(`语音播放失败：${playError?.message || String(playError)}`);
+                            }
+                            audioAbortRef.current = null;
                         }
-                        audioAbortRef.current = null;
+                        // 分段音频拼成整条，仍按原逻辑存为「角色原音」供回放/重听
+                        if (audioParts.length) {
+                            try {
+                                const current = loadChatMessages(session.id).find(m => m.id === message.id);
+                                if (current?.content === message.content) {
+                                    const merged = new Blob(audioParts, { type: audioParts[0].type || "audio/mpeg" });
+                                    const audio = await prepareChatVoiceAudio(merged, message.content);
+                                    updateChatMessage(message.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: spoken } });
+                                    messagesRef.current = loadChatMessages(session.id);
+                                }
+                            } catch (error) { console.warn("[VoiceCall] 保存原音失败", error); }
+                        }
                         setSpeakingId(null);
                     }
                 } catch (e: any) {
@@ -1157,7 +1173,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 {ttsNotice && (
                     <div className="text-center ts-12 px-5" style={{ color: "#ffc2c2" }}>{ttsNotice}</div>
                 )}
-                {holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
+                {!editingSubtitle && holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
                     <div className="text-center ts-12 opacity-80 px-5">
                         {holdInput.recState === "recording" ? "松开发送"
                             : holdInput.recState === "transcribing" ? "识别中…"
@@ -1165,12 +1181,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     </div>
                 )}
 
-                <CallDiagnosticPanel characterId={session.contactId} />
+                {!editingSubtitle && <CallDiagnosticPanel characterId={session.contactId} />}
 
                 {/* Bottom controls */}
                 <div
-                    className="relative flex justify-center items-center gap-[26px] px-4 py-5"
-                    style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
+                    className="call-bottom-controls relative flex justify-center items-center gap-[26px] px-4 py-5"
+                    data-compact={editingSubtitle ? "" : undefined}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>

@@ -7932,3 +7932,53 @@
   border-top-color: #fff;
   animation: call-replay-spin 0.8s linear infinite;
 }
+
+/* ── 通话底部按键行：编辑台词时整体缩小，给输入框让出高度 ── */
+.call-bottom-controls {
+  padding-bottom: max(30px, env(safe-area-inset-bottom));
+}
+.call-bottom-controls[data-compact] {
+  gap: 18px;
+  padding-top: 4px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+.call-bottom-controls[data-compact] .ui-call-btn {
+  width: 44px;
+  height: 44px;
+}
+.call-bottom-controls[data-compact] .ui-call-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.call-bottom-controls[data-compact] .ui-call-mic {
+  border-width: 2px;
+}
+.call-bottom-controls[data-compact] .ui-call-mic-lg {
+  width: 58px;
+  height: 58px;
+}
+.call-bottom-controls[data-compact] .ui-call-mic-lg svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* 台词编辑框：与字幕正文同字号，不再明显放大 */
+.call-subtitle textarea.call-subtitle-edit {
+  font-size: calc(12.6px * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+/* 正在合成/播放的转圈：挪到气泡外侧、编辑按钮上方 */
+.call-subtitle[data-speaking]::after {
+  position: absolute;
+  left: 100%;
+  top: calc(50% - 44px);
+  margin-left: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: none;
+}

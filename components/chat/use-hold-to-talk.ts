@@ -16,6 +16,7 @@ import {
     startAliyunStreamingStt,
     type ActiveStreamingStt,
 } from "@/lib/aliyun-streaming-stt";
+import { recordCallDiagnostic } from "@/lib/call-diagnostics";
 
 export type HoldToTalkRecState = "idle" | "recording" | "transcribing";
 
@@ -89,6 +90,8 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
         setError("");
         startingRef.current = true;
         const config = resolveCloudSttConfig(optionsRef.current.characterId);
+        const pressStartedAt = Date.now();
+        recordCallDiagnostic(`识别开始：provider=${config?.provider || "无"} 流式支持=${isStreamingSttSupported() ? "是" : "否"}`);
 
         // 档 2：阿里云实时流式——随说随识别。失败或环境不支持则回退一句话识别。
         if (config?.provider === "aliyun" && config.aliyunAppKey && isStreamingSttSupported()) {
@@ -105,10 +108,12 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
                 startedAtRef.current = Date.now();
                 setRecState("recording");
                 optionsRef.current.onRecordingStart?.();
+                recordCallDiagnostic(`流式识别已连接：${Date.now() - pressStartedAt}ms`);
                 return;
             } catch (e) {
                 // 连接失败：不打断用户，直接走一句话识别
                 streamingErrorRef.current = e instanceof Error ? e.message : String(e);
+                recordCallDiagnostic(`流式连接失败，改用一句话识别：${streamingErrorRef.current}`);
             }
         }
 
@@ -141,7 +146,9 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
             setRecState("transcribing");
             optionsRef.current.onTranscribeStart?.();
             try {
+                const stopStartedAt = Date.now();
                 const text = await streaming.stop();
+                recordCallDiagnostic(`流式收尾：${Date.now() - stopStartedAt}ms · 结果 ${text.trim().length} 字`);
                 if (!mountedRef.current) return;
                 if (text.trim()) {
                     setRecState("idle");
@@ -155,7 +162,9 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
                 const config = resolveCloudSttConfig(optionsRef.current.characterId);
                 if (wav && config) {
                     try {
+                        const fallbackStartedAt = Date.now();
                         const fallbackText = await transcribeAudioBlob(wav, config);
+                        recordCallDiagnostic(`兜底一句话识别：${Date.now() - fallbackStartedAt}ms · 结果 ${fallbackText.trim().length} 字`);
                         if (!mountedRef.current) return;
                         if (fallbackText.trim()) {
                             setRecState("idle");
@@ -190,11 +199,13 @@ export function useHoldToTalk(options: HoldToTalkOptions): HoldToTalkHandle {
         setRecState("transcribing");
         optionsRef.current.onTranscribeStart?.();
         try {
+            const oneShotStartedAt = Date.now();
             const blob = await recording.stop();
             if (!blob) { fail("没有录到声音"); return; }
             const config = resolveCloudSttConfig(optionsRef.current.characterId);
             if (!config) { fail("未找到可用的语音识别配置"); return; }
             const text = await transcribeAudioBlob(blob, config);
+            recordCallDiagnostic(`一句话识别：${Date.now() - oneShotStartedAt}ms · 结果 ${text.trim().length} 字`);
             if (!mountedRef.current) return;
             setRecState("idle");
             if (!text.trim()) { fail("没有识别到内容"); return; }
