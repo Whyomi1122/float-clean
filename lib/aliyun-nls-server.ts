@@ -77,7 +77,13 @@ async function createToken(akId: string, akSecret: string): Promise<CachedToken>
         .join("&");
     const url = `${TOKEN_ENDPOINT}?Signature=${percentEncode(signature)}&${query}`;
 
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    let res: Response;
+    try {
+        res = await fetch(url, { method: "GET", cache: "no-store" });
+    } catch (e) {
+        const err = e as { message?: string; cause?: { code?: string; message?: string } };
+        throw new Error(`CreateToken 网络请求失败：${err?.message || String(e)}（cause: ${err?.cause?.code || err?.cause?.message || "-"}）`);
+    }
     const responseBody = await res.text();
     const data = await Promise.resolve().then(() => JSON.parse(responseBody)).catch(() => null) as {
         Token?: { Id?: string; ExpireTime?: number };
@@ -153,6 +159,10 @@ export async function recognizeShortSpeech(audio: ArrayBuffer, appKey: string): 
     } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
             throw new Error("阿里云识别超时（55 秒无响应）");
+        }
+        const err = e as { message?: string; cause?: { code?: string; message?: string } };
+        if (err?.cause || /fetch failed/i.test(err?.message || "")) {
+            throw new Error(`阿里云识别网络请求失败：${err?.message || String(e)}（cause: ${err?.cause?.code || err?.cause?.message || "-"}）`);
         }
         throw e;
     } finally {

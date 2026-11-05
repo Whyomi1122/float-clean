@@ -11,11 +11,11 @@ import { generateChatCompletion, flattenCompletionResult, ChatEngineError } from
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
-import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, playAudioBlobViaMediaElement, setCallAudioSessionActive } from "@/lib/tts-service";
+import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, setCallAudioSessionActive, unlockAudioPlayback } from "@/lib/tts-service";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
-import { BilingualTextBlock } from "./message-bubble";
+import { SubtitleText } from "./subtitle-text";
 import { splitNarration, speechTextForContent } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
@@ -86,7 +86,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const holdToTalk = holdToTalkRef.current;
     const androidTextInputOnlyRef = useRef(isAndroidBrowser() && !holdToTalkRef.current);
     const androidTextInputOnly = androidTextInputOnlyRef.current;
-    const playCallAudio = iosDevice ? playAudioBlob : playAudioBlobViaMediaElement;
+    // 统一用 WebAudio 播放：通话中语音是「延迟几秒」才播的，
+    // <audio> 元素在移动端容易被自动播放策略拦掉（表现为完全无声但不报错）。
+    const playCallAudio = playAudioBlob;
     const { style: keyboardOffsetStyle, offset: kbOffset } = useCallKeyboardOffsetStyle();
     const [callState, setCallState] = useState<CallState>("CONNECTING");
     const hasConnectedRef = useRef(false);
@@ -308,6 +310,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     useEffect(() => {
         if (callState !== "CONNECTING" && !hasConnectedRef.current) {
             hasConnectedRef.current = true;
+            // 接通瞬间（仍在用户点击的同一轮交互里）解锁音频播放，避免后续 TTS 被自动播放策略静音
+            unlockAudioPlayback();
             // 接通瞬间：偏好"对方先说"且本轮还没有角色台词 → 立刻让她开口（不等用户说话，也不等自动搭话）
             const hasCallDialogue = messagesRef.current.some(m =>
                 m.role === "assistant" && m.content && !m.content.includes("发起了语音通话") && !m.content.startsWith("[")
@@ -810,6 +814,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         <div
             className="absolute inset-0 z-[100] flex flex-col text-white overflow-hidden call-bg-default call-keyboard-shift"
             data-keyboard={kbOffset > 0 ? "" : undefined}
+            onPointerDown={() => { unlockAudioPlayback(); recordCallDiagnostic("手势解锁音频上下文"); }}
             style={bgImageResolved ? { ...keyboardOffsetStyle, background: `url(${bgImageResolved}) center/cover no-repeat` } : keyboardOffsetStyle}
         >
             {/* Dark overlay for readability */}
@@ -1040,7 +1045,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     <>
                                         {!sub.text && !sub.narration && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
                                         {sub.text && (
-                                            <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                                            <span className="call-subtitle-body"><SubtitleText text={sub.text} /></span>
                                         )}
                                         {sub.narration && (
                                             <div className="call-subtitle-narration">{sub.narration}</div>
@@ -1144,7 +1149,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     </div>
                 )}
 
-                <CallDiagnosticPanel />
+                <CallDiagnosticPanel characterId={session.contactId} />
 
                 {/* Bottom controls */}
                 <div
