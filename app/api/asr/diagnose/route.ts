@@ -36,7 +36,8 @@ async function probe(url: string, init?: RequestInit) {
     }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+    const appkey = new URL(request.url).searchParams.get("appkey")?.trim() || "";
     const akId = process.env.ALIYUN_AK_ID?.trim() || "";
     const akSecret = process.env.ALIYUN_AK_SECRET?.trim() || "";
 
@@ -76,5 +77,54 @@ export async function GET() {
         await probe(ASR_ENDPOINT, { method: "GET" }),
     ];
 
+    // 3) 真实跑一次一句话识别（1 秒静音 WAV）：验证「服务端 → 阿里云识别接口」整条链路
+    if (appkey) {
+        const started = Date.now();
+        try {
+            const { recognizeShortSpeech } = await import("@/lib/aliyun-nls-server");
+            const result = await recognizeShortSpeech(silentWav(1), appkey);
+            report.transcribe = {
+                ok: true,
+                ms: Date.now() - started,
+                result: result || "(静音，识别为空属正常)",
+            };
+        } catch (e) {
+            const cause = (e as { cause?: { code?: string; message?: string } } | null)?.cause;
+            report.transcribe = {
+                ok: false,
+                ms: Date.now() - started,
+                error: e instanceof Error ? e.message : String(e),
+                cause: cause?.code || cause?.message || null,
+            };
+        }
+    } else {
+        report.transcribe = { skipped: "未提供 appkey，跳过真实识别测试" };
+    }
+
     return NextResponse.json(report, { headers: { "cache-control": "no-store" } });
+}
+
+/** 生成 N 秒 16k/16bit 单声道静音 WAV */
+function silentWav(seconds: number): ArrayBuffer {
+    const sampleRate = 16000;
+    const samples = Math.floor(sampleRate * seconds);
+    const buffer = new ArrayBuffer(44 + samples * 2);
+    const view = new DataView(buffer);
+    const write = (offset: number, text: string) => {
+        for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+    };
+    write(0, "RIFF");
+    view.setUint32(4, 36 + samples * 2, true);
+    write(8, "WAVE");
+    write(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    write(36, "data");
+    view.setUint32(40, samples * 2, true);
+    return buffer;
 }

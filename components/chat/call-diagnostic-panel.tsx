@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { enableCallDiagnostics, disableCallDiagnostics, getCallDiagnostics, recordCallDiagnostic, subscribeCallDiagnostics } from "@/lib/call-diagnostics";
 import { playAudioBlob, resolveVoiceConfig, synthesizeSpeech, unlockAudioPlayback } from "@/lib/tts-service";
+import { resolveCloudSttConfig } from "@/lib/stt-cloud";
 import * as buildInfo from "@/lib/build-info";
 
 export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
@@ -61,14 +62,30 @@ export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
         setBusy("stt");
         try {
             recordCallDiagnostic("— 语音识别自检开始 —");
+            const stt = resolveCloudSttConfig(characterId || undefined);
+            const appKey = stt?.provider === "aliyun" ? (stt.aliyunAppKey || "").trim() : "";
+            recordCallDiagnostic(stt
+                ? `识别配置：provider=${stt.provider || "openai"} ${appKey ? `appkey 尾号=${appKey.slice(-4)}` : "无 appkey"}`
+                : "✗ 未找到识别配置：设置 → 语音 里没有可用的识别通道（阿里云 / OpenAI 兼容）");
             try {
-                const res = await fetch("/api/asr/diagnose", { cache: "no-store" });
+                const query = appKey ? `?appkey=${encodeURIComponent(appKey)}` : "";
+                const res = await fetch(`/api/asr/diagnose${query}`, { cache: "no-store" });
                 const data = await res.json();
                 const env = data?.env || {};
                 recordCallDiagnostic(`服务端 AK：id=${env.hasAkId ? "有" : "缺"} secret=${env.hasAkSecret ? "有" : "缺"} tail=${env.akIdTail || "-"} region=${data?.region || "-"}`);
                 recordCallDiagnostic(`Token：${data?.token?.ok ? `✓ ${data.token.ms}ms` : `✗ ${data?.token?.error || "未知"}`}`);
                 for (const p of data?.probes || []) {
                     recordCallDiagnostic(`连通性 ${p.url} → ${p.ok ? `✓ ${p.status}` : `✗ ${p.error || p.status}`} (${p.ms}ms)${p.cause ? ` cause=${p.cause}` : ""}`);
+                }
+                const tr = data?.transcribe;
+                if (!tr) {
+                    recordCallDiagnostic("端到端识别：服务端未返回结果（路由版本旧，确认最新部署）");
+                } else if (tr.skipped) {
+                    recordCallDiagnostic(`端到端识别：跳过（${tr.skipped}）`);
+                } else if (tr.ok) {
+                    recordCallDiagnostic(`端到端识别：✓ ${tr.ms}ms · 返回「${(tr.result || "").slice(0, 40) || "空文本（静音音频，正常）"}」`);
+                } else {
+                    recordCallDiagnostic(`端到端识别：✗ ${tr.error || "未知错误"}${tr.cause ? ` cause=${tr.cause}` : ""}`);
                 }
             } catch (e) {
                 recordCallDiagnostic(`✗ /api/asr/diagnose 请求失败：${e instanceof Error ? e.message : String(e)}（部署未更新或路由报错）`);
