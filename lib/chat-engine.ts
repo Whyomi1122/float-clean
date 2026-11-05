@@ -879,7 +879,7 @@ export async function sendLLMStreamRequest(
         }
         if (error instanceof ChatEngineError) throw error;
         const detail = error instanceof Error ? error.message : String(error);
-        throw new ChatEngineError(`Stream Network Error connecting to AI Provider: ${detail}`);
+        throw new ChatEngineError(`Stream Network Error connecting to AI Provider: ${detail}${networkErrorHint(detail)}`);
     } finally {
         clearTimeout(llmTimeout);
         detachExternalAbort();
@@ -1056,12 +1056,18 @@ export async function sendLLMRequest(
         if (error instanceof ChatEngineError) throw error;
         const detail = error instanceof Error ? error.message : String(error);
         throw new ChatEngineError(
-            `Network Error connecting to AI Provider: ${detail}\n请求诊断：provider=${requestDebugInfo.provider}, model=${requestDebugInfo.model}, app=${requestDebugInfo.appId}, messages=${requestDebugInfo.messageCount}, bodySize=${requestDebugInfo.bodySize}, estimatedTokens=${requestDebugInfo.bodyTokenEstimate}, largestMessage=${requestDebugInfo.largestMessageSize}, largestRole=${requestDebugInfo.largestMessageRole}, largestIndex=${requestDebugInfo.largestMessageIndex}`,
+            `Network Error connecting to AI Provider: ${detail}\n请求诊断：provider=${requestDebugInfo.provider}, model=${requestDebugInfo.model}, app=${requestDebugInfo.appId}, messages=${requestDebugInfo.messageCount}, bodySize=${requestDebugInfo.bodySize}, estimatedTokens=${requestDebugInfo.bodyTokenEstimate}, largestMessage=${requestDebugInfo.largestMessageSize}, largestRole=${requestDebugInfo.largestMessageRole}, largestIndex=${requestDebugInfo.largestMessageIndex}${networkErrorHint(detail)}`,
         );
     } finally {
         clearTimeout(llmTimeout);
         detachExternalAbort();
     }
+}
+
+/** 浏览器里 fetch 失败只有一句「Failed to fetch」，这里附上常见原因，方便直接定位 */
+function networkErrorHint(detail: string): string {
+    if (!/failed to fetch|load failed|fetch failed|networkerror/i.test(detail)) return "";
+    return "\n可能原因：① 该 API 域名当前网络不可达（需要代理）；② 中转服务没开跨域（CORS）；③ 请求体过大被中转断开；④ 域名/证书失效。可先用「设置 → API → 测试连接」确认基础连通性。";
 }
 
 export type LLMToolRequestResult = {
