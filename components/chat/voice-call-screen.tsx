@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechChunks } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechChunks, splitSentencesForDisplay } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -110,6 +110,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
     const [subtitlesHidden, setSubtitlesHidden] = useState(false);
+    // 字幕条数：0 = 全部；其余为「最多显示几句」，避免长回复堆满屏幕
+    const [subtitleLimit, setSubtitleLimit] = useState(4);
     const [speakingId, setSpeakingId] = useState<string | null>(null);
     // 语音合成侧的可见提示（没绑语音 / 合成失败），避免"角色没声但毫无提示"
     const [ttsNotice, setTtsNotice] = useState<string | null>(null);
@@ -994,6 +996,29 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     <span className={`call-more-switch ${autoChat ? "on" : ""}`} aria-hidden="true"><i /></span>
                                 </button>
                                 {autoChat && <p className="call-more-hint">安静 45–75 秒后开口，本次通话最多 3 次</p>}
+                                <div className="call-more-row">
+                                    <span className="call-more-ico" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M4 6h16" /><path d="M4 12h10" /><path d="M4 18h13" />
+                                        </svg>
+                                    </span>
+                                    <span className="call-more-main">
+                                        <b>字幕条数</b>
+                                        <small>按句拆开显示，只保留最近几句</small>
+                                    </span>
+                                    <span className="call-more-chips">
+                                        {[2, 4, 6, 0].map(value => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                className={`call-more-chip ${subtitleLimit === value ? "on" : ""}`}
+                                                onClick={() => setSubtitleLimit(value)}
+                                            >
+                                                {value === 0 ? "全部" : value}
+                                            </button>
+                                        ))}
+                                    </span>
+                                </div>
                             </div>
                         </>
                     )}
@@ -1060,46 +1085,64 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             字幕已隐藏 · 可在右上「···」恢复
                         </div>
                     )}
-                    {!subtitlesHidden && subtitles.map((sub) => {
-                        const isEditing = editingSubtitle && selectedSubtitle?.id === sub.id;
-                        const isLatestAssistant = sub.role === "assistant" && !!sub.text && subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id === sub.id;
-                        return (
-                            <div key={sub.id} className="call-subtitle" data-role={sub.role} data-speaking={speakingId === sub.id || undefined}>
-                                {isEditing ? (
-                                    <textarea
-                                        className="call-subtitle-edit"
-                                        autoFocus
-                                        value={editText}
-                                        onChange={e => setEditText(e.target.value)}
-                                        placeholder="编辑台词（自动保存）；清空后按发送键让角色重说"
-                                    />
-                                ) : (
-                                    <>
-                                        {!sub.text && !sub.narration && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
-                                        {sub.text && (
-                                            <span className="call-subtitle-body"><SubtitleText text={sub.text} /></span>
-                                        )}
-                                        {sub.narration && (
-                                            <div className="call-subtitle-narration">{sub.narration}</div>
-                                        )}
-                                    </>
-                                )}
-                                {isLatestAssistant && !editingSubtitle && callState !== "ENDED" && !callMenuOpen && !!sub.text && (
-                                    <button
-                                        type="button"
-                                        className="call-subtitle-edit-btn"
-                                        aria-label="编辑台词"
-                                        onClick={() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(true); }}
-                                    >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M12 20h9" />
-                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                        </svg>
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {!subtitlesHidden && (() => {
+                        // 按句拆成独立气泡；双语行成对切，避免原文/译文错位
+                        const items = subtitles.flatMap(sub => {
+                            const parts = sub.role === "assistant" && sub.text
+                                ? splitSentencesForDisplay(sub.text)
+                                : [sub.text];
+                            const list = parts.length ? parts : [sub.text];
+                            return list.map((part, index) => ({ sub, part, index, count: list.length }));
+                        });
+                        const visibleItems = subtitleLimit > 0 ? items.slice(-subtitleLimit) : items;
+                        const latestAssistantId = subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id;
+                        return visibleItems.map(({ sub, part, index, count }) => {
+                            const isEditingThis = editingSubtitle && selectedSubtitle?.id === sub.id;
+                            const isLastPart = index === count - 1;
+                            const isLatestAssistant = isLastPart && sub.id === latestAssistantId;
+                            return (
+                                <div
+                                    key={`${sub.id}-${index}`}
+                                    className="call-subtitle"
+                                    data-role={sub.role}
+                                    data-speaking={(speakingId === sub.id && isLastPart) || undefined}
+                                >
+                                    {isEditingThis && isLastPart ? (
+                                        <textarea
+                                            className="call-subtitle-edit"
+                                            autoFocus
+                                            value={editText}
+                                            onChange={e => setEditText(e.target.value)}
+                                            placeholder="编辑台词（自动保存）；清空后按发送键让角色重说"
+                                        />
+                                    ) : (
+                                        <>
+                                            {!sub.text && !sub.narration && isLastPart && <span className="call-subtitle-cleared">（已清空 · 按发送键让角色重说）</span>}
+                                            {part && (
+                                                <span className="call-subtitle-body"><SubtitleText text={part} /></span>
+                                            )}
+                                            {sub.narration && isLastPart && (
+                                                <div className="call-subtitle-narration">{sub.narration}</div>
+                                            )}
+                                        </>
+                                    )}
+                                    {isLatestAssistant && !editingSubtitle && callState !== "ENDED" && !callMenuOpen && !!sub.text && (
+                                        <button
+                                            type="button"
+                                            className="call-subtitle-edit-btn"
+                                            aria-label="编辑台词"
+                                            onClick={() => { setSelectedSubtitle(sub); setEditText(sub.text); setEditingSubtitle(true); }}
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        });
+                    })()}
 
                     {/* Interim STT text */}
                     {interimText && callState === "USER_SPEAKING" && (

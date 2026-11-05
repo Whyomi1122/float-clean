@@ -101,3 +101,40 @@ export function splitSpeechChunks(text: string, maxLen = 40): string[] {
     if (buffer.trim()) chunks.push(buffer.trim());
     return chunks.length ? chunks : [cleaned];
 }
+
+/** 只按句末标点切，不合并：给字幕分句显示用 */
+function splitByPunctuation(text: string): string[] {
+    const pieces = text.match(/[^。！？!?]+[。！？!?]*/g) || [];
+    return pieces.map(p => p.trim()).filter(Boolean);
+}
+
+/**
+ * 字幕分句：把一条长回复拆成逐句显示。
+ * 双语行（「原文|译文」）必须成对切，两边句数对不上就整行不拆，
+ * 否则会出现「半句韩文配整句中文」的错位。
+ */
+export function splitSentencesForDisplay(text: string): string[] {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return [];
+    const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    const out: string[] = [];
+    for (const line of lines) {
+        const pipeIndex = line.indexOf("|");
+        if (pipeIndex > 0) {
+            const left = line.slice(0, pipeIndex);
+            const right = line.slice(pipeIndex + 1);
+            const leftParts = splitByPunctuation(left);
+            const rightParts = splitByPunctuation(right);
+            if (leftParts.length > 1 && leftParts.length === rightParts.length) {
+                leftParts.forEach((part, index) => out.push(`${part}|${rightParts[index]}`));
+            } else {
+                out.push(line);
+            }
+            continue;
+        }
+        const parts = splitByPunctuation(line);
+        if (parts.length > 1) out.push(...parts);
+        else out.push(line);
+    }
+    return out.length ? out : [trimmed];
+}

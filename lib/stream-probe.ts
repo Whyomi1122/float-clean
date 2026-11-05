@@ -80,7 +80,9 @@ export async function probeStreamingConfig(config: ApiConfig, timeoutMs = 25000)
             ok: false,
             firstByteMs,
             chars,
-            error: error instanceof Error ? error.message : String(error),
+            error: abortedByUs
+                ? `${Math.round(timeoutMs / 1000)}s 内没收到任何增量文本（能连上但不吐流）`
+                : (error instanceof Error ? error.message : String(error)),
         };
     }
 }
