@@ -111,8 +111,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editText, setEditText] = useState("");
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
-    // 字幕显示写死：始终展示文字；最多保留最近 8 句，避免长回复堆满屏幕
-    const SUBTITLE_DISPLAY_LIMIT = 8;
+    // 字幕始终显示、按句拆分，全部保留可向上滚动回看
     // 语音分段：每次合成几句（1 = 首字最快）
     const [speechChunkSize, setSpeechChunkSize] = useState(1);
     const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -1147,7 +1146,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             const list = parts.length ? parts : [sub.text];
                             return list.map((part, index) => ({ sub, part, index, count: list.length }));
                         });
-                        const visibleItems = items.slice(-SUBTITLE_DISPLAY_LIMIT);
+                        // 全部保留，台词区可往上滚动回看（不截断）
+                        const visibleItems = items;
                         const latestAssistantId = subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id;
                         return visibleItems.map(({ sub, part, index, count }) => {
                             const isEditingThis = editingSubtitle && selectedSubtitle?.id === sub.id;
