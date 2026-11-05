@@ -6302,14 +6302,15 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding-top: 0;
+  padding-top: max(12px, env(safe-area-inset-top));
 }
 
 /* ── Top bar ── */
 .gcall-topbar {
   text-align: center;
-  /* 顶栏与聊天室 header 对齐：安全区 + 内容行 */
-  padding: calc(var(--page-header-safe-top, 48px) + 4px) 20px 6px;
+  /* 顶栏与聊天室 header 对齐：目标 = 安全区 + 内容行起始；
+     这里减去 .gcall-body 已有的安全区 padding，避免叠加 */
+  padding: calc(var(--page-header-safe-top, 48px) + 4px - max(12px, env(safe-area-inset-top))) 20px 6px;
   flex-shrink: 0;
 }
 .gcall-topbar-video {
