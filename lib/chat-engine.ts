@@ -2184,7 +2184,7 @@ async function generateNativeChatCompletion(
         preset: PresetConfig | null;
         regexes: RegexConfig[];
         userIdentity: ReturnType<typeof resolveUserIdentity>;
-        options?: ChatPromptBuildOptions & { signal?: AbortSignal };
+        options?: ChatPromptBuildOptions & { signal?: AbortSignal; forceStream?: boolean };
         callbacks?: ChatCompletionCallbacks;
         bailoutRef: ReplyBailoutRef;
     },
@@ -2212,33 +2212,44 @@ async function generateNativeChatCompletion(
     const onlineThinkingEnabled = preset?.online_thinking_enabled === true;
     const onlineThinkingTag = preset?.online_thinking_tag?.trim() || "thinking";
     for (let round = 0; round < maxToolRounds; round += 1) {
-        let result: LLMToolRequestResult;
+        let result!: LLMToolRequestResult;
         try {
-            if (isSessionStreamingEnabled(session, true)) {
+            // forceStream：通话页要「边收边播」，不受会话里聊天流式开关限制
+            const streamEnabled = options?.forceStream === true || isSessionStreamingEnabled(session, true);
+            let streamed = false;
+            if (streamEnabled) {
                 let streamReasoning = "";
-                result = await sendLLMToolStreamRequest(
-                    config,
-                    preset,
-                    requestMessages,
-                    nativeBundle.definitions,
-                    regexes,
-                    meta,
-                    {
-                        appId: options?.appId ?? "chat",
-                        appTags: requestAppTags,
-                        followUpCount: options?.followUpCount,
-                        debugSessionId: session.id,
-                        signal: options?.signal,
-                    },
-                    {
-                        onDelta: (text) => callbacks?.onStreamDelta?.(text),
-                        // 流式下 onReasoningDelta 收到的是单段增量：本地累积后再喂 onReasoning，
-                        // 保证下游拿到的是完整思维链（与整段请求的 onReasoning 语义一致）。
-                        // 预设开启「线上标签解析」时不透传原生思维链（改由下方标签提取）
-                        onReasoningDelta: onlineThinkingEnabled ? undefined : (text) => { streamReasoning += text; callbacks?.onReasoning?.(streamReasoning); },
-                    },
-                );
-            } else {
+                try {
+                    result = await sendLLMToolStreamRequest(
+                        config,
+                        preset,
+                        requestMessages,
+                        nativeBundle.definitions,
+                        regexes,
+                        meta,
+                        {
+                            appId: options?.appId ?? "chat",
+                            appTags: requestAppTags,
+                            followUpCount: options?.followUpCount,
+                            debugSessionId: session.id,
+                            signal: options?.signal,
+                        },
+                        {
+                            onDelta: (text) => callbacks?.onStreamDelta?.(text),
+                            // 流式下 onReasoningDelta 收到的是单段增量：本地累积后再喂 onReasoning，
+                            // 保证下游拿到的是完整思维链（与整段请求的 onReasoning 语义一致）。
+                            // 预设开启「线上标签解析」时不透传原生思维链（改由下方标签提取）
+                            onReasoningDelta: onlineThinkingEnabled ? undefined : (text) => { streamReasoning += text; callbacks?.onReasoning?.(streamReasoning); },
+                        },
+                    );
+                    streamed = true;
+                } catch (streamError) {
+                    // 强制流式（通话）失败时回退整段请求，避免整通电话直接报错
+                    if (options?.forceStream !== true) throw streamError;
+                    console.warn("[chat-engine] 流式请求失败，回退整段请求", streamError);
+                }
+            }
+            if (!streamed) {
                 result = await sendLLMToolRequest(
                     config,
                     preset,
@@ -2558,7 +2569,7 @@ async function registerShortcutContinuation(
 export async function generateChatCompletion(
     session: ChatSession,
     history: ChatMessage[],
-    options?: ChatPromptBuildOptions & { signal?: AbortSignal },
+    options?: ChatPromptBuildOptions & { signal?: AbortSignal; forceStream?: boolean },
     callbacks?: ChatCompletionCallbacks,
 ): Promise<ChatCompletionResult> {
     // 发送兜底（离线推送）：生成期间在服务端挂一张带心跳租约的保险单，
@@ -2589,7 +2600,7 @@ export async function generateChatCompletion(
 async function generateChatCompletionCore(
     session: ChatSession,
     history: ChatMessage[],
-    options: (ChatPromptBuildOptions & { signal?: AbortSignal }) | undefined,
+    options: (ChatPromptBuildOptions & { signal?: AbortSignal; forceStream?: boolean }) | undefined,
     callbacks: ChatCompletionCallbacks | undefined,
     bailoutRef: ReplyBailoutRef,
 ): Promise<ChatCompletionResult> {

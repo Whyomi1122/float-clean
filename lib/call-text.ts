@@ -109,6 +109,23 @@ function splitByPunctuation(text: string): string[] {
 }
 
 /**
+ * 按「每段几句」切分合成文本：段数越少首字越快，段数越多请求越少。
+ * 通话偏好的「语音分段」就是调这个值。
+ */
+export function splitSpeechBySentenceCount(text: string, perChunk = 1): string[] {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    if (!cleaned) return [];
+    const pieces = cleaned.match(/[^。！？!?…；;\n]+[。！？!?…；;]?/g) || [cleaned];
+    const size = Math.max(1, Math.floor(perChunk));
+    const groups: string[] = [];
+    for (let i = 0; i < pieces.length; i += size) {
+        const piece = pieces.slice(i, i + size).join("").trim();
+        if (piece) groups.push(piece);
+    }
+    return groups.length ? groups : [cleaned];
+}
+
+/**
  * 字幕分句：把一条长回复拆成逐句显示。
  * 双语行（「原文|译文」）必须成对切，两边句数对不上就整行不拆，
  * 否则会出现「半句韩文配整句中文」的错位。

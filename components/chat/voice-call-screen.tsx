@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechChunks, splitSentencesForDisplay } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -95,6 +95,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [callDuration, setCallDuration] = useState(0);
     const [subtitles, setSubtitles] = useState<SubtitleEntry[]>([]);
     const [interimText, setInterimText] = useState("");
+    // 流式生成中的临时字幕（模型边吐字边显示），落库后由正式字幕接管
+    const [liveReply, setLiveReply] = useState<string | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [inputMode, setInputMode] = useState<"voice" | "text">(() => androidTextInputOnly ? "text" : "voice");
     const [typedText, setTypedText] = useState("");
@@ -109,9 +111,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editText, setEditText] = useState("");
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
-    const [subtitlesHidden, setSubtitlesHidden] = useState(false);
-    // 字幕条数：0 = 全部；其余为「最多显示几句」，避免长回复堆满屏幕
-    const [subtitleLimit, setSubtitleLimit] = useState(4);
+    // 字幕显示写死：始终展示文字；最多保留最近 8 句，避免长回复堆满屏幕
+    const SUBTITLE_DISPLAY_LIMIT = 8;
+    // 语音分段：每次合成几句（1 = 首字最快）
+    const [speechChunkSize, setSpeechChunkSize] = useState(1);
     const [speakingId, setSpeakingId] = useState<string | null>(null);
     // 语音合成侧的可见提示（没绑语音 / 合成失败），避免"角色没声但毫无提示"
     const [ttsNotice, setTtsNotice] = useState<string | null>(null);
@@ -434,11 +437,87 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
         try {
             recordCallDiagnostic(`通话开始请求 · 输入 ${userText?.length ?? 0} 字 · 历史 ${messagesRef.current.length} 条 · 安卓文字降级 ${androidTextInputOnly}`);
-            // 3. Generate AI response
+
+            // 流式边收边播：模型每吐一句就先合成先播，不再等整段
+            const streamVoiceConfig = resolveVoiceConfig(session.contactId);
+            const liveId = `live-${Date.now()}`;
+            const liveQueue: string[] = [];
+            const liveAudio: Blob[] = [];
+            let livePending = "";
+            let liveDrain: Promise<void> | null = null;
+            let liveStartedAt = 0;
+
+            const speakLive = async (sentence: string) => {
+                if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;
+                const startedAt = Date.now();
+                const blob = await synthesizeSpeech(sentence, streamVoiceConfig);
+                if (!blob) {
+                    recordCallDiagnostic(`流式合成返回空音频：${sentence.slice(0, 16)}`);
+                    return;
+                }
+                liveAudio.push(blob);
+                recordCallDiagnostic(`流式合成 ${Date.now() - startedAt}ms · ${sentence.length} 字`);
+                setCallState("AI_SPEAKING");
+                setSpeakingId(liveId);
+                const { promise, abort } = playCallAudio(blob);
+                audioAbortRef.current = abort;
+                try { await promise; } catch (playError: any) {
+                    recordCallDiagnostic(`流式播放失败：${playError?.message || String(playError)}`);
+                }
+                audioAbortRef.current = null;
+                setSpeakingId(null);
+            };
+            const drainLive = async () => {
+                while (liveQueue.length && stateRef.current !== "ENDED") {
+                    await speakLive(liveQueue.shift()!);
+                }
+            };
+            const kickLive = () => {
+                if (!liveDrain) liveDrain = drainLive().finally(() => { liveDrain = null; });
+            };
+            // 从增量缓冲里切出「已完整」的句子；只取 | 左侧的原文，括号旁白不读
+            const pullSentences = (force: boolean) => {
+                const terminators = ["。", "！", "？", "!", "?", "…", "\n"];
+                let cut = -1;
+                for (const t of terminators) cut = Math.max(cut, livePending.lastIndexOf(t));
+                const complete = force ? livePending : (cut >= 0 ? livePending.slice(0, cut + 1) : "");
+                if (!complete) return;
+                livePending = force ? "" : livePending.slice(cut + 1);
+                const sentences = complete.split(/(?<=[。！？!?…\n])/)
+                    .map(s => s.trim())
+                    .filter(Boolean)
+                    .map(s => s.split("|")[0].trim())
+                    .filter(s => s && !/^[（(].*[）)]$/.test(s));
+                for (const sentence of sentences) liveQueue.push(sentence);
+                if (sentences.length) kickLive();
+            };
+
+            // 3. Generate AI response（强制流式：不等整段，先到先播）
             const aiResponseText = flattenCompletionResult(await generateChatCompletion(session, messagesRef.current, {
                 appTags: ["chat", "voice"],
                 signal: request.signal,
+                forceStream: true,
+            }, {
+                onStreamDelta: (delta: string) => {
+                    if (!delta) return;
+                    if (!liveStartedAt) {
+                        liveStartedAt = Date.now();
+                        recordCallDiagnostic("收到首个增量");
+                    }
+                    livePending += delta;
+                    setLiveReply(prev => (prev || "") + delta);
+                    pullSentences(false);
+                },
             }));
+
+            // 收尾：把最后不足一句的尾巴也读出来，并等播放队列清空
+            if (livePending.trim()) {
+                pullSentences(true);
+            }
+            if (liveDrain) await liveDrain;
+            if (liveStartedAt) {
+                recordCallDiagnostic(`流式结束：首字 ${liveStartedAt} / 共 ${liveAudio.length} 段音频`);
+            }
 
             // Bail if call ended during generation
             if (stateRef.current === "ENDED") return;
@@ -447,6 +526,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const previousIds = new Set(messagesRef.current.map(m => m.id));
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
+            setLiveReply(null);
             recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
             const speechText = stripNarrationForSpeech(displayText);
 
@@ -463,7 +543,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 ? replyMessages.map(m => ({ id: m.id, content: m.content }))
                 : [{ id: `live-${Date.now()}`, content: speechText || displayText }];
 
-            // 6. TTS
+            // 6. TTS（流式已经边收边播过的，这里只负责存原音，不再重复合成）
             setCallState("AI_SPEAKING");
 
             const voiceConfig = resolveVoiceConfig(session.contactId);
@@ -471,7 +551,17 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 setTtsNotice("未绑定语音：本次通话只有字幕（去角色设置里配一个 MiniMax 音色）");
                 recordCallDiagnostic("TTS 跳过：resolveVoiceConfig 返回空（角色未绑定语音）");
             }
-            if (voiceConfig) {
+            if (liveAudio.length > 0 && replyMessages.length > 0) {
+                try {
+                    const target = replyMessages[0];
+                    const merged = new Blob(liveAudio, { type: liveAudio[0].type || "audio/mpeg" });
+                    const audio = await prepareChatVoiceAudio(merged, target.content);
+                    updateChatMessage(target.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: stripNarrationForSpeech(target.content) } });
+                    messagesRef.current = loadChatMessages(session.id);
+                    recordCallDiagnostic(`流式原音已保存：${liveAudio.length} 段合并 ${Math.round(merged.size / 1024)}KB`);
+                } catch (error) { console.warn("[VoiceCall] 保存流式原音失败", error); }
+            }
+            if (voiceConfig && liveAudio.length === 0) {
                 try {
                     for (const message of ttsTargets) {
                         if (stateRef.current === "ENDED") break;
@@ -482,7 +572,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         setSpeakingId(message.id);
                         const spoken = stripNarrationForSpeech(message.content);
                         recordCallDiagnostic(`TTS 取文 ${spoken.length} 字：${spoken.slice(0, 40)}`);
-                        const chunks = splitSpeechChunks(spoken);
+                        const chunks = splitSpeechBySentenceCount(spoken, speechChunkSize);
                         const audioParts: Blob[] = [];
                         let pendingChunk: Promise<Blob | null> | null = null;
                         for (let i = 0; i < chunks.length; i++) {
@@ -542,6 +632,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             }
         } catch (error: any) {
             console.error("[VoiceCall] Error:", error);
+            setLiveReply(null);
             if (stateRef.current !== "ENDED") {
                 setSubtitles(prev => [...prev, {
                     id: `err-${Date.now()}`,
@@ -908,75 +999,40 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                         setFirstSpeaker(v);
                                     };
                                     return (
-                                        <>
-                                            <button
-                                                type="button"
-                                                role="menuitemradio"
-                                                aria-checked={firstSpeaker === "character"}
-                                                disabled={speakerLocked}
-                                                onClick={() => setSpeaker("character")}
-                                            >
-                                                <span className="call-more-ico" aria-hidden="true">
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                                                    </svg>
-                                                </span>
-                                                <span className="call-more-main">
-                                                    <b>对方先说</b>
-                                                    <small>等待对方先开口{speakerLocked ? " · 已定" : ""}</small>
-                                                </span>
-                                                {firstSpeaker === "character" && (
-                                                    <span className="call-more-check" aria-hidden="true">
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                                                    </span>
-                                                )}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitemradio"
-                                                aria-checked={firstSpeaker === "user"}
-                                                disabled={speakerLocked}
-                                                onClick={() => setSpeaker("user")}
-                                            >
-                                                <span className="call-more-ico" aria-hidden="true">
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                                        <path d="M12 19v3" />
-                                                    </svg>
-                                                </span>
-                                                <span className="call-more-main">
-                                                    <b>你先说</b>
-                                                    <small>由你先发起对话{speakerLocked ? " · 已定" : ""}</small>
-                                                </span>
-                                                {firstSpeaker === "user" && (
-                                                    <span className="call-more-check" aria-hidden="true">
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                                                    </span>
-                                                )}
-                                            </button>
-                                        </>
+                                        <div className="call-more-row">
+                                            <span className="call-more-ico" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                                    <path d="M12 19v3" />
+                                                </svg>
+                                            </span>
+                                            <span className="call-more-main">
+                                                <b>谁先说</b>
+                                                <small>{speakerLocked ? "已开口，本通不可改" : "接通后由谁先开口"}</small>
+                                            </span>
+                                            <span className="call-more-chips">
+                                                <button
+                                                    type="button"
+                                                    className={`call-more-chip ${firstSpeaker === "character" ? "on" : ""}`}
+                                                    disabled={speakerLocked}
+                                                    onClick={() => setSpeaker("character")}
+                                                >
+                                                    对方先
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`call-more-chip ${firstSpeaker === "user" ? "on" : ""}`}
+                                                    disabled={speakerLocked}
+                                                    onClick={() => setSpeaker("user")}
+                                                >
+                                                    我先
+                                                </button>
+                                            </span>
+                                        </div>
                                     );
                                 })()}
                                 <div className="call-more-divider" aria-hidden="true" />
-                                <button
-                                    type="button"
-                                    role="menuitemcheckbox"
-                                    aria-checked={!subtitlesHidden}
-                                    onClick={() => setSubtitlesHidden(value => !value)}
-                                >
-                                    <span className="call-more-ico" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                            <rect x="2" y="5" width="20" height="14" rx="3" />
-                                            <path d="M6 15h4" /><path d="M12 15h6" /><path d="M6 11h12" />
-                                        </svg>
-                                    </span>
-                                    <span className="call-more-main">
-                                        <b>字幕显示</b>
-                                        <small>在台词区展示文字内容</small>
-                                    </span>
-                                    <span className={`call-more-switch ${subtitlesHidden ? "" : "on"}`} aria-hidden="true"><i /></span>
-                                </button>
                                 <button
                                     type="button"
                                     role="menuitemcheckbox"
@@ -999,22 +1055,24 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 <div className="call-more-row">
                                     <span className="call-more-ico" aria-hidden="true">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M4 6h16" /><path d="M4 12h10" /><path d="M4 18h13" />
+                                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                            <path d="M12 19v3" />
                                         </svg>
                                     </span>
                                     <span className="call-more-main">
-                                        <b>字幕条数</b>
-                                        <small>按句拆开显示，只保留最近几句</small>
+                                        <b>语音分段</b>
+                                        <small>每次合成几句台词，1 句最快出声</small>
                                     </span>
                                     <span className="call-more-chips">
-                                        {[2, 4, 6, 0].map(value => (
+                                        {[1, 2, 3].map(value => (
                                             <button
                                                 key={value}
                                                 type="button"
-                                                className={`call-more-chip ${subtitleLimit === value ? "on" : ""}`}
-                                                onClick={() => setSubtitleLimit(value)}
+                                                className={`call-more-chip ${speechChunkSize === value ? "on" : ""}`}
+                                                onClick={() => setSpeechChunkSize(value)}
                                             >
-                                                {value === 0 ? "全部" : value}
+                                                {value} 句
                                             </button>
                                         ))}
                                     </span>
@@ -1080,12 +1138,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     className="voicecall-subtitle-mask flex-1 min-h-0 overflow-auto px-5 py-[10px] flex flex-col gap-2 relative"
                     {...(callState !== "CONNECTING" && callState !== "ENDED" ? { "data-text-input": "" } : {})}
                 >
-                    {subtitlesHidden && subtitles.length > 0 && (
-                        <div className="call-subtitle" data-subtitles-hidden="">
-                            字幕已隐藏 · 可在右上「···」恢复
-                        </div>
-                    )}
-                    {!subtitlesHidden && (() => {
+                    {(() => {
                         // 按句拆成独立气泡；双语行成对切，避免原文/译文错位
                         const items = subtitles.flatMap(sub => {
                             const parts = sub.role === "assistant" && sub.text
@@ -1094,7 +1147,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             const list = parts.length ? parts : [sub.text];
                             return list.map((part, index) => ({ sub, part, index, count: list.length }));
                         });
-                        const visibleItems = subtitleLimit > 0 ? items.slice(-subtitleLimit) : items;
+                        const visibleItems = items.slice(-SUBTITLE_DISPLAY_LIMIT);
                         const latestAssistantId = subtitles.filter(s => s.role === "assistant" && s.text).slice(-1)[0]?.id;
                         return visibleItems.map(({ sub, part, index, count }) => {
                             const isEditingThis = editingSubtitle && selectedSubtitle?.id === sub.id;
@@ -1143,6 +1196,18 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             );
                         });
                     })()}
+
+                    {/* 流式生成中的临时字幕 */}
+                    {liveReply && (
+                        <div
+                            className="call-subtitle"
+                            data-role="assistant"
+                            data-streaming=""
+                            data-speaking={(speakingId && speakingId.startsWith("live-")) || undefined}
+                        >
+                            <span className="call-subtitle-body"><SubtitleText text={liveReply} /></span>
+                        </div>
+                    )}
 
                     {/* Interim STT text */}
                     {interimText && callState === "USER_SPEAKING" && (
