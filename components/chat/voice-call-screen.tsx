@@ -454,7 +454,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
             const replyMessages = messagesRef.current.filter(m => !previousIds.has(m.id) && !m.mediaType && m.content.trim());
             latestReplyIdsRef.current = replyMessages.map(m => m.id);
-            recordCallDiagnostic(`本轮新消息 ${replyMessages.length} 条${replyMessages.length ? "" : "（TTS 没有可播文本，检查解析/入库）"}`);
+            recordCallDiagnostic(`本轮新消息 ${replyMessages.length} 条${replyMessages.length ? "" : "（已回退用解析文本朗读）"}`);
+
+            // 兜底：新消息没入库（解析/过滤失配）时也必须出声，直接用本轮解析出的文本
+            const ttsTargets = replyMessages.length > 0
+                ? replyMessages.map(m => ({ id: m.id, content: m.content }))
+                : [{ id: `live-${Date.now()}`, content: speechText || displayText }];
 
             // 6. TTS
             setCallState("AI_SPEAKING");
@@ -466,7 +471,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             }
             if (voiceConfig) {
                 try {
-                    for (const message of replyMessages) {
+                    for (const message of ttsTargets) {
                         if (stateRef.current === "ENDED") break;
                         if (!speakerOnRef.current) {
                             recordCallDiagnostic("扬声器关闭：跳过合成与播放（只出字幕）");
