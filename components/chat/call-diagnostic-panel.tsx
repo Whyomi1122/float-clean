@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { enableCallDiagnostics, disableCallDiagnostics, getCallDiagnostics, recordCallDiagnostic, subscribeCallDiagnostics } from "@/lib/call-diagnostics";
 import { playAudioBlob, resolveVoiceConfig, synthesizeSpeech, unlockAudioPlayback } from "@/lib/tts-service";
 import { resolveCloudSttConfig } from "@/lib/stt-cloud";
+import { probeAliyunStreaming } from "@/lib/aliyun-streaming-stt";
+import { probeAllStreamingConfigs } from "@/lib/stream-probe";
 import * as buildInfo from "@/lib/build-info";
 
 export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
@@ -105,6 +107,57 @@ export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
         }
     };
 
+    /** ③ 实时识别握手自检：只连 WebSocket 发 StartTranscription，不开麦克风 */
+    const runRealtimeSttTest = async () => {
+        if (busy) return;
+        setBusy("realtime");
+        try {
+            recordCallDiagnostic("— 实时识别握手自检开始 —");
+            const stt = resolveCloudSttConfig(characterId || undefined);
+            const appKey = stt?.provider === "aliyun" ? (stt.aliyunAppKey || "").trim() : "";
+            if (stt?.provider !== "aliyun") {
+                recordCallDiagnostic(`✗ 当前识别通道不是阿里云（provider=${stt?.provider || "无"}），实时识别不可用`);
+                return;
+            }
+            recordCallDiagnostic(`appkey 尾号=${appKey ? appKey.slice(-4) : "无"}`);
+            const result = await probeAliyunStreaming(appKey);
+            recordCallDiagnostic(result.ok
+                ? `实时识别：✓ ${result.ms}ms · ${result.message}`
+                : `实时识别：✗ ${result.ms}ms · ${result.message}`);
+        } catch (e) {
+            recordCallDiagnostic(`✗ 实时识别自检异常：${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    /** ④ 流式能力自检：逐个模型发 stream:true 的最小请求，量首字耗时 */
+    const runStreamModelTest = async () => {
+        if (busy) return;
+        setBusy("stream");
+        try {
+            recordCallDiagnostic("— 流式模型自检开始（每个模型单独请求，慢的会等一会）—");
+            const results = await probeAllStreamingConfigs();
+            if (!results.length) {
+                recordCallDiagnostic("✗ 没有已配置的 API 模型：设置 → API");
+                return;
+            }
+            for (const r of results) {
+                recordCallDiagnostic(r.ok
+                    ? `流式 ✓ ${r.label} · 首字 ${r.firstByteMs}ms · 收到 ${r.chars} 字`
+                    : `流式 ✗ ${r.label} · ${r.error || "未收到增量"}`);
+            }
+            const usable = results.filter(r => r.ok);
+            recordCallDiagnostic(usable.length
+                ? `可用流式模型 ${usable.length}/${results.length}：${usable.map(r => r.label).join(" / ")}`
+                : "✗ 没有任何模型支持流式：通话只能沿用一次性返回");
+        } catch (e) {
+            recordCallDiagnostic(`✗ 流式自检异常：${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setBusy(null);
+        }
+    };
+
     return <div style={{ padding: "4px 20px", textAlign: "center", fontSize: 12 }}>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ opacity: .75, padding: "6px 12px" }}>通话诊断 D1{open ? " · 收起" : ""}</button>
         {open && <div style={{ borderRadius: 14, padding: 12, background: "var(--background, #f7f7f7)", color: "var(--foreground, #333)", textAlign: "left", maxHeight: "42dvh", overflow: "auto", position: "relative", zIndex: 30 }}>
@@ -115,6 +168,12 @@ export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
                 </button>
                 <button type="button" disabled={busy === "stt"} onClick={runSttTest} style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(0,0,0,.06)" }}>
                     {busy === "stt" ? "测语音识别…" : "测语音识别"}
+                </button>
+                <button type="button" disabled={busy === "realtime"} onClick={runRealtimeSttTest} style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(0,0,0,.06)" }}>
+                    {busy === "realtime" ? "测实时识别…" : "测实时识别"}
+                </button>
+                <button type="button" disabled={busy === "stream"} onClick={runStreamModelTest} style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(0,0,0,.06)" }}>
+                    {busy === "stream" ? "测流式模型…" : "测流式模型"}
                 </button>
             </div>
             <textarea aria-label="通话诊断报告" readOnly value={report} onFocus={event => event.currentTarget.select()} style={{ width: "100%", height: 150, fontSize: 11, background: "transparent", color: "inherit", wordBreak: "break-all" }} />

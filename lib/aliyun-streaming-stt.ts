@@ -353,3 +353,81 @@ export function isStreamingSttSupported(): boolean {
         && typeof AudioContext !== "undefined"
         && !!navigator.mediaDevices?.getUserMedia;
 }
+
+/**
+ * 只做握手自检：取 Token → 连 WebSocket → 发 StartTranscription，
+ * 看服务端是否回 TranscriptionStarted。用来判断「实时语音识别」服务
+ * 在当前项目上有没有开通、appkey 是否匹配、网络是否可达。
+ * 不开麦克风、不上传音频，通常几百毫秒到几秒出结果。
+ */
+export async function probeAliyunStreaming(
+    appKey: string,
+    timeoutMs = 10000,
+): Promise<{ ok: boolean; ms: number; message: string; status?: number }> {
+    const startedAt = Date.now();
+    const key = appKey?.trim();
+    if (!key) return { ok: false, ms: 0, message: "没有读到 appkey（先检查设置 → 语音 → 识别通道）" };
+    if (typeof WebSocket === "undefined") return { ok: false, ms: 0, message: "当前环境不支持 WebSocket" };
+
+    try {
+        const tokenStartedAt = Date.now();
+        const token = await fetchToken();
+        const tokenMs = Date.now() - tokenStartedAt;
+        const url = `${ALIYUN_WS_ENDPOINT}?token=${encodeURIComponent(token)}&appkey=${encodeURIComponent(key)}`;
+        const ws = new WebSocket(url);
+        const taskId = crypto.randomUUID();
+
+        return await new Promise((resolve) => {
+            let settled = false;
+            const done = (result: { ok: boolean; message: string; status?: number }) => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timer);
+                try { ws.close(); } catch { /* ignore */ }
+                resolve({ ...result, ms: Date.now() - startedAt });
+            };
+            const timer = window.setTimeout(() => {
+                done({ ok: false, message: "等待 TranscriptionStarted 超时（项目可能未开通「实时语音识别」）" });
+            }, timeoutMs);
+
+            ws.onopen = () => {
+                try {
+                    ws.send(JSON.stringify({
+                        header: {
+                            message_id: crypto.randomUUID(),
+                            task_id: taskId,
+                            namespace: "SpeechTranscriber",
+                            name: "StartTranscription",
+                            appkey: key,
+                        },
+                        payload: { format: "pcm", sample_rate: SAMPLE_RATE, enable_intermediate_result: true },
+                    }));
+                } catch {
+                    done({ ok: false, message: "发送 StartTranscription 失败" });
+                }
+            };
+            ws.onerror = () => done({ ok: false, message: "WebSocket 连接失败（token / appkey / 网络）" });
+            ws.onclose = () => done({ ok: false, message: "连接被服务端断开（通常是 appkey 与项目不匹配或未开通实时识别）" });
+            ws.onmessage = (event) => {
+                if (typeof event.data !== "string") return;
+                let data: NlsMessage;
+                try { data = JSON.parse(event.data) as NlsMessage; } catch { return; }
+                const name = data.header?.name || "";
+                const status = data.header?.status ?? 20000000;
+                if (name === "TranscriptionStarted" && status === 20000000) {
+                    done({ ok: true, message: `token ${tokenMs}ms，实时识别服务已就绪` });
+                    return;
+                }
+                if (status !== 20000000 && status !== 20000001) {
+                    done({
+                        ok: false,
+                        status,
+                        message: `${name || "识别"}失败（${status}）：${data.header?.status_text || data.payload?.msg || "未知错误"}`,
+                    });
+                }
+            };
+        });
+    } catch (error) {
+        return { ok: false, ms: Date.now() - startedAt, message: error instanceof Error ? error.message : String(error) };
+    }
+}
