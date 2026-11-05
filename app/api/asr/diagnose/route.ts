@@ -8,6 +8,8 @@ import { AliyunConfigError, getAliyunToken } from "@/lib/aliyun-nls-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// 自检要跑 Token + 连通性 + 端到端识别，给足时间
+export const maxDuration = 60;
 
 const TOKEN_ENDPOINT = "https://nls-meta.cn-shanghai.aliyuncs.com/";
 const ASR_ENDPOINT = "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr";
