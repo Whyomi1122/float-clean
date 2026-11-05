@@ -26,6 +26,22 @@ const CHUNK_SAMPLES = 1600; // 100ms
 const SILENCE_AUTO_STOP_MS = 1200; // 说完自动收尾（流式特有的"说完即识别"）
 const MAX_STREAM_MS = 60_000;
 
+/**
+ * 阿里云 NLS 的 message_id / task_id 要求 32 位十六进制、不能带连字符。
+ * 之前直接用了 crypto.randomUUID()（带 '-'），网关会回
+ * 40000002 MESSAGE_INVALID: Invalid message id '...' —— 实时识别一直是这个原因失败的。
+ */
+function nlsId(): string {
+    const uuid = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx`.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        });
+    return uuid.replace(/-/g, "");
+}
+
 export type StreamingSttHandlers = {
     /** 中间结果（会不断被替换） */
     onPartial?: (text: string) => void;
@@ -158,12 +174,12 @@ export async function startAliyunStreamingStt(
     // 全程保留采集到的 PCM：流式失败/空结果时用它走一次性识别兜底
     const capturedPcm: Int16Array[] = [];
     // NLS 协议：同一次识别任务共用一个 task_id，每条指令单独一个 message_id
-    const taskId = crypto.randomUUID();
+    const taskId = nlsId();
 
     const sendCommand = (name: "StartTranscription" | "StopTranscription") => {
         sendJson({
             header: {
-                message_id: crypto.randomUUID(),
+                message_id: nlsId(),
                 task_id: taskId,
                 namespace: "SpeechTranscriber",
                 name,
@@ -206,7 +222,7 @@ export async function startAliyunStreamingStt(
             window.clearTimeout(openTimer);
             sendJson({
                 header: {
-                    message_id: crypto.randomUUID(),
+                    message_id: nlsId(),
                     task_id: taskId,
                     namespace: "SpeechTranscriber",
                     name: "StartTranscription",
@@ -375,7 +391,7 @@ export async function probeAliyunStreaming(
         const tokenMs = Date.now() - tokenStartedAt;
         const url = `${ALIYUN_WS_ENDPOINT}?token=${encodeURIComponent(token)}&appkey=${encodeURIComponent(key)}`;
         const ws = new WebSocket(url);
-        const taskId = crypto.randomUUID();
+        const taskId = nlsId();
 
         return await new Promise((resolve) => {
             let settled = false;
@@ -394,7 +410,7 @@ export async function probeAliyunStreaming(
                 try {
                     ws.send(JSON.stringify({
                         header: {
-                            message_id: crypto.randomUUID(),
+                            message_id: nlsId(),
                             task_id: taskId,
                             namespace: "SpeechTranscriber",
                             name: "StartTranscription",
