@@ -454,6 +454,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
             const replyMessages = messagesRef.current.filter(m => !previousIds.has(m.id) && !m.mediaType && m.content.trim());
             latestReplyIdsRef.current = replyMessages.map(m => m.id);
+            recordCallDiagnostic(`本轮新消息 ${replyMessages.length} 条${replyMessages.length ? "" : "（TTS 没有可播文本，检查解析/入库）"}`);
 
             // 6. TTS
             setCallState("AI_SPEAKING");
@@ -467,7 +468,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 try {
                     for (const message of replyMessages) {
                         if (stateRef.current === "ENDED") break;
-                        if (!speakerOnRef.current) continue;
+                        if (!speakerOnRef.current) {
+                            recordCallDiagnostic("扬声器关闭：跳过合成与播放（只出字幕）");
+                            continue;
+                        }
                         setSpeakingId(message.id);
                         const spoken = stripNarrationForSpeech(message.content);
                         recordCallDiagnostic(`TTS 取文 ${spoken.length} 字：${spoken.slice(0, 40)}`);
@@ -491,7 +495,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         if (!speakerOnRef.current) continue;
                         const { promise, abort } = playCallAudio(audioBlob);
                         audioAbortRef.current = abort;
-                        await promise;
+                        const playStarted = Date.now();
+                        try {
+                            await promise;
+                            recordCallDiagnostic(`播放完成：${Date.now() - playStarted}ms · ${audioBlob.size} bytes · ${audioBlob.type || "未知类型"}`);
+                        } catch (playError: any) {
+                            recordCallDiagnostic(`播放失败：${playError?.message || String(playError)}`);
+                            setTtsNotice(`语音播放失败：${playError?.message || String(playError)}`);
+                        }
                         audioAbortRef.current = null;
                         setSpeakingId(null);
                     }
