@@ -22,6 +22,21 @@ export function usesCallDialogueFormat(text: string): boolean {
     return CALL_FORMAT.test(text);
 }
 
+/**
+ * 去掉模型自带的「[语音条: …]」外壳。真实输出（2026-11-05 实机）：
+ *   [语音条:어디야는 무슨, 집 앞이니까 창밖 좀 봐봐.
+ *   什么叫做在哪里，就在家门口呢，往窗外看一眼。]
+ * 旧逻辑把「[」「语音条:」「]」当台词：界面上露符号、TTS 还念了个「[」。
+ */
+export function stripVoiceNoteWrapper(text: string): string {
+    let out = (text || "").replace(/语音条\s*[:：]?/g, "");
+    // 独占一行的纯括号残留
+    out = out.split(/\r?\n/).filter(line => !/^[\s[\]【】]*$/.test(line)).join("\n");
+    // 整段首尾游离的方括号
+    out = out.replace(/^\s*[[【]\s*/, "").replace(/\s*[\]】]\s*$/, "");
+    return out.trim();
+}
+
 /** 单行是否属于旁白（需配合 usesCallDialogueFormat 使用） */
 export function isNarrationLine(line: string): boolean {
     const trimmed = line.trim();
@@ -38,6 +53,7 @@ export function isNarrationLine(line: string): boolean {
  * 只有整段确实用了通话台词格式时才抽旁白，否则原样返回。
  */
 export function splitNarration(text: string): { dialogue: string; narration?: string } {
+    text = stripVoiceNoteWrapper(text);
     if (!usesCallDialogueFormat(text)) return { dialogue: text };
     const dialogue: string[] = [];
     const narration: string[] = [];
@@ -66,6 +82,7 @@ export function stripBilingualTranslation(text: string): string {
  * 任何一步剥成空串都会逐级回退，确保不会出现「空文本让角色哑掉」。
  */
 export function speechTextForContent(content: string): string {
+    content = stripVoiceNoteWrapper(content);
     const { dialogue } = splitNarration(content);
     const spoken = stripBilingualTranslation(dialogue);
     if (spoken) return spoken;
@@ -113,7 +130,7 @@ function splitByPunctuation(text: string): string[] {
  * 通话偏好的「语音分段」就是调这个值。
  */
 export function splitSpeechBySentenceCount(text: string, perChunk = 1): string[] {
-    const cleaned = text.replace(/\s+/g, " ").trim();
+    const cleaned = stripVoiceNoteWrapper(text).replace(/\s+/g, " ").trim();
     if (!cleaned) return [];
     const pieces = cleaned.match(/[^。！？!?…；;\n]+[。！？!?…；;]?/g) || [cleaned];
     const size = Math.max(1, Math.floor(perChunk));
@@ -131,7 +148,7 @@ export function splitSpeechBySentenceCount(text: string, perChunk = 1): string[]
  * 否则会出现「半句韩文配整句中文」的错位。
  */
 export function splitSentencesForDisplay(text: string): string[] {
-    const trimmed = (text || "").trim();
+    const trimmed = stripVoiceNoteWrapper(text).trim();
     if (!trimmed) return [];
     const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean);
     const out: string[] = [];

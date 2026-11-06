@@ -2678,26 +2678,36 @@ async function generateChatCompletionCore(
         reasoning: undefined as string | undefined,
     };
     for (let round = 0; round < maxToolRounds; round++) {
-        let filteredOutput: string;
+        let filteredOutput = "";
         try {
-            if (isSessionStreamingEnabled(session, true)) {
+            const streamEnabled = options?.forceStream === true || isSessionStreamingEnabled(session, true);
+            let streamed = false;
+            if (streamEnabled) {
                 // 流式分支：与 sendLLMRequest 走同一套请求构造/日志/正则，仅把「整段等待」换成
                 // SSE 增量，并通过 onStreamDelta 把原文增量实时交给 UI 层做预览显示。
                 let streamReasoning = "";
-                const streamResult = await sendLLMStreamRequest(config, preset, llmMessages, regexes, meta, {
-                    appId: options?.appId ?? "chat",
-                    appTags: requestAppTags,
-                    followUpCount: options?.followUpCount,
-                    debugSessionId: session.id,
-                    signal: options?.signal,
-                }, {
-                    onDelta: (text) => callbacks?.onStreamDelta?.(text),
-                    // 流式下 onReasoningDelta 是单段增量：累积后再喂 onReasoning（保持整段请求语义）
-                    // 预设开启「线上标签解析」时不透传原生思维链（改由下方标签提取）
-                    onReasoningDelta: onlineThinking.enabled ? undefined : (text) => { streamReasoning += text; callbacks?.onReasoning?.(streamReasoning); },
-                });
-                filteredOutput = streamResult.content;
-            } else {
+                try {
+                    const streamResult = await sendLLMStreamRequest(config, preset, llmMessages, regexes, meta, {
+                        appId: options?.appId ?? "chat",
+                        appTags: requestAppTags,
+                        followUpCount: options?.followUpCount,
+                        debugSessionId: session.id,
+                        signal: options?.signal,
+                    }, {
+                        onDelta: (text) => callbacks?.onStreamDelta?.(text),
+                        // 流式下 onReasoningDelta 是单段增量：累积后再喂 onReasoning（保持整段请求语义）
+                        // 预设开启「线上标签解析」时不透传原生思维链（改由下方标签提取）
+                        onReasoningDelta: onlineThinking.enabled ? undefined : (text) => { streamReasoning += text; callbacks?.onReasoning?.(streamReasoning); },
+                    });
+                    filteredOutput = streamResult.content;
+                    streamed = true;
+                } catch (streamError) {
+                    // 强制流式（通话）失败时回退整段请求，避免整通电话直接报错
+                    if (options?.forceStream !== true) throw streamError;
+                    console.warn("[chat-engine] 流式请求失败，回退整段请求", streamError);
+                }
+            }
+            if (!streamed) {
                 filteredOutput = await sendLLMRequest(config, preset, llmMessages, regexes, meta, {
                     appId: options?.appId ?? "chat",
                     appTags: requestAppTags,

@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -483,6 +483,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 if (!complete) return;
                 livePending = force ? "" : livePending.slice(cut + 1);
                 const sentences = complete.split(/(?<=[。！？!?…\n])/)
+                    .map(s => stripVoiceNoteWrapper(s))
                     .map(s => s.trim())
                     .filter(Boolean)
                     .map(s => s.split("|")[0].trim())
@@ -1205,7 +1206,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             data-streaming=""
                             data-speaking={(speakingId && speakingId.startsWith("live-")) || undefined}
                         >
-                            <span className="call-subtitle-body"><SubtitleText text={liveReply} /></span>
+                            <span className="call-subtitle-body"><SubtitleText text={stripVoiceNoteWrapper(liveReply)} /></span>
                         </div>
                     )}
 
