@@ -885,6 +885,19 @@ export function VoiceSettings() {
                                                         <span className="menu-desc">语音条与通话一律念韩语；中文台词会先转写韩语，正文/剧情不受影响</span>
                                                     </span>
                                                 </label>
+                                                <label className="flex items-start gap-2 cursor-pointer px-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.textKorean === true}
+                                                        onChange={(e) => updateConfig(config.id, { textKorean: e.target.checked || undefined })}
+                                                        className="mt-0.5 accent-black"
+                                                        aria-label="台词用韩语"
+                                                    />
+                                                    <span className="flex flex-col gap-0.5">
+                                                        <span className="menu-label">台词用韩语</span>
+                                                        <span className="menu-desc">该角色的文字台词强制韩语，中文只作译文行（人设本就是韩语口语的角色才开）</span>
+                                                    </span>
+                                                </label>
                                                 <div className="flex flex-col gap-1">
                                                     <label className="menu-desc ml-1">语音模型 (TTS Model)</label>
                                                     <div className="flex flex-col gap-2">

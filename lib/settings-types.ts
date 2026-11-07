@@ -182,6 +182,11 @@ export type VoiceApiConfig = {
      * 用于克隆音色是韩语、读中文会失真的角色（如反80）。缺省 auto = 读原文。
      */
     forceSpeechLanguage?: "korean";
+    /**
+     * 台词语言：true = 该角色正文/台词必须用韩语写（中文只作译文行），
+     * 用于人设本身就是韩语口语的角色（如姜志焕）。缺省 false = 跟随角色文风。
+     */
+    textKorean?: boolean;
     customVoices?: { id: string; name: string; createdAt?: number }[];
     enableSTT: boolean;
     enableTTS: boolean;

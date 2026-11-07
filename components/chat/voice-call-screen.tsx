@@ -12,7 +12,7 @@ import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
 import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, setCallAudioSessionActive, unlockAudioPlayback, isKoreanDominantVoice } from "@/lib/tts-service";
-import { resolveSpeechLanguageMode } from "@/lib/speech-language";
+import { resolveSpeechLanguageMode, isKoreanTextCharacter } from "@/lib/speech-language";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
@@ -82,9 +82,9 @@ function splitSubtitleContent(content: string): { text: string; narration?: stri
 function buildCallLanguageInstruction(characterId: string): string | undefined {
     try {
         const cfg = resolveVoiceConfig(characterId);
-        // 强制韩语（反80 这类韩语克隆音色）：台词全韩语，中文只作译文。
+        // 强制韩语（反80 这类韩语克隆音色）或台词语言就是韩语（姜志焕）：台词全韩语，中文只作译文。
         // 只改通话的「读」这一层，聊天室正文/剧情生成完全不受影响。
-        if (cfg?.forceSpeechLanguage === "korean") {
+        if (cfg?.forceSpeechLanguage === "korean" || cfg?.textKorean === true) {
             return [
                 "【语音通话·语言口径】",
                 "本角色音色是韩语克隆音色，读中文会失真，所以通话里台词必须全部用韩语说。",
@@ -498,7 +498,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             let speechGroup: string[] = [];
             // 韩语主导角色：朗读时丢掉纯中文译文行；强制韩语角色同理
             const koreanDominant = isKoreanDominantVoice(session.contactId)
-                || resolveSpeechLanguageMode(session.contactId) === "korean";
+                || resolveSpeechLanguageMode(session.contactId) === "korean"
+                || isKoreanTextCharacter(session.contactId);
 
             const speakLive = async (sentence: string) => {
                 if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;

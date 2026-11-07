@@ -1,6 +1,7 @@
 // lib/chat-engine.ts
 
 import { createSseJsonParser } from "./sse-json";
+import { isKoreanTextCharacter } from "./speech-language";
 import { maybeAppendShortcutCapability } from "./offline-shortcut-capability";
 import { loadCharacters } from "./character-storage";
 import { buildScreenEffectPromptHint } from "./chat-screen-effects";
@@ -1815,6 +1816,19 @@ export function nativeChatToolCallToTextCall(call: LlmToolCall, bundle: NativeCh
  * Supports multi-round tool calling loop.
  */
 /**
+ * 台词语言：韩语主导角色（如姜志焕）。
+ * 应用级双语规则只规定「非中文要附译文」，不规定角色用哪种语言说话，
+ * 而且分隔符写死竖线 —— 这里按角色人设把语言与排版口径钉住。
+ * 不修改全局默认双语预设，只在角色层追加一条 system 指令（历史做法）。
+ */
+const KOREAN_TEXT_INSTRUCTION = [
+    "【台词语言·韩语】",
+    "本角色第一口语是韩语：台词必须用韩语写，中文只用于专有名词、称谓，或用户明确表示听不懂时的极短解释。",
+    "双语排版：每句台词先写一行「韩语台词」，紧跟下一行（简体中文译文）。译文仅供阅读，不朗读。",
+    "若上文的双语规则要求用竖线分隔原文与译文，请以上面这种双行写法为准。",
+].join("\n");
+
+/**
  * 聊天室语音条的声音表现力标签：**已停用**（2026-11-07 实机事故）。
  * 原因：标签会漏进普通消息、克隆音色把标签念成怪声、并把双语格式带乱。
  * 保留函数体结构便于以后复测，但现在一律返回 undefined、不注入任何指令。
@@ -2043,6 +2057,11 @@ export async function buildChatPromptMessages(
     const extraSystemInstructions = options?.extraSystemInstructions?.trim();
     if (extraSystemInstructions) {
         llmMessages.push({ role: "system", content: extraSystemInstructions });
+    }
+    // 台词语言：韩语主导角色（如姜志焕）。全局双语规则只规定「非中文要附译文」，
+    // 不保证角色用哪种语言说话，也不允许自定义分隔符，所以在角色层补一条口径。
+    if (!session.isGroup && isKoreanTextCharacter(character.id)) {
+        llmMessages.push({ role: "system", content: KOREAN_TEXT_INSTRUCTION });
     }
     // 聊天室语音条的声音表现力标签（逐角色开关，只管 [语音条: ...] 里的台词）
     const performanceHint = buildChatVoicePerformanceHint(options, session);

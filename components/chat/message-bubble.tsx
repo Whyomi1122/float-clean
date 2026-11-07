@@ -2366,6 +2366,30 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
     const needsResynthesis = msg.role !== "user" && synthesizedFromText !== speechText;
     const duration = msg.mediaData?.voiceDuration || Math.max(2, Math.ceil(speechText.length / 4));
 
+    // 预转写（强制韩语角色）：语音条内容是中文时，后台改写成「韩语台词」+（中文译文）并回写 label。
+    // 这样气泡直接显示韩语、点播放零等待；否则每次点播放才现转，要等十几秒。
+    const prefetchRef = useRef(false);
+    useEffect(() => {
+        if (msg.role === "user" || !characterId || !onUpdate || prefetchRef.current) return;
+        const label = String(msg.mediaData?.label || "");
+        if (!label.trim()) return;
+        if (/[\uAC00-\uD7A3]/.test(label)) return;
+        if (!/[\u4E00-\u9FFF]/.test(label)) return;
+        prefetchRef.current = true;
+        let cancelled = false;
+        (async () => {
+            try {
+                const { isKoreanSpeechCharacter, toKoreanSpeechPair } = await import("@/lib/speech-language");
+                if (!isKoreanSpeechCharacter(characterId)) return;
+                const converted = await toKoreanSpeechPair(label);
+                if (cancelled || !converted || converted === label) return;
+                onUpdate({ ...msg, mediaData: { ...(msg.mediaData || {}), label: converted } });
+            } catch { /* 预转写失败就退回点播放时现转 */ }
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [msg.id, characterId, onUpdate]);
+
     const playSrc = (src: string) => {
         // 必须用 <audio> 元素:iOS 静音拨键会掐掉 Web Audio 的输出(表现为全线
         // 无声),媒体元素不受影响。元素属于宿主页面,锁屏媒体卡片指向站点本身,
