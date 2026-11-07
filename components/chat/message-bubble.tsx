@@ -12,7 +12,7 @@ import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
-import { splitNarration } from "@/lib/call-text";
+import { splitNarration, stripPerformanceTags } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -2351,9 +2351,11 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const mountedRef = useRef(true);
     useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-    const text = msg.mediaData?.label || "语音消息";
-    const bilingual = splitBilingualText(text);
-    const speechText = bilingual?.original || text;
+    // 上屏用剥掉朗读标签的文本；合成语音必须用原始 label（标签是给 TTS 的）
+    const rawLabel = msg.mediaData?.label || "语音消息";
+    const text = stripPerformanceTags(rawLabel);
+    const bilingual = splitBilingualText(rawLabel);
+    const speechText = bilingual?.original || rawLabel;
     const synthesizedFromText = msg.mediaData?.synthesizedFromText;
     const needsResynthesis = msg.role !== "user" && synthesizedFromText !== speechText;
     const duration = msg.mediaData?.voiceDuration || Math.max(2, Math.ceil(speechText.length / 4));
