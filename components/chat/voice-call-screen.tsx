@@ -12,6 +12,7 @@ import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
 import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, setCallAudioSessionActive, unlockAudioPlayback, isKoreanDominantVoice } from "@/lib/tts-service";
+import { resolveSpeechLanguageMode } from "@/lib/speech-language";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
@@ -81,6 +82,16 @@ function splitSubtitleContent(content: string): { text: string; narration?: stri
 function buildCallLanguageInstruction(characterId: string): string | undefined {
     try {
         const cfg = resolveVoiceConfig(characterId);
+        // 强制韩语（反80 这类韩语克隆音色）：台词全韩语，中文只作译文。
+        // 只改通话的「读」这一层，聊天室正文/剧情生成完全不受影响。
+        if (cfg?.forceSpeechLanguage === "korean") {
+            return [
+                "【语音通话·语言口径】",
+                "本角色音色是韩语克隆音色，读中文会失真，所以通话里台词必须全部用韩语说。",
+                "每句写成两行：第一行「韩语台词」，第二行紧接（中文译文）。译文只给用户看，不朗读。",
+                "只写台词，不写动作与环境描写。",
+            ].join("\n");
+        }
         const boost = String(cfg?.languageBoost || "").toLowerCase();
         if (!boost.includes("korean")) return undefined;
         // 只加强「韩语为主」，不覆盖角色自己的双语输出格式：
@@ -485,8 +496,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             let liveDrain: Promise<void> | null = null;
             let liveStartedAt = 0;
             let speechGroup: string[] = [];
-            // 韩语主导角色：朗读时丢掉纯中文译文行
-            const koreanDominant = isKoreanDominantVoice(session.contactId);
+            // 韩语主导角色：朗读时丢掉纯中文译文行；强制韩语角色同理
+            const koreanDominant = isKoreanDominantVoice(session.contactId)
+                || resolveSpeechLanguageMode(session.contactId) === "korean";
 
             const speakLive = async (sentence: string) => {
                 if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;

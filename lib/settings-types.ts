@@ -177,6 +177,11 @@ export type VoiceApiConfig = {
     speechVolume?: number;
     /** 实验开关：通话中允许模型插入 MiniMax 声音表现力标签（<#0.3#>、(breath) 等）。默认关。 */
     speechPerformance?: boolean;
+    /**
+     * 朗读层语言强制：'korean' = 语音条与通话一律用韩语朗读（中文台词先转写韩语），
+     * 用于克隆音色是韩语、读中文会失真的角色（如反80）。缺省 auto = 读原文。
+     */
+    forceSpeechLanguage?: "korean";
     customVoices?: { id: string; name: string; createdAt?: number }[];
     enableSTT: boolean;
     enableTTS: boolean;

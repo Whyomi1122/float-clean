@@ -2327,7 +2327,13 @@ function synthesizeVoiceForMessage(msgId: string, characterId: string, speechTex
         const { resolveVoiceConfig, synthesizeSpeech } = await import("@/lib/tts-service");
         const vc = resolveVoiceConfig(characterId);
         if (!vc) throw new Error("未绑定语音配置");
-        const blob = await synthesizeSpeech(speechText, vc);
+        // 强制韩语角色（韩语克隆音色）：中文台词先转成韩语再朗读，失败退回原文
+        let spokenText = speechText;
+        if (vc.forceSpeechLanguage === "korean") {
+            const { toKoreanSpeechText } = await import("@/lib/speech-language");
+            spokenText = (await toKoreanSpeechText(speechText)) ?? speechText;
+        }
+        const blob = await synthesizeSpeech(spokenText, vc);
         if (!blob) throw new Error("合成失败");
         const dataUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();

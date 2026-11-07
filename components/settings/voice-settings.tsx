@@ -872,6 +872,19 @@ export function VoiceSettings() {
                                                         ))}
                                                     </select>
                                                 </div>
+                                                <label className="flex items-start gap-2 cursor-pointer px-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.forceSpeechLanguage === "korean"}
+                                                        onChange={(e) => updateConfig(config.id, { forceSpeechLanguage: e.target.checked ? "korean" : undefined })}
+                                                        className="mt-0.5 accent-black"
+                                                        aria-label="强制韩语朗读"
+                                                    />
+                                                    <span className="flex flex-col gap-0.5">
+                                                        <span className="menu-label">强制韩语朗读</span>
+                                                        <span className="menu-desc">语音条与通话一律念韩语；中文台词会先转写韩语，正文/剧情不受影响</span>
+                                                    </span>
+                                                </label>
                                                 <div className="flex flex-col gap-1">
                                                     <label className="menu-desc ml-1">语音模型 (TTS Model)</label>
                                                     <div className="flex flex-col gap-2">

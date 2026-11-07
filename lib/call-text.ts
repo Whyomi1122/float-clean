@@ -9,7 +9,7 @@
 //   因此规则改为：**整段至少有一行带「名|」前缀**（= 确实用了通话台词格式）时，
 //   才把「无前缀、非括号、非引号开头」的行判为旁白；否则整段一律当正文。
 
-import { splitBilingualText } from "./bilingual-text";
+import { splitBilingualText, splitQuotedBilingualText, stripQuotedTranslation } from "./bilingual-text";
 
 /** 台词行前缀：「名|台词」或「名：台词」 */
 const SPEAKER_PREFIX = /^[^\s|：:]{1,12}[|：:]/;
@@ -70,6 +70,9 @@ export function splitNarration(text: string): { dialogue: string; narration?: st
 
 /** 去掉双语译本，只留原文（TTS 用） */
 export function stripBilingualTranslation(text: string): string {
+    // 「韩语」（中文译文）配对写法：只剥挂在引号后面的括号译文，其余原样保留
+    const quoted = stripQuotedTranslation(text);
+    if (quoted !== text) return quoted.trim();
     return text
         .split("\n")
         .map((line) => splitBilingualText(line)?.original ?? line)
@@ -104,6 +107,11 @@ export function stripSpokenScript(raw: string, options?: SpeechCleanOptions): st
     if (!HANGUL_CHAR.test(text)) return text;
     const kept: string[] = [];
     for (const line of text.split(/\r?\n/)) {
+        // 引号包裹的中文行＝角色真的说了中文（如被要求说中文），照念，不当译文删
+        if (/^\s*「[^「」]*」\s*$/.test(line) && HAN_CHAR.test(line) && !HANGUL_CHAR.test(line)) {
+            kept.push(line.trim());
+            continue;
+        }
         if (!HANGUL_CHAR.test(line)) {
             // 纯符号/拉丁/数字行（标签、语气符）保留；含汉字的就是译文行
             if (!HAN_CHAR.test(line)) kept.push(line);
@@ -128,6 +136,8 @@ export function cleanSpeechFragment(raw: string, options?: SpeechCleanOptions): 
     text = stripBilingualTranslation(text);
     text = stripSpokenScript(text, options);
     text = text.replace(DECORATION_CHARS, " ");
+    // 括号被掏空后剩下的孤立半括号（念出来就是「念符号」），直接清掉
+    text = text.replace(/[（(]\s*[）)]/g, " ").replace(/[（(]\s*(?=$|[。！？!?…])/g, " ").replace(/\s*[）)]/g, " ");
     text = text.replace(/\s{2,}/g, " ").replace(/^[ \t]+|[ \t]+$/gm, "").trim();
     return text;
 }
@@ -229,7 +239,25 @@ export function splitSentencesForDisplay(text: string): string[] {
     if (!trimmed) return [];
     const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean);
     const out: string[] = [];
-    for (const line of lines) {
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        // 「韩语」（中文译文）成对写法：整对作为一帧，不按句末标点硬切，
+        // 否则「폰 떨어져서 얼굴 맞았어?」+（手机掉下来砸到脸了?）会被切成碎片、引号括号悬空。
+        const pair = splitQuotedBilingualText(line)
+            ?? splitQuotedBilingualText(`${line}\n${lines[index + 1] ?? ""}`);
+        if (pair) {
+            const pairedOnNextLine = !splitQuotedBilingualText(line);
+            out.push(`${pair.original}（${pair.translated}）`);
+            if (pairedOnNextLine) index += 1;
+            continue;
+        }
+        const quotedOnly = line.match(/^「([^「」]+)」$/);
+        if (quotedOnly) {
+            const innerParts = splitByPunctuation(quotedOnly[1].trim());
+            if (innerParts.length > 1) out.push(...innerParts.map(p => `「${p}」`));
+            else out.push(`「${quotedOnly[1].trim()}」`);
+            continue;
+        }
         const pipeIndex = line.indexOf("|");
         if (pipeIndex > 0) {
             const left = line.slice(0, pipeIndex);
