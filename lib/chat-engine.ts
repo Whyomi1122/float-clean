@@ -37,7 +37,6 @@ import {
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
 import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
 import { buildNowPlayingPromptBlock } from "./music-now-playing";
-import { resolveVoiceConfig } from "./tts-service";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
 import {
@@ -1816,29 +1815,15 @@ export function nativeChatToolCallToTextCall(call: LlmToolCall, bundle: NativeCh
  * Supports multi-round tool calling loop.
  */
 /**
- * 聊天室语音条的声音表现力标签：只有该角色音色开了 speechPerformance 才注入，
- * 且明确限定标签只能写在 [语音条: ...] 台词里——普通文字消息保持干净，不用到处剥标签。
+ * 聊天室语音条的声音表现力标签：**已停用**（2026-11-07 实机事故）。
+ * 原因：标签会漏进普通消息、克隆音色把标签念成怪声、并把双语格式带乱。
+ * 保留函数体结构便于以后复测，但现在一律返回 undefined、不注入任何指令。
  */
 function buildChatVoicePerformanceHint(
-    options: ChatPromptBuildOptions | undefined,
-    session: ChatSession,
+    _options: ChatPromptBuildOptions | undefined,
+    _session: ChatSession,
 ): string | undefined {
-    const tags = options?.appTags || [];
-    if (!tags.includes("chat") || tags.includes("voice")) return undefined;
-    const contactId = session.contactId;
-    if (!contactId) return undefined;
-    try {
-        const voiceConfig = resolveVoiceConfig(contactId);
-        if (!voiceConfig?.speechPerformance) return undefined;
-    } catch {
-        return undefined;
-    }
-    return [
-        "【语音条·声音表现力】",
-        "本角色开启了语音表现力：只有语音条里的台词允许插入朗读标签——(breath)、(sighs)、(laughs)、(clears throat)，以及 <#0.3#> 表示停顿（0.1-1.0 秒）。",
-        "节制：一条语音最多 1-2 个标签，情绪转折处才用，平静叙述不加。",
-        "普通文字消息、动作描写、旁白里一律不要出现这些标签。",
-    ].join("\n");
+    return undefined;
 }
 
 /**

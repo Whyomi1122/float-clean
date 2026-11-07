@@ -33,6 +33,19 @@ export function resolveVoiceConfig(characterId: string, appId?: ContentAppId): V
 }
 
 /**
+ * 该角色音色是否「韩语主导」（朗读语言＝韩语）。
+ * 只对韩语主导角色剥中文译文行，混说角色（中文社交+偶尔韩语）的中文台词不能删。
+ */
+export function isKoreanDominantVoice(characterId: string, appId?: ContentAppId): boolean {
+    try {
+        const cfg = resolveVoiceConfig(characterId, appId);
+        return String(cfg?.languageBoost || "").toLowerCase().includes("korean");
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Synthesize speech from text using the given voice config.
  * Returns an audio Blob (mp3/wav) or null if synthesis failed.
  *

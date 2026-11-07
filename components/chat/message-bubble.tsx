@@ -12,7 +12,7 @@ import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
-import { splitNarration, stripPerformanceTags } from "@/lib/call-text";
+import { cleanSpeechFragment, splitNarration, stripPerformanceTags } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -130,7 +130,8 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
             if (msg.mediaType?.startsWith("plugin:")) {
                 return <PluginKindBubble msg={msg} kind={msg.mediaType.slice("plugin:".length)} />;
             }
-            const textBubble = <TextBubble content={displayContent ?? msg.content} onActionSelect={onActionSelect} defaultTranslationExpanded={defaultTranslationExpanded} narrationMode={narrationMode && msg.role === "assistant"} />;
+            // 兜底：万一历史消息里残留朗读标签（表现力标签已停用），上屏一律剥掉
+            const textBubble = <TextBubble content={stripPerformanceTags(displayContent ?? msg.content)} onActionSelect={onActionSelect} defaultTranslationExpanded={defaultTranslationExpanded} narrationMode={narrationMode && msg.role === "assistant"} />;
             return (
                 <>
                     {textBubble}
@@ -2351,11 +2352,10 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const mountedRef = useRef(true);
     useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-    // 上屏用剥掉朗读标签的文本；合成语音必须用原始 label（标签是给 TTS 的）
+    // 上屏只剥标签；合成只念「该念的语言」——韩语角色的中文译文行、装饰符号都不念
     const rawLabel = msg.mediaData?.label || "语音消息";
     const text = stripPerformanceTags(rawLabel);
-    const bilingual = splitBilingualText(rawLabel);
-    const speechText = bilingual?.original || rawLabel;
+    const speechText = cleanSpeechFragment(rawLabel) || splitBilingualText(rawLabel)?.original || rawLabel;
     const synthesizedFromText = msg.mediaData?.synthesizedFromText;
     const needsResynthesis = msg.role !== "user" && synthesizedFromText !== speechText;
     const duration = msg.mediaData?.voiceDuration || Math.max(2, Math.ceil(speechText.length / 4));

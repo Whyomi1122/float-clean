@@ -84,15 +84,23 @@ const HAN_CHAR = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
 /** 装饰性包裹符号：模型爱用《》«»「」把台词括起来，TTS 会当字符念出来 */
 const DECORATION_CHARS = /[《》«»‹›「」『』〈〉〖〗【】｜|]/g;
 
+export type SpeechCleanOptions = {
+    /**
+     * 该角色是否「韩语主导」：只有韩语主导的角色，纯中文行才被当作译文丢掉。
+     * 混说/中文主导的角色（如中文社交+偶尔韩语）中文就是正常台词，不能删。
+     */
+    dropTranslation?: boolean;
+};
+
 /**
  * 只留「该念的语言」：
- *   · 整段有韩文时，纯中文行＝译文行，丢弃；
- *   · 韩文行里夹着中文（模型把译文塞同一行）→ 去掉汉字片段；
- *   · 整段没有韩文（中文/其他语种角色）→ 原样返回，不动。
+ *   · 韩语主导角色的纯中文行＝译文行，丢弃；韩文行里夹的汉字片段删掉；
+ *   · 其他角色原样返回，只保留装饰符清洗（在 cleanSpeechFragment 里做）。
  * 实机事故（2026-11-07）：译文另起一行、没有竖线分隔时，最后一句中文被念一遍。
  */
-export function stripSpokenScript(raw: string): string {
+export function stripSpokenScript(raw: string, options?: SpeechCleanOptions): string {
     const text = raw || "";
+    if (!options?.dropTranslation) return text;
     if (!HANGUL_CHAR.test(text)) return text;
     const kept: string[] = [];
     for (const line of text.split(/\r?\n/)) {
@@ -114,11 +122,11 @@ export function stripSpokenScript(raw: string): string {
 /**
  * TTS 取文清洗（单句/整段通用）：剥外壳 → 剥译本 → 去掉不该念的文字 → 去装饰符号。
  */
-export function cleanSpeechFragment(raw: string): string {
+export function cleanSpeechFragment(raw: string, options?: SpeechCleanOptions): string {
     if (!raw) return "";
     let text = stripVoiceNoteWrapper(raw);
     text = stripBilingualTranslation(text);
-    text = stripSpokenScript(text);
+    text = stripSpokenScript(text, options);
     text = text.replace(DECORATION_CHARS, " ");
     text = text.replace(/\s{2,}/g, " ").replace(/^[ \t]+|[ \t]+$/gm, "").trim();
     return text;
@@ -128,12 +136,12 @@ export function cleanSpeechFragment(raw: string): string {
  * TTS 取文：只念台词（剥旁白、剥译本）。
  * 任何一步剥成空串都会逐级回退，确保不会出现「空文本让角色哑掉」。
  */
-export function speechTextForContent(content: string): string {
+export function speechTextForContent(content: string, options?: SpeechCleanOptions): string {
     const unwrapped = stripVoiceNoteWrapper(content);
     const { dialogue } = splitNarration(unwrapped);
-    const spoken = cleanSpeechFragment(dialogue);
+    const spoken = cleanSpeechFragment(dialogue, options);
     if (spoken) return spoken;
-    const fallback = cleanSpeechFragment(unwrapped);
+    const fallback = cleanSpeechFragment(unwrapped, options);
     if (fallback) return fallback;
     return unwrapped.trim();
 }

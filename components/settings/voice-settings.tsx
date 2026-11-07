@@ -860,18 +860,6 @@ export function VoiceSettings() {
                                                         aria-label="Minimax 音量"
                                                     />
                                                 </div>
-                                                <div className="flex flex-col gap-1 mt-2">
-                                                    <label className="flex items-center justify-between gap-3 px-1 py-1 cursor-pointer">
-                                                        <span className="menu-desc leading-snug">声音表现力标签（实验）</span>
-                                                        <input
-                                                            type="checkbox"
-                                                            className="w-4 h-4 shrink-0 accent-black"
-                                                            checked={!!config.speechPerformance}
-                                                            onChange={(e) => updateConfig(config.id, { speechPerformance: e.target.checked })}
-                                                        />
-                                                    </label>
-                                                    <p className="text-[11px] leading-relaxed text-gray-400 px-1">通话中偶尔加入呼吸、轻笑与停顿，让语气更自然；不影响字幕与聊天记录。</p>
-                                                </div>
                                                 <div className="flex flex-col gap-1 mt-1">
                                                     <label className="menu-desc ml-1">朗读语言</label>
                                                     <select

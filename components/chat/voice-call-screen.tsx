@@ -11,7 +11,7 @@ import { generateChatCompletion, flattenCompletionResult, ChatEngineError } from
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
-import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, setCallAudioSessionActive, unlockAudioPlayback } from "@/lib/tts-service";
+import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, setCallAudioSessionActive, unlockAudioPlayback, isKoreanDominantVoice } from "@/lib/tts-service";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
@@ -63,8 +63,10 @@ type VoiceCallScreenProps = {
 
 // 旁白判定 / TTS 取文统一在 lib/call-text.ts：旁白必须「正向识别」，
 // 整段没有「名|」前缀时一律当正文，避免正文被掏空、角色哑掉。
-function stripNarrationForSpeech(text: string): string {
-    return speechTextForContent(text);
+// dropTranslation：只有「韩语主导」角色才把纯中文行当译文丢掉，
+// 混说角色（中文为主 + 偶尔韩语）中文就是台词，不能删。
+function stripNarrationForSpeech(text: string, dropTranslation = false): string {
+    return speechTextForContent(text, { dropTranslation });
 }
 
 // 字幕拆分：有真旁白时抽出来单独淡字显示，台词留在 text（朗读 + 气泡）
@@ -80,33 +82,14 @@ function buildCallLanguageInstruction(characterId: string): string | undefined {
     try {
         const cfg = resolveVoiceConfig(characterId);
         const boost = String(cfg?.languageBoost || "").toLowerCase();
-        const koreanFirst = boost.includes("korean");
-        const performance = cfg?.speechPerformance === true;
-        const lines: string[] = [];
-        // 输出格式是硬要求：实机事故（2026-11-07）——模型用《》«»包裹台词、
-        // 译文另起一行或混进同一行，导致 TTS 把括号符号和中文一起念出来。
-        lines.push(
-            "【语音通话·输出格式（必须遵守）】",
-            "每句话单独一行；需要译文时用竖线分隔，格式固定为「原文|中文译文」。",
-            "禁止用《》«»「」『』等符号包裹台词；禁止把译文混进原文那一行；禁止一行里出现两句。",
-            "只输出台词本身，不要写「（停顿）」「（笑声）」这类中文动作描写，也不要写角色名前缀。",
-        );
-        if (koreanFirst) {
-            lines.push(
-                "【语音通话·语言口径】",
-                "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
-                "口语化：短句、可停顿、允许重复词和语气词，不要书面语整段输出。",
-            );
-        }
-        if (performance) {
-            lines.push(
-                "【语音通话·声音表现力（朗读标签）】",
-                "允许在台词里插入少量朗读标签：句首用 (breath)、(sighs)、(laughs)、(clears throat) 表现呼吸与轻笑；必要处用 <#0.3#> 表示停顿（秒数 0.1-1.0）。",
-                "节制使用：每 2-3 句最多 1 个，不要连续堆叠，不要给每句都加；标签不是台词，不解释也不朗读出来。",
-                "情绪转折处才用，平静叙述不加。",
-            );
-        }
-        return lines.join("\n");
+        if (!boost.includes("korean")) return undefined;
+        // 只加强「韩语为主」，不覆盖角色自己的双语输出格式：
+        // 2026-11-07 事故——之前在这里塞了输出格式硬约束，模型把双语格式丢了、韩语也丢了。
+        return [
+            "【语音通话·语言口径】",
+            "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
+            "中文译文仍按角色原有双语格式附在后面（译文不朗读）。不要跳过韩语原文。",
+        ].join("\n");
     } catch {
         return undefined;
     }
@@ -502,6 +485,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             let liveDrain: Promise<void> | null = null;
             let liveStartedAt = 0;
             let speechGroup: string[] = [];
+            // 韩语主导角色：朗读时丢掉纯中文译文行
+            const koreanDominant = isKoreanDominantVoice(session.contactId);
 
             const speakLive = async (sentence: string) => {
                 if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;
@@ -540,7 +525,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 if (!complete) return;
                 livePending = force ? "" : livePending.slice(cut + 1);
                 const sentences = complete.split(/(?<=[。！？!?…\n])/)
-                    .map(s => cleanSpeechFragment(s))
+                    .map(s => cleanSpeechFragment(s, { dropTranslation: koreanDominant }))
                     .map(s => s.trim())
                     .filter(Boolean)
                     .filter(s => !/^[（(].*[）)]$/.test(s));
@@ -601,7 +586,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const displayText = cleanParts.join("\n");
             setLiveReply(null);
             recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
-            const speechText = stripNarrationForSpeech(displayText);
+            const speechText = stripNarrationForSpeech(displayText, koreanDominant);
 
             if (!displayText.trim()) {
                 throw new Error("本次通话回复没有可显示的文字，请重试或检查模型返回内容。");
@@ -629,7 +614,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     const target = replyMessages[0];
                     const merged = new Blob(liveAudio, { type: liveAudio[0].type || "audio/mpeg" });
                     const audio = await prepareChatVoiceAudio(merged, target.content);
-                    updateChatMessage(target.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: stripNarrationForSpeech(target.content) } });
+                    updateChatMessage(target.id, { ...audio, mediaData: { ...audio.mediaData, synthesizedFromText: stripNarrationForSpeech(target.content, koreanDominant) } });
                     messagesRef.current = loadChatMessages(session.id);
                     recordCallDiagnostic(`流式原音已保存：${liveAudio.length} 段合并 ${Math.round(merged.size / 1024)}KB`);
                 } catch (error) { console.warn("[VoiceCall] 保存流式原音失败", error); }
@@ -643,7 +628,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             continue;
                         }
                         setSpeakingId(message.id);
-                        const spoken = stripNarrationForSpeech(message.content);
+                        const spoken = stripNarrationForSpeech(message.content, koreanDominant);
                         recordCallDiagnostic(`TTS 取文 ${spoken.length} 字：${spoken.slice(0, 40)}`);
                         const chunks = splitSpeechBySentenceCount(spoken, speechChunkSize);
                         const audioParts: Blob[] = [];
