@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags, cleanSpeechFragment } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -82,13 +82,19 @@ function buildCallLanguageInstruction(characterId: string): string | undefined {
         const boost = String(cfg?.languageBoost || "").toLowerCase();
         const koreanFirst = boost.includes("korean");
         const performance = cfg?.speechPerformance === true;
-        if (!koreanFirst && !performance) return undefined;
         const lines: string[] = [];
+        // 输出格式是硬要求：实机事故（2026-11-07）——模型用《》«»包裹台词、
+        // 译文另起一行或混进同一行，导致 TTS 把括号符号和中文一起念出来。
+        lines.push(
+            "【语音通话·输出格式（必须遵守）】",
+            "每句话单独一行；需要译文时用竖线分隔，格式固定为「原文|中文译文」。",
+            "禁止用《》«»「」『』等符号包裹台词；禁止把译文混进原文那一行；禁止一行里出现两句。",
+            "只输出台词本身，不要写「（停顿）」「（笑声）」这类中文动作描写，也不要写角色名前缀。",
+        );
         if (koreanFirst) {
             lines.push(
                 "【语音通话·语言口径】",
                 "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
-                "按既有规则需要中文译文时，仍用原来的分隔格式附在后面（译文不朗读）。",
                 "口语化：短句、可停顿、允许重复词和语气词，不要书面语整段输出。",
             );
         }
@@ -150,6 +156,9 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     // 字幕始终显示、按句拆分，全部保留可向上滚动回看
     // 语音分段：每次合成几句（1 = 首字最快）
     const [speechChunkSize, setSpeechChunkSize] = useState(1);
+    // 流式合成也要按「语音分段」分组，所以用 ref 让回调读到最新值
+    const speechChunkSizeRef = useRef(1);
+    useEffect(() => { speechChunkSizeRef.current = speechChunkSize; }, [speechChunkSize]);
     const [speakingId, setSpeakingId] = useState<string | null>(null);
     // 语音合成侧的可见提示（没绑语音 / 合成失败），避免"角色没声但毫无提示"
     const [ttsNotice, setTtsNotice] = useState<string | null>(null);
@@ -492,6 +501,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             let livePending = "";
             let liveDrain: Promise<void> | null = null;
             let liveStartedAt = 0;
+            let speechGroup: string[] = [];
 
             const speakLive = async (sentence: string) => {
                 if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;
@@ -530,13 +540,21 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 if (!complete) return;
                 livePending = force ? "" : livePending.slice(cut + 1);
                 const sentences = complete.split(/(?<=[。！？!?…\n])/)
-                    .map(s => stripVoiceNoteWrapper(s))
+                    .map(s => cleanSpeechFragment(s))
                     .map(s => s.trim())
                     .filter(Boolean)
-                    .map(s => s.split("|")[0].trim())
-                    .filter(s => s && !/^[（(].*[）)]$/.test(s));
-                for (const sentence of sentences) liveQueue.push(sentence);
-                if (sentences.length) kickLive();
+                    .filter(s => !/^[（(].*[）)]$/.test(s));
+                // 按「语音分段」把 N 句并成一段再合成，否则流式永远是一句一合成（分段设置形同虚设）
+                let pushed = false;
+                for (const sentence of sentences) {
+                    speechGroup.push(sentence);
+                    if (speechGroup.length >= speechChunkSizeRef.current) {
+                        liveQueue.push(speechGroup.join(" "));
+                        speechGroup = [];
+                        pushed = true;
+                    }
+                }
+                if (pushed) kickLive();
             };
 
             // 3. Generate AI response（强制流式：不等整段，先到先播）
@@ -561,6 +579,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             // 收尾：把最后不足一句的尾巴也读出来，并等播放队列清空
             if (livePending.trim()) {
                 pullSentences(true);
+            }
+            // 收尾：不足 N 句的尾段也要合成，别把最后一句吞掉
+            if (speechGroup.length) {
+                liveQueue.push(speechGroup.join(" "));
+                speechGroup = [];
+                kickLive();
             }
             if (liveDrain) await liveDrain;
             if (liveStartedAt) {
@@ -1388,15 +1412,19 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 )}
 
                 {!editingSubtitle && diagOpen && (
-                    <div className="call-diag-float" role="dialog" aria-label="通话诊断">
-                        <button
-                            type="button"
-                            className="call-diag-float-close"
-                            onClick={() => setDiagOpen(false)}
-                            aria-label="收起诊断"
-                        >✕</button>
-                        <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />
-                    </div>
+                    <>
+                        {/* 点空白处直接关闭诊断浮窗 */}
+                        <div className="call-diag-backdrop" onClick={() => setDiagOpen(false)} aria-hidden="true" />
+                        <div className="call-diag-float" role="dialog" aria-label="通话诊断">
+                            <button
+                                type="button"
+                                className="call-diag-float-close"
+                                onClick={() => setDiagOpen(false)}
+                                aria-label="收起诊断"
+                            >✕</button>
+                            <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />
+                        </div>
+                    </>
                 )}
 
                 {/* 环境音：随扬声器总开关，按住说话时自动压低 */}

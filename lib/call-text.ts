@@ -77,18 +77,65 @@ export function stripBilingualTranslation(text: string): string {
         .trim();
 }
 
+/** 韩文字母范围（含兼容字母） */
+const HANGUL_CHAR = /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/;
+/** 汉字范围 */
+const HAN_CHAR = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
+/** 装饰性包裹符号：模型爱用《》«»「」把台词括起来，TTS 会当字符念出来 */
+const DECORATION_CHARS = /[《》«»‹›「」『』〈〉〖〗【】｜|]/g;
+
+/**
+ * 只留「该念的语言」：
+ *   · 整段有韩文时，纯中文行＝译文行，丢弃；
+ *   · 韩文行里夹着中文（模型把译文塞同一行）→ 去掉汉字片段；
+ *   · 整段没有韩文（中文/其他语种角色）→ 原样返回，不动。
+ * 实机事故（2026-11-07）：译文另起一行、没有竖线分隔时，最后一句中文被念一遍。
+ */
+export function stripSpokenScript(raw: string): string {
+    const text = raw || "";
+    if (!HANGUL_CHAR.test(text)) return text;
+    const kept: string[] = [];
+    for (const line of text.split(/\r?\n/)) {
+        if (!HANGUL_CHAR.test(line)) {
+            // 纯符号/拉丁/数字行（标签、语气符）保留；含汉字的就是译文行
+            if (!HAN_CHAR.test(line)) kept.push(line);
+            continue;
+        }
+        kept.push(
+            line
+                .replace(/[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]+[，、。！？…；：""''（）()·—\s]*/g, " ")
+                .replace(/[ \t]{2,}/g, " ")
+                .trim(),
+        );
+    }
+    return kept.join("\n").replace(/\n{2,}/g, "\n").trim();
+}
+
+/**
+ * TTS 取文清洗（单句/整段通用）：剥外壳 → 剥译本 → 去掉不该念的文字 → 去装饰符号。
+ */
+export function cleanSpeechFragment(raw: string): string {
+    if (!raw) return "";
+    let text = stripVoiceNoteWrapper(raw);
+    text = stripBilingualTranslation(text);
+    text = stripSpokenScript(text);
+    text = text.replace(DECORATION_CHARS, " ");
+    text = text.replace(/\s{2,}/g, " ").replace(/^[ \t]+|[ \t]+$/gm, "").trim();
+    return text;
+}
+
 /**
  * TTS 取文：只念台词（剥旁白、剥译本）。
  * 任何一步剥成空串都会逐级回退，确保不会出现「空文本让角色哑掉」。
  */
 export function speechTextForContent(content: string): string {
-    content = stripVoiceNoteWrapper(content);
-    const { dialogue } = splitNarration(content);
-    const spoken = stripBilingualTranslation(dialogue);
+    const unwrapped = stripVoiceNoteWrapper(content);
+    const { dialogue } = splitNarration(unwrapped);
+    const spoken = cleanSpeechFragment(dialogue);
     if (spoken) return spoken;
-    const translated = stripBilingualTranslation(content);
-    if (translated) return translated;
-    return content.trim();
+    const fallback = cleanSpeechFragment(unwrapped);
+    if (fallback) return fallback;
+    return unwrapped.trim();
 }
 
 /**

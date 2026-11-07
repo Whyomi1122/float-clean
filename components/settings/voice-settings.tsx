@@ -859,24 +859,18 @@ export function VoiceSettings() {
                                                         className="w-full accent-black"
                                                         aria-label="Minimax 音量"
                                                     />
-                                                    <div className="relative h-4 px-1 text-xs text-gray-500" aria-hidden="true">
-                                                        <span className="absolute left-1 whitespace-nowrap">{MINIMAX_VOLUME_MIN.toFixed(1)}</span>
-                                                        <span className="absolute whitespace-nowrap" style={{ left: "5.3%", transform: "translateX(-50%)" }}>1.0 默认</span>
-                                                        <span className="absolute right-1 whitespace-nowrap">{MINIMAX_VOLUME_MAX}</span>
-                                                    </div>
-                                                    <p className="text-xs text-gray-400 ml-1">克隆音色偏小可调到 2~4；每个音色各自独立保存</p>
                                                 </div>
-                                                <div className="flex flex-col gap-1 -mt-1">
-                                                    <label className="flex items-center justify-between px-1 py-1 cursor-pointer">
-                                                        <span className="menu-desc">声音表现力标签（实验）</span>
+                                                <div className="flex flex-col gap-1 mt-2">
+                                                    <label className="flex items-center justify-between gap-3 px-1 py-1 cursor-pointer">
+                                                        <span className="menu-desc leading-snug">声音表现力标签（实验）</span>
                                                         <input
                                                             type="checkbox"
-                                                            className="w-4 h-4 accent-black"
+                                                            className="w-4 h-4 shrink-0 accent-black"
                                                             checked={!!config.speechPerformance}
                                                             onChange={(e) => updateConfig(config.id, { speechPerformance: e.target.checked })}
                                                         />
                                                     </label>
-                                                    <p className="text-xs text-gray-400 ml-1">开启后通话里偶尔插入 (breath)/(sighs)/&lt;#0.3#&gt; 等标签，只影响朗读，不上屏不入库。克隆音色不认标签就关掉。</p>
+                                                    <p className="text-[11px] leading-relaxed text-gray-400 px-1">通话中偶尔加入呼吸、轻笑与停顿，让语气更自然；不影响字幕与聊天记录。</p>
                                                 </div>
                                                 <div className="flex flex-col gap-1 mt-1">
                                                     <label className="menu-desc ml-1">朗读语言</label>

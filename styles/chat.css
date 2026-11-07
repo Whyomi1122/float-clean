@@ -7922,12 +7922,19 @@
 }
 
 /* 通话诊断：浮层小窗，脱离主界面布局，不再挤压字幕区 */
+/* 诊断浮窗的透明遮罩：点一下空白就关掉 */
+.call-diag-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 78;
+  background: rgba(0, 0, 0, 0.18);
+}
 .call-diag-float {
   position: absolute;
   left: 0;
   right: 0;
   bottom: calc(max(26px, env(safe-area-inset-bottom)) + 86px);
-  z-index: 60;
+  z-index: 80;
   animation: modalSoftRise 0.22s ease;
   filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.4));
 }
@@ -7935,7 +7942,7 @@
   position: absolute;
   top: -11px;
   right: 14px;
-  z-index: 2;
+  z-index: 82;
   width: 28px;
   height: 28px;
   display: flex;
