@@ -111,6 +111,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [editText, setEditText] = useState("");
     const [editingSubtitle, setEditingSubtitle] = useState(false);
     const [callMenuOpen, setCallMenuOpen] = useState(false);
+    const [diagOpen, setDiagOpen] = useState(false);
+    const [typingInput, setTypingInput] = useState(false);
     // 字幕始终显示、按句拆分，全部保留可向上滚动回看
     // 语音分段：每次合成几句（1 = 首字最快）
     const [speechChunkSize, setSpeechChunkSize] = useState(1);
@@ -817,6 +819,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             setInterimText("");
             if (stateRef.current === "IDLE") setCallState("USER_SPEAKING");
         },
+        onPartial: (text) => {
+            // 实时识别：按住说话期间就把中间结果铺到"我在说"字幕上
+            if (!text) return;
+            setInterimText(text);
+            if (stateRef.current === "IDLE") setCallState("USER_SPEAKING");
+        },
         onTranscribeStart: () => {
             if (stateRef.current === "USER_SPEAKING") setCallState("PROCESSING");
         },
@@ -993,23 +1001,21 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             <div className="call-more-panel" role="menu" aria-label="通话选项">
                                 <p className="call-more-title">通话偏好</p>
                                 {(() => {
-                                    const speakerLocked = !hasConnectedRef.current || subtitles.some(s => s.role === "assistant" && s.text);
+                                    const hasCallDialogue = subtitles.some(s => s.role === "assistant" && s.text);
+                                    const speakerLocked = hasCallDialogue;
                                     const setSpeaker = (v: "character" | "user") => {
                                         if (speakerLocked || v === firstSpeaker) return;
                                         setFirstSpeaker(v);
+                                        // 选了"对方先说"但她还没开口 → 立刻让她开口，而不是等下一轮
+                                        if (v === "character" && callState !== "CONNECTING") {
+                                            void turnRef.current();
+                                        }
                                     };
                                     return (
                                         <div className="call-more-row">
-                                            <span className="call-more-ico" aria-hidden="true">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                                    <path d="M12 19v3" />
-                                                </svg>
-                                            </span>
                                             <span className="call-more-main">
                                                 <b>谁先说</b>
-                                                <small>{speakerLocked ? "已开口，本通不可改" : "接通后由谁先开口"}</small>
+                                                <small>{speakerLocked ? "已开口，本通固定" : "接通后由谁先开口"}</small>
                                             </span>
                                             <span className="call-more-chips">
                                                 <button
@@ -1032,37 +1038,23 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                         </div>
                                     );
                                 })()}
-                                <div className="call-more-divider" aria-hidden="true" />
                                 <button
                                     type="button"
                                     role="menuitemcheckbox"
                                     aria-checked={autoChat}
+                                    className="call-more-row call-more-row-btn"
                                     onClick={() => setAutoChat(value => !value)}
                                 >
-                                    <span className="call-more-ico" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
-                                            <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />
-                                        </svg>
-                                    </span>
                                     <span className="call-more-main">
                                         <b>自动搭话</b>
-                                        <small>安静时替你接话{autoChat ? ` · 最多 3 次` : ""}</small>
+                                        <small>安静 45–75 秒后替你接话 · 最多 3 次</small>
                                     </span>
                                     <span className={`call-more-switch ${autoChat ? "on" : ""}`} aria-hidden="true"><i /></span>
                                 </button>
-                                {autoChat && <p className="call-more-hint">安静 45–75 秒后开口，本次通话最多 3 次</p>}
                                 <div className="call-more-row">
-                                    <span className="call-more-ico" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                            <path d="M12 19v3" />
-                                        </svg>
-                                    </span>
                                     <span className="call-more-main">
                                         <b>语音分段</b>
-                                        <small>每次合成几句台词，1 句最快出声</small>
+                                        <small>每次合成几句，1 句最快</small>
                                     </span>
                                     <span className="call-more-chips">
                                         {[1, 2, 3].map(value => (
@@ -1077,6 +1069,18 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                         ))}
                                     </span>
                                 </div>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="call-more-row call-more-row-btn"
+                                    onClick={() => { setDiagOpen(value => !value); setCallMenuOpen(false); }}
+                                >
+                                    <span className="call-more-main">
+                                        <b>通话诊断</b>
+                                        <small>{diagOpen ? "已展开 · 点此收起" : "语音 / 识别 / 流式自检"}</small>
+                                    </span>
+                                    <span className="call-more-chevron" aria-hidden="true">{diagOpen ? "−" : "+"}</span>
+                                </button>
                             </div>
                         </>
                     )}
@@ -1198,17 +1202,23 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         });
                     })()}
 
-                    {/* 流式生成中的临时字幕 */}
-                    {liveReply && (
-                        <div
-                            className="call-subtitle"
-                            data-role="assistant"
-                            data-streaming=""
-                            data-speaking={(speakingId && speakingId.startsWith("live-")) || undefined}
-                        >
-                            <span className="call-subtitle-body"><SubtitleText text={stripVoiceNoteWrapper(liveReply)} /></span>
-                        </div>
-                    )}
+                    {/* 流式生成中的临时字幕：边收边按句拆气泡，和落库后的正式字幕保持一致，避免结束后"突然分句" */}
+                    {liveReply && (() => {
+                        const liveText = stripVoiceNoteWrapper(liveReply);
+                        const liveParts = splitSentencesForDisplay(liveText);
+                        const parts = liveParts.length ? liveParts : (liveText ? [liveText] : []);
+                        return parts.map((part, index) => (
+                            <div
+                                key={`live-${index}`}
+                                className="call-subtitle"
+                                data-role="assistant"
+                                data-streaming=""
+                                data-speaking={(speakingId && speakingId.startsWith("live-") && index === parts.length - 1) || undefined}
+                            >
+                                <span className="call-subtitle-body"><SubtitleText text={part} /></span>
+                            </div>
+                        ));
+                    })()}
 
                     {/* Interim STT text */}
                     {interimText && callState === "USER_SPEAKING" && (
@@ -1236,6 +1246,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                             <input
                                 value={typedText}
                                 onChange={e => setTypedText(e.target.value)}
+                                onFocus={() => setTypingInput(true)}
+                                onBlur={() => setTypingInput(false)}
                                 className="call-text-input"
                                 placeholder={editingSubtitle ? "编辑台词中（在上方气泡里改）…" : pendingCount >= 5 ? "待发已满，文字会保留" : busyRef.current ? "输入后排队发送…" : "输入你想说的话…"}
                                 tabIndex={editingSubtitle ? -1 : 0}
@@ -1282,46 +1294,25 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 {ttsNotice && (
                     <div className="text-center ts-12 px-5" style={{ color: "#ffc2c2" }}>{ttsNotice}</div>
                 )}
-                {!editingSubtitle && holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED" && (
-                    <div className="text-center ts-12 opacity-80 px-5">
+                {/* 按住说话状态行：只在录音/识别/出错时出现，平时不占高度 */}
+                {!editingSubtitle && holdToTalk && inputMode === "voice" && callState !== "CONNECTING" && callState !== "ENDED"
+                    && (holdInput.recState !== "idle" || !!holdInput.error) && (
+                    <div className="text-center ts-12 opacity-80 px-5 call-hint-line">
                         {holdInput.recState === "recording" ? "松开发送"
                             : holdInput.recState === "transcribing" ? "识别中…"
-                            : holdInput.error || "按住下方麦克风说话"}
+                            : holdInput.error}
                     </div>
                 )}
 
-                {!editingSubtitle && <CallDiagnosticPanel characterId={session.contactId} />}
+                {!editingSubtitle && diagOpen && <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />}
 
                 {/* Bottom controls */}
                 <div
-                    className="call-bottom-controls relative flex justify-center items-center gap-[26px] px-4 py-5"
-                    data-compact={editingSubtitle ? "" : undefined}
+                    className="call-bottom-controls relative flex justify-center items-center gap-[22px] px-4 py-3"
+                    data-compact={(editingSubtitle || typingInput) ? "" : undefined}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
-                            {/* 静音（按住说话模式下静音 = 禁用麦克风按键） */}
-                            <button
-                                onClick={() => setIsMuted(!isMuted)}
-                                className="ui-call-btn ui-call-btn-muted"
-                                {...(isMuted ? { "data-checked": "" } : {})}
-                                aria-label={isMuted ? "取消静音" : "静音"}
-                            >
-                                {isMuted ? (
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="1" y1="1" x2="23" y2="23" />
-                                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                                        <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.48-.35 2.15" />
-                                        <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
-                                    </svg>
-                                ) : (
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                        <line x1="12" y1="19" x2="12" y2="22" />
-                                    </svg>
-                                )}
-                            </button>
-
                             {/* 按住说话主按钮（常驻输入框上方的文字输入不冲突：想说就按住，想打就打字） */}
                             <button
                                 className="ui-call-mic ui-call-mic-lg"

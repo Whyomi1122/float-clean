@@ -8,8 +8,16 @@ import { probeAliyunStreaming } from "@/lib/aliyun-streaming-stt";
 import { probeAllStreamingConfigs } from "@/lib/stream-probe";
 import * as buildInfo from "@/lib/build-info";
 
-export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
-    const [open, setOpen] = useState(false);
+export function CallDiagnosticPanel({
+    characterId,
+    hideTrigger = false,
+    defaultOpen = false,
+}: {
+    characterId?: string;
+    hideTrigger?: boolean;
+    defaultOpen?: boolean;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
     const [report, setReport] = useState("");
     const [copied, setCopied] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
@@ -158,8 +166,16 @@ export function CallDiagnosticPanel({ characterId }: { characterId?: string }) {
         }
     };
 
-    return <div style={{ padding: "4px 20px", textAlign: "center", fontSize: 12 }}>
-        <button type="button" onClick={() => setOpen(value => !value)} style={{ opacity: .75, padding: "6px 12px" }}>通话诊断 D1{open ? " · 收起" : ""}</button>
+    useEffect(() => {
+        if (defaultOpen) setOpen(true);
+    }, [defaultOpen]);
+
+    return <div style={{ padding: hideTrigger ? "0 16px 8px" : "4px 20px", textAlign: "center", fontSize: 12 }}>
+        {!hideTrigger && (
+            <button type="button" onClick={() => setOpen(value => !value)} style={{ opacity: .75, padding: "6px 12px" }}>
+                通话诊断 D1{open ? " · 收起" : ""}
+            </button>
+        )}
         {open && <div style={{ borderRadius: 14, padding: 12, background: "var(--background, #f7f7f7)", color: "var(--foreground, #333)", textAlign: "left", maxHeight: "42dvh", overflow: "auto", position: "relative", zIndex: 30 }}>
             <p style={{ marginBottom: 8 }}>先点两个自检按钮，再照常发一句话；报告里只记配置概况和状态，不含密钥与正文。</p>
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
