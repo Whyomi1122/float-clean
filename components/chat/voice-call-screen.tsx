@@ -791,6 +791,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             pendingRef.current.push(text);
             setPendingCount(pendingRef.current.length);
             setTypedText("");
+            (document.activeElement as HTMLElement | null)?.blur?.();
             return;
         }
         if (sttRef.current) {
@@ -798,6 +799,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             sttRef.current = null;
         }
         setTypedText("");
+        // 发完主动失焦，底栏从「紧凑」回到常态，不用再点一次空白
+        (document.activeElement as HTMLElement | null)?.blur?.();
         runConversationTurn(text);
     }, [typedText, callState, runConversationTurn]);
 
@@ -1304,12 +1307,22 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     </div>
                 )}
 
-                {!editingSubtitle && diagOpen && <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />}
+                {!editingSubtitle && diagOpen && (
+                    <div className="call-diag-float" role="dialog" aria-label="通话诊断">
+                        <button
+                            type="button"
+                            className="call-diag-float-close"
+                            onClick={() => setDiagOpen(false)}
+                            aria-label="收起诊断"
+                        >✕</button>
+                        <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />
+                    </div>
+                )}
 
                 {/* Bottom controls */}
                 <div
                     className="call-bottom-controls relative flex justify-center items-center gap-[22px] px-4 py-3"
-                    data-compact={(editingSubtitle || typingInput) ? "" : undefined}
+                    data-compact={(editingSubtitle || (typingInput && (kbOffset > 0 || !!typedText.trim()))) ? "" : undefined}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>

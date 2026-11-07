@@ -7857,7 +7857,12 @@
   gap: 8px;
   padding: 8px 2px;
   color: #fff;
+  text-align: left;
 }
+/* 说明文案统一左对齐（胶囊行与开关行视觉齐平） */
+.call-more-row .call-more-main,
+.call-more-row .call-more-main b,
+.call-more-row .call-more-main small { text-align: left; }
 .call-more-row .call-more-main { gap: 1px; }
 .call-more-row .call-more-main small { font-size: 11px; line-height: 1.35; }
 .call-more-chips {
@@ -7885,6 +7890,35 @@
 }
 .call-more-panel .call-more-chips button:disabled {
   opacity: 0.45;
+}
+
+/* 通话诊断：浮层小窗，脱离主界面布局，不再挤压字幕区 */
+.call-diag-float {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(max(26px, env(safe-area-inset-bottom)) + 86px);
+  z-index: 60;
+  animation: modalSoftRise 0.22s ease;
+  filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.4));
+}
+.call-diag-float-close {
+  position: absolute;
+  top: -11px;
+  right: 14px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(40, 42, 48, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 .call-subtitle[data-subtitles-hidden] {
   text-align: center;
