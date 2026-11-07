@@ -2327,11 +2327,13 @@ function synthesizeVoiceForMessage(msgId: string, characterId: string, speechTex
         const { resolveVoiceConfig, synthesizeSpeech } = await import("@/lib/tts-service");
         const vc = resolveVoiceConfig(characterId);
         if (!vc) throw new Error("未绑定语音配置");
-        // 强制韩语角色（韩语克隆音色）：中文台词先转成韩语再朗读，失败退回原文
+        // 韩语角色：中文台词先转成韩语再朗读，失败退回原文
         let spokenText = speechText;
-        if (vc.forceSpeechLanguage === "korean") {
-            const { toKoreanSpeechText } = await import("@/lib/speech-language");
-            spokenText = (await toKoreanSpeechText(speechText)) ?? speechText;
+        {
+            const { shouldConvertToKorean, toKoreanSpeechText } = await import("@/lib/speech-language");
+            if (shouldConvertToKorean(characterId)) {
+                spokenText = (await toKoreanSpeechText(speechText)) ?? speechText;
+            }
         }
         const blob = await synthesizeSpeech(spokenText, vc);
         if (!blob) throw new Error("合成失败");
@@ -2379,11 +2381,19 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
         let cancelled = false;
         (async () => {
             try {
-                const { isKoreanSpeechCharacter, toKoreanSpeechPair } = await import("@/lib/speech-language");
-                if (!isKoreanSpeechCharacter(characterId)) return;
+                const { shouldConvertToKorean, toKoreanSpeechPair } = await import("@/lib/speech-language");
+                if (!shouldConvertToKorean(characterId)) return;
                 const converted = await toKoreanSpeechPair(label);
                 if (cancelled || !converted || converted === label) return;
-                onUpdate({ ...msg, mediaData: { ...(msg.mediaData || {}), label: converted } });
+                onUpdate({
+                    ...msg,
+                    mediaData: {
+                        ...(msg.mediaData || {}),
+                        // 原中文留档，避免 label 被覆盖后找不回来（11-07 皮韩宇无译文事故）
+                        originalLabel: msg.mediaData?.originalLabel || label,
+                        label: converted,
+                    },
+                });
             } catch { /* 预转写失败就退回点播放时现转 */ }
         })();
         return () => { cancelled = true; };

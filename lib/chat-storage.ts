@@ -207,6 +207,7 @@ export type ChatMessage = {
         callDuration?: string;    // 通话时长（如 05:23）
         voiceDuration?: number;   // 语音条时长（秒）
         synthesizedFromText?: string; // 语音条当前音频对应的合成文本
+        originalLabel?: string;       // 韩语化改写前的原始文字（留档，别丢）
         memoryContent?: string;   // 记忆写入内容
         memoryReason?: string;    // 记忆写入原因
         memoryImportance?: number;// 记忆写入重要性

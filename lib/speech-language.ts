@@ -40,31 +40,33 @@ export function isKoreanSpeechCharacter(characterId: string): boolean {
     return resolveSpeechLanguageMode(characterId) === "korean";
 }
 
+/** 语音条是否需要韩语化：强制韩语朗读的（反80）或台词本就韩语的（姜志焕） */
+export function shouldConvertToKorean(characterId: string): boolean {
+    return isKoreanSpeechCharacter(characterId) || isKoreanTextCharacter(characterId);
+}
+
 const KOREAN_SPEECH_SYSTEM = [
-    "你是韩语台词转写器。把用户给的一句中文台词，改写成同一个角色会说出来的自然韩语口语。",
-    "只输出两行：第一行韩语台词；第二行它的简体中文译文。",
-    "保留原本的语气强弱、称呼方式、停顿感。不解释、不加引号、不加书名号、不加任何标注。",
+    "你是韩语台词转写器。把用户给的台词，改写成同一个角色会说出来的自然韩语口语。",
+    "只输出一行韩语，不输出中文译文、不解释、不加引号、不加任何标注。",
+    "保留原本的语气强弱、称呼方式、停顿感。",
 ].join("\n");
 
 // 同一条文本只转一次：预转写与点击播放共用缓存，避免重复请求（也避免重复扣额度）
 const pairCache = new Map<string, string | null>();
 const pending = new Map<string, Promise<string | null>>();
 
-function parseKoreanPair(content: string): string | null {
+function extractKoreanLine(content: string): string | null {
     const lines = content
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
         .map((line) => line.replace(/^[「『"]|[」』"]$/g, "").trim());
-    const korean = lines.find((line) => HANGUL_RE.test(line));
-    if (!korean) return null;
-    const chinese = lines.find((line) => line !== korean && HAN_RE.test(line));
-    if (!chinese) return korean;
-    return `「${korean}」\n（${chinese}）`;
+    return lines.find((line) => HANGUL_RE.test(line)) || null;
 }
 
 /**
  * 中文台词 → 「韩语台词」\n（中文译文）。已经含韩语的原样返回。
+ * 译文一律用**原中文**：模型漏写、写歪都不会导致气泡没有译文（11-07 事故）。
  * 失败返回 null（调用方退回原文，宁可读中文也不出错）。
  */
 export async function toKoreanSpeechPair(text: string): Promise<string | null> {
@@ -90,8 +92,11 @@ export async function toKoreanSpeechPair(text: string): Promise<string | null> {
                 temperature: 0.3,
                 label: "韩语台词转写",
             });
-            const content = (result.content ?? "").trim();
-            return content ? parseKoreanPair(content) : null;
+            const korean = extractKoreanLine((result.content ?? "").trim());
+            if (!korean) return null;
+            // 译文行直接用原中文（压成一行，避免多行括号让取文/字幕解析失败）
+            const chinese = source.replace(/\s*\n+\s*/g, " ").replace(/[|｜]/g, " ").trim();
+            return `「${korean}」\n（${chinese}）`;
         } catch {
             return null;
         }
