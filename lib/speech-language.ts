@@ -77,7 +77,7 @@ export async function toKoreanSpeechPair(text: string): Promise<string | null> {
     const inflight = pending.get(source);
     if (inflight) return inflight;
     const task = (async () => {
-        const config = resolveAuxiliaryApiConfig("reasoningTranslateApiConfigId");
+        const config = resolveAuxiliaryApiConfig("koreanSpeechApiConfigId");
         if (!config) return null;
         const messages: SimpleLLMMessage[] = [
             { role: "system", content: KOREAN_SPEECH_SYSTEM },

@@ -15,6 +15,7 @@ import {
     RotateCcw,
     User,
     UserPlus,
+    Volume2,
     Wrench,
     X,
     type LucideIcon,
@@ -67,7 +68,7 @@ type Level = "global" | "character" | "app";
 type SingleBindingField = "apiConfigId" | "voiceConfigId" | "presetId" | "userIdentityId";
 type MultiBindingField = "worldBookIds" | "regexIds";
 type BindingField = SingleBindingField | MultiBindingField;
-type AuxBindingField = "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId";
+type AuxBindingField = "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId" | "koreanSpeechApiConfigId";
 
 const BINDING_FIELD_VISUALS: Record<BindingField, { icon: LucideIcon; color: string }> = {
     apiConfigId: { icon: Code2, color: BINDING_ACCENTS.api },
@@ -84,6 +85,7 @@ const AUX_FIELD_VISUALS: Record<AuxBindingField, { icon: LucideIcon; color: stri
     mascotApiConfigId: { icon: Code2, color: BINDING_ACCENTS.api },
     reasoningTranslateApiConfigId: { icon: Languages, color: BINDING_ACCENTS.voice },
     qaApiConfigId: { icon: Wrench, color: BINDING_ACCENTS.api },
+    koreanSpeechApiConfigId: { icon: Volume2, color: BINDING_ACCENTS.voice },
 };
 
 const APP_OVERRIDE_COLORS = CONTENT_APP_ACCENTS;
@@ -449,6 +451,7 @@ export function BindingManager() {
             case "mascotApiConfigId": return "用于小卷对话与工具调用";
             case "reasoningTranslateApiConfigId": return "用于翻译思考过程（思维链）内容";
             case "qaApiConfigId": return "用于工坊答疑、诊断与内容开发";
+            case "koreanSpeechApiConfigId": return "用于把中文台词转写成韩语再朗读";
         }
     };
 
@@ -459,6 +462,7 @@ export function BindingManager() {
             case "mascotApiConfigId": return "小卷助手 API";
             case "reasoningTranslateApiConfigId": return "思维链翻译 API";
             case "qaApiConfigId": return "工坊 API";
+            case "koreanSpeechApiConfigId": return "韩语转写 API";
         }
     };
 
@@ -990,6 +994,7 @@ export function BindingManager() {
                             {renderAuxSelect("mascotApiConfigId", "小卷助手 API")}
                             {renderAuxSelect("qaApiConfigId", "工坊 API")}
                             {renderAuxSelect("reasoningTranslateApiConfigId", "思维链翻译 API")}
+                            {renderAuxSelect("koreanSpeechApiConfigId", "韩语转写 API")}
                         </div>
                     </section>
                 </>

@@ -351,6 +351,8 @@ export type BindingConfig = {
     qaApiConfigId?: string;
     /** Auxiliary API: used to translate reasoning/chain-of-thought text (global, not per-character) */
     reasoningTranslateApiConfigId?: string;
+    /** Auxiliary API: used to transcribe Chinese lines into Korean for speech playback (global) */
+    koreanSpeechApiConfigId?: string;
 };
 
 // --- Chat Toolbox ---
