@@ -103,6 +103,16 @@ function normalizeMinimaxPitch(pitch: number | undefined): number {
     return Math.min(MINIMAX_PITCH_MAX, Math.max(MINIMAX_PITCH_MIN, Math.round(pitch)));
 }
 
+/** Minimax vol：官方范围 (0,10]，1.0 为默认值。缺省保持旧行为 1.0。 */
+export const MINIMAX_VOLUME_MIN = 0.5;
+export const MINIMAX_VOLUME_MAX = 10;
+export const DEFAULT_SPEECH_VOLUME = 1.0;
+
+function normalizeMinimaxVolume(volume: number | undefined): number {
+    if (typeof volume !== "number" || !Number.isFinite(volume) || volume <= 0) return DEFAULT_SPEECH_VOLUME;
+    return Math.min(MINIMAX_VOLUME_MAX, Math.max(MINIMAX_VOLUME_MIN, volume));
+}
+
 async function synthesizeMinimax(text: string, config: VoiceApiConfig, emotion?: string): Promise<Blob | null> {
     if (!config.apiKey) throw new Error("Minimax API Key 未配置");
 
@@ -110,7 +120,7 @@ async function synthesizeMinimax(text: string, config: VoiceApiConfig, emotion?:
     const voiceSetting: Record<string, unknown> = {
         voice_id: config.defaultVoice || "male-qn-qingse",
         speed: normalizeMinimaxSpeed(config.speechSpeed),
-        vol: 1.0,
+        vol: normalizeMinimaxVolume(config.speechVolume),
         pitch: normalizeMinimaxPitch(config.speechPitch),
     };
     const normalizedEmotion = emotion?.trim().toLowerCase();

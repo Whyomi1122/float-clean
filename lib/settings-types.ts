@@ -173,6 +173,8 @@ export type VoiceApiConfig = {
     speechSpeed?: number;
     /** Minimax voice_setting.pitch（半音，±12）。缺省保持旧行为（0，原声）。 */
     speechPitch?: number;
+    /** Minimax voice_setting.vol（0.5-10，1 为官方默认）。逐音色可调，解决克隆音色偏小。 */
+    speechVolume?: number;
     customVoices?: { id: string; name: string; createdAt?: number }[];
     enableSTT: boolean;
     enableTTS: boolean;

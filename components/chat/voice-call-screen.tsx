@@ -24,6 +24,8 @@ import { isAndroidBrowser, isIOSDevice } from "./voice-input-platform";
 import { CallVolumeControl } from "./call-volume-control";
 import { startIncomingCallVibration } from "@/lib/call-vibration";
 import { CallDiagnosticPanel } from "./call-diagnostic-panel";
+import { CallAmbiencePlayer } from "./call-ambience-player";
+import { AMBIENCE_SCENES, DEFAULT_AMBIENCE, loadAmbienceSettings, saveAmbienceSettings, type AmbienceSceneId, type AmbienceSettings } from "@/lib/call-ambience";
 import { recordCallDiagnostic } from "@/lib/call-diagnostics";
 
 // ── Types ───────────────────────────────────────────
@@ -70,6 +72,24 @@ function splitSubtitleContent(content: string): { text: string; narration?: stri
     const { dialogue, narration } = splitNarration(content);
     const text = dialogue.trim();
     return { text, ...(narration ? { narration } : {}) };
+}
+
+// 通话语言口径：角色音色绑定的「朗读语言」若为韩语，则该角色为韩语主导，
+// 通话时给 LLM 追加语言强制指令（不改聊天室的开场白/双语规则，只在通话生效）。
+function buildCallLanguageInstruction(characterId: string): string | undefined {
+    try {
+        const cfg = resolveVoiceConfig(characterId);
+        const boost = String(cfg?.languageBoost || "").toLowerCase();
+        if (!boost.includes("korean")) return undefined;
+        return [
+            "【语音通话·语言口径】",
+            "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
+            "按既有规则需要中文译文时，仍用原来的分隔格式附在后面（译文不朗读）。",
+            "口语化：短句、可停顿、允许重复词和语气词，不要书面语整段输出。",
+        ].join("\n");
+    } catch {
+        return undefined;
+    }
 }
 
 // ── Component ───────────────────────────────────────
@@ -136,6 +156,17 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [speakerOn, setSpeakerOn] = useState(true);
     const speakerOnRef = useRef(true);
     useEffect(() => { speakerOnRef.current = speakerOn; }, [speakerOn]);
+
+    // 环境音：场景 + 音量（localStorage 持久化，跨通话记住）
+    const [ambience, setAmbience] = useState<AmbienceSettings>(DEFAULT_AMBIENCE);
+    useEffect(() => { setAmbience(loadAmbienceSettings()); }, []);
+    const updateAmbience = useCallback((patch: Partial<AmbienceSettings>) => {
+        setAmbience(prev => {
+            const next = { ...prev, ...patch };
+            saveAmbienceSettings(next);
+            return next;
+        });
+    }, []);
     const toggleSpeaker = useCallback(() => {
         setSpeakerOn(prev => {
             const next = !prev;
@@ -499,6 +530,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                 appTags: ["chat", "voice"],
                 signal: request.signal,
                 forceStream: true,
+                extraSystemInstructions: buildCallLanguageInstruction(session.contactId),
             }, {
                 onStreamDelta: (delta: string) => {
                     if (!delta) return;
@@ -1072,6 +1104,39 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                         ))}
                                     </span>
                                 </div>
+                                <div className="call-more-col">
+                                    <b>环境音</b>
+                                    <small>接通后自动循环 · 跟随扬声器开关</small>
+                                    <span className="call-more-chips call-more-chips-wrap">
+                                        <button
+                                            type="button"
+                                            className={`call-more-chip ${ambience.scene === "off" ? "on" : ""}`}
+                                            onClick={() => updateAmbience({ scene: "off" })}
+                                        >关</button>
+                                        {AMBIENCE_SCENES.map(scene => (
+                                            <button
+                                                key={scene.id}
+                                                type="button"
+                                                className={`call-more-chip ${ambience.scene === scene.id ? "on" : ""}`}
+                                                onClick={() => updateAmbience({ scene: scene.id as AmbienceSceneId })}
+                                            >{scene.label}</button>
+                                        ))}
+                                    </span>
+                                </div>
+                                <div className="call-more-col">
+                                    <b>环境音量</b>
+                                    <small>只调背景音；角色人声音量用播放条上的音量键</small>
+                                    <input
+                                        type="range"
+                                        className="call-more-range"
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={Math.round(ambience.ambientVolume * 100)}
+                                        onChange={(e) => updateAmbience({ ambientVolume: Number(e.target.value) / 100 })}
+                                        aria-label="环境音量"
+                                    />
+                                </div>
                                 <button
                                     type="button"
                                     role="menuitem"
@@ -1318,6 +1383,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         <CallDiagnosticPanel characterId={session.contactId} hideTrigger defaultOpen />
                     </div>
                 )}
+
+                {/* 环境音：随扬声器总开关，按住说话时自动压低 */}
+                <CallAmbiencePlayer
+                    active={callState !== "CONNECTING" && callState !== "ENDED" && speakerOn && !minimized}
+                    scene={ambience.scene}
+                    volume={ambience.ambientVolume}
+                    ducked={callState === "USER_SPEAKING"}
+                />
 
                 {/* Bottom controls */}
                 <div
