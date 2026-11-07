@@ -147,6 +147,28 @@ export function splitSpeechBySentenceCount(text: string, perChunk = 1): string[]
  * 双语行（「原文|译文」）必须成对切，两边句数对不上就整行不拆，
  * 否则会出现「半句韩文配整句中文」的错位。
  */
+/**
+ * 剥掉 MiniMax 的「声音表现力标签」，只用于上屏与入库：
+ *   · <#0.3#> 停顿
+ *   · (breath) (sighs) (laughs) (clears throat) 等英文括号动作
+ * TTS 取文走的是另一条链路（保留标签），所以剥掉不影响朗读。
+ * 注意只认英文括号短词，中文旁白「（叹气）」不受影响。
+ */
+const PERFORMANCE_SPEED_TAG = /<#\s*[0-9.]+\s*#>/g;
+const PERFORMANCE_PAREN_TAG =
+    /[（(]\s*(?:breath(?:e|es|ing)?|sigh(?:s|ing)?|laugh(?:s|ing)?|chuckle|giggle|cry(?:ing)?|sob(?:bing)?|cough(?:s|ing)?|sneez(?:e|es|ing)|gasp(?:s|ing)?|yawn(?:s|ing)?|sniff(?:s|ing)?|groan(?:s|ing)?|hum(?:ming)?|whistl(?:e|es|ing)|clears?\s+throat|tsk+|scream(?:s|ing)?|exhal(?:e|es|ing)|inhal(?:e|es|ing)|pause|silence|shaky|trembling)\s*[)）]/gi;
+
+export function stripPerformanceTags(text: string): string {
+    if (!text) return "";
+    return text
+        .replace(PERFORMANCE_SPEED_TAG, "")
+        .replace(PERFORMANCE_PAREN_TAG, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/^[ \t]+/gm, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
 export function splitSentencesForDisplay(text: string): string[] {
     const trimmed = stripVoiceNoteWrapper(text).trim();
     if (!trimmed) return [];

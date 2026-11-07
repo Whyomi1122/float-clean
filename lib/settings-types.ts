@@ -175,6 +175,8 @@ export type VoiceApiConfig = {
     speechPitch?: number;
     /** Minimax voice_setting.vol（0.5-10，1 为官方默认）。逐音色可调，解决克隆音色偏小。 */
     speechVolume?: number;
+    /** 实验开关：通话中允许模型插入 MiniMax 声音表现力标签（<#0.3#>、(breath) 等）。默认关。 */
+    speechPerformance?: boolean;
     customVoices?: { id: string; name: string; createdAt?: number }[];
     enableSTT: boolean;
     enableTTS: boolean;

@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -74,19 +74,33 @@ function splitSubtitleContent(content: string): { text: string; narration?: stri
     return { text, ...(narration ? { narration } : {}) };
 }
 
-// 通话语言口径：角色音色绑定的「朗读语言」若为韩语，则该角色为韩语主导，
-// 通话时给 LLM 追加语言强制指令（不改聊天室的开场白/双语规则，只在通话生效）。
+// 通话口径注入：语言（韩语主导）+ 声音表现力标签（实验开关，默认关）。
+// 只影响通话，不动聊天室的双语/文风规则；关掉即完全回到旧行为。
 function buildCallLanguageInstruction(characterId: string): string | undefined {
     try {
         const cfg = resolveVoiceConfig(characterId);
         const boost = String(cfg?.languageBoost || "").toLowerCase();
-        if (!boost.includes("korean")) return undefined;
-        return [
-            "【语音通话·语言口径】",
-            "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
-            "按既有规则需要中文译文时，仍用原来的分隔格式附在后面（译文不朗读）。",
-            "口语化：短句、可停顿、允许重复词和语气词，不要书面语整段输出。",
-        ].join("\n");
+        const koreanFirst = boost.includes("korean");
+        const performance = cfg?.speechPerformance === true;
+        if (!koreanFirst && !performance) return undefined;
+        const lines: string[] = [];
+        if (koreanFirst) {
+            lines.push(
+                "【语音通话·语言口径】",
+                "本角色第一口语是韩语：台词用韩语（≥90%），中文只用于专有名词、称谓或用户明确表示听不懂时的极短解释。",
+                "按既有规则需要中文译文时，仍用原来的分隔格式附在后面（译文不朗读）。",
+                "口语化：短句、可停顿、允许重复词和语气词，不要书面语整段输出。",
+            );
+        }
+        if (performance) {
+            lines.push(
+                "【语音通话·声音表现力（朗读标签）】",
+                "允许在台词里插入少量朗读标签：句首用 (breath)、(sighs)、(laughs)、(clears throat) 表现呼吸与轻笑；必要处用 <#0.3#> 表示停顿（秒数 0.1-1.0）。",
+                "节制使用：每 2-3 句最多 1 个，不要连续堆叠，不要给每句都加；标签不是台词，不解释也不朗读出来。",
+                "情绪转折处才用，平静叙述不加。",
+            );
+        }
+        return lines.join("\n");
     } catch {
         return undefined;
     }
@@ -558,7 +572,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
             // 4. Process response
             const previousIds = new Set(messagesRef.current.map(m => m.id));
-            const { cleanParts } = processAIResponse(aiResponseText);
+            // 声音表现力标签只服务朗读（TTS 走流式句子原始文本），上屏与入库前统一剥掉
+            const { cleanParts } = processAIResponse(stripPerformanceTags(aiResponseText));
             const displayText = cleanParts.join("\n");
             setLiveReply(null);
             recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
@@ -1272,7 +1287,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
                     {/* 流式生成中的临时字幕：边收边按句拆气泡，和落库后的正式字幕保持一致，避免结束后"突然分句" */}
                     {liveReply && (() => {
-                        const liveText = stripVoiceNoteWrapper(liveReply);
+                        const liveText = stripPerformanceTags(stripVoiceNoteWrapper(liveReply));
                         const liveParts = splitSentencesForDisplay(liveText);
                         const parts = liveParts.length ? liveParts : (liveText ? [liveText] : []);
                         return parts.map((part, index) => (
