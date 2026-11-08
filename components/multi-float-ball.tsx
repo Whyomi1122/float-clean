@@ -23,6 +23,7 @@ import {
 import "./../styles/multi-float.css";
 import "./../styles/listen-together.css";
 import ListenTogetherOverlay from "@/components/music/listen-together-overlay";
+import { appendListenMarker } from "@/lib/listen-together-markers";
 
 type Props = {
     hidden: boolean;
@@ -300,6 +301,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                                     onClick={() => {
                                         if (!partner) { showToast("先在右边选一个角色"); return; }
                                         setListenOpen(true);
+                                        appendListenMarker(partner.id, "start");
                                     }}
                                 >
                                     <button
@@ -550,7 +552,10 @@ export default function MultiFloatBall({ hidden }: Props) {
                     character={partner}
                     userName={me?.name ?? "我"}
                     userAvatar={me?.avatarUrl}
-                    onClose={() => setListenOpen(false)}
+                    onClose={() => {
+                        setListenOpen(false);
+                        appendListenMarker(partner.id, "end");
+                    }}
                 />
             )}
         </>
