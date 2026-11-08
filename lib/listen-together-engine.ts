@@ -119,7 +119,11 @@ export async function generateListenReply(
 ): Promise<string> {
     const resolved = await resolveListenAssemblerInput(character);
 
-    const recentHistory: LLMMessage[] = history.slice(-12).map(m => ({
+    // 用户刚发的那句话已经在 history 里了，触发消息里不要再拼一次（否则模型看到两遍）
+    const historyForPrompt = userText
+        ? history.filter((m, i) => !(i === history.length - 1 && m.role === "user" && m.text.trim() === userText.trim()))
+        : history;
+    const recentHistory: LLMMessage[] = historyForPrompt.slice(-12).map(m => ({
         role: m.role === "user" ? "user" : "assistant",
         content: m.text,
     }));

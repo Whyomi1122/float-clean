@@ -2772,6 +2772,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const showPersistentChatToast = (text: string) => {
         clearTimeout(chatToastTimer.current);
         setChatToast(text);
+        // 兜底：万一后续流程没走到 clearChatToast，别把提示永久挂在屏幕上
+        chatToastTimer.current = setTimeout(() => setChatToast(null), 12000);
     };
 
     const clearStuckGeneration = () => {

@@ -96,14 +96,17 @@ function fmtTime(sec: number): string {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** 歌词窗口:当前行 ±10 行,整块最长约 4000 字符 */
+/** 歌词窗口：一共 6 句（当前句 + 前 3 后 2），够接话又不拖慢小模型 */
+const LYRIC_WINDOW = 6;
+const LYRIC_BEFORE = 3;
+
 function buildLyricWindow(lines: LrcLine[], currentTime: number): string {
     if (lines.length === 0) return "";
     let idx = lines.findIndex(l => l.time > currentTime);
     if (idx === -1) idx = lines.length; // 已到尾奏
     const cur = idx - 1;                 // 当前句(最后一条 time <= currentTime)
-    const start = Math.max(0, cur - 10);
-    const end = Math.min(lines.length, cur + 11);
+    const start = Math.max(0, cur - LYRIC_BEFORE);
+    const end = Math.min(lines.length, start + LYRIC_WINDOW);
     let out = "";
     for (let i = start; i < end; i++) {
         const marker = i === cur ? "▶" : " ";
