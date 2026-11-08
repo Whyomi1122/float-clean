@@ -2378,13 +2378,14 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
         if (/[\uAC00-\uD7A3]/.test(label)) return;
         if (!/[\u4E00-\u9FFF]/.test(label)) return;
         prefetchRef.current = true;
-        let cancelled = false;
+        // 注意：这里不能做取消清理——onUpdate 每次渲染可能换身份，effect 重跑时若把
+        // 上一次的请求标记取消，回写就永远被跳过（11-07 检修发现）。写完为止即可。
         (async () => {
             try {
                 const { shouldConvertToKorean, toKoreanSpeechPair } = await import("@/lib/speech-language");
                 if (!shouldConvertToKorean(characterId)) return;
                 const converted = await toKoreanSpeechPair(label);
-                if (cancelled || !converted || converted === label) return;
+                if (!converted || converted === label) return;
                 onUpdate({
                     ...msg,
                     mediaData: {
@@ -2396,7 +2397,6 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
                 });
             } catch { /* 预转写失败就退回点播放时现转 */ }
         })();
-        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [msg.id, characterId, onUpdate]);
 

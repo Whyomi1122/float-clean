@@ -94,8 +94,12 @@ export async function toKoreanSpeechPair(text: string): Promise<string | null> {
             });
             const korean = extractKoreanLine((result.content ?? "").trim());
             if (!korean) return null;
-            // 译文行直接用原中文（压成一行，避免多行括号让取文/字幕解析失败）
-            const chinese = source.replace(/\s*\n+\s*/g, " ").replace(/[|｜]/g, " ").trim();
+            // 译文行直接用原中文（压成一行并去掉括号/竖线，避免多行或嵌套括号让取文/字幕解析失败）
+            const chinese = source
+                .replace(/\s*\n+\s*/g, " ")
+                .replace(/[|｜（）()]/g, " ")
+                .replace(/\s{2,}/g, " ")
+                .trim();
             return `「${korean}」\n（${chinese}）`;
         } catch {
             return null;
