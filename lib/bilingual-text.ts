@@ -118,10 +118,13 @@ export function splitQuotedBilingualText(text: string): { original: string; tran
     return { original, translated };
 }
 
-/** 只剥「挂在「」后面的中文括号译文」，其余文本（含纯中文台词）原样保留 */
+/** 韩语行尾跟一个中文括号 → 当译文剥掉（不要求有「」引号） */
+const HANGUL_TAIL_PAREN_RE = /^(.*[\uAC00-\uD7A3\u1100-\u11FF\u3131-\u318E].*?)\s*[（(]([^（）()]*[\u4E00-\u9FFF][^（）()]*)[）)]$/;
+
+/** 剥掉挂在台词后面的中文括号译文（「」配对 / 韩语行尾括号），其余文本原样保留 */
 export function stripQuotedTranslation(text: string): string {
     const normalized = normalizeBilingualTextInput(text);
-    if (!normalized.includes("「")) return text;
+    if (!normalized.includes("「") && !/[（(]/.test(normalized)) return text;
     const lines = normalized.split("\n");
     const out: string[] = [];
     let removed = false;
@@ -141,6 +144,13 @@ export function stripQuotedTranslation(text: string): string {
         const prefixed = line.match(PREFIX_QUOTE_PAREN_RE);
         if (prefixed && isQuotePair(prefixed[2].trim(), prefixed[3].trim())) {
             out.push(`${prefixed[1].trimEnd()}「${prefixed[2].trim()}」`);
+            removed = true;
+            continue;
+        }
+        // 通话实录：模型常写成「韩语 . (中文译文)」不带引号，括号里是中文就是译文（11-08 实机）
+        const hangulTail = line.match(HANGUL_TAIL_PAREN_RE);
+        if (hangulTail && hangulTail[1].trim()) {
+            out.push(hangulTail[1].trimEnd());
             removed = true;
             continue;
         }

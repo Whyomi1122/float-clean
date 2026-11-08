@@ -104,7 +104,8 @@ export type SpeechCleanOptions = {
 export function stripSpokenScript(raw: string, options?: SpeechCleanOptions): string {
     const text = raw || "";
     if (!options?.dropTranslation) return text;
-    if (!HANGUL_CHAR.test(text)) return text;
+    // 不能因为「整段没韩文」就提前返回：分句后单块可能只剩译文（如「(明明就起不来。)」），
+    // 那种碎片正是 2026-11-08 实机"还在念译文"的罪魁。
     const kept: string[] = [];
     for (const line of text.split(/\r?\n/)) {
         // 引号包裹的中文行＝角色真的说了中文（如被要求说中文），照念，不当译文删
@@ -136,10 +137,30 @@ export function cleanSpeechFragment(raw: string, options?: SpeechCleanOptions): 
     text = stripBilingualTranslation(text);
     text = stripSpokenScript(text, options);
     text = text.replace(DECORATION_CHARS, " ");
-    // 括号被掏空后剩下的孤立半括号（念出来就是「念符号」），直接清掉
-    text = text.replace(/[（(]\s*[）)]/g, " ").replace(/[（(]\s*(?=$|[。！？!?…])/g, " ").replace(/\s*[）)]/g, " ");
+    // 括号被掏空后剩下的孤立半括号（念出来就是「念符号」），按行配对后清掉落单的
+    text = text
+        .split("\n")
+        .map((line) => stripOrphanBrackets(line))
+        .join("\n");
     text = text.replace(/\s{2,}/g, " ").replace(/^[ \t]+|[ \t]+$/gm, "").trim();
     return text;
+}
+
+/** 只删掉落单的括号，成对的（笑）保持原样，避免把正常括号内容吃掉 */
+function stripOrphanBrackets(line: string): string {
+    const chars = Array.from(line);
+    const openStack: number[] = [];
+    const drop = new Set<number>();
+    chars.forEach((ch, index) => {
+        if (ch === "（" || ch === "(") openStack.push(index);
+        else if (ch === "）" || ch === ")") {
+            if (openStack.length) openStack.pop();
+            else drop.add(index);
+        }
+    });
+    openStack.forEach((index) => drop.add(index));
+    if (!drop.size) return line;
+    return chars.filter((_, index) => !drop.has(index)).join("");
 }
 
 /**
