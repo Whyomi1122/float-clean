@@ -45,3 +45,43 @@ export function clearListenMessages(characterId: string): void {
 export function genListenMsgId(): string {
     return `lt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// ── 队列归属:「这首是谁放的」 ──
+// 只记归属，不另存队列本身——队列真源永远是 music-context。
+export type ListenQueueMark = {
+    trackId: string;
+    /** user=你放的 / character=TA 排进来的 */
+    by: "user" | "character";
+    /** 角色放歌时顺带说的一句，显示在歌下面 */
+    note?: string;
+    addedAt: string;
+};
+
+const QUEUE_KEY_PREFIX = "ai_phone_listen_together_queue_v1_";
+
+export function loadListenQueueMarks(characterId: string): ListenQueueMark[] {
+    try {
+        const raw = localStorage.getItem(QUEUE_KEY_PREFIX + characterId);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+/** 同一首再次被放时覆盖旧的归属（后来的那次说了算） */
+export function markListenQueueTrack(characterId: string, mark: ListenQueueMark): void {
+    try {
+        const list = loadListenQueueMarks(characterId).filter(item => item.trackId !== mark.trackId);
+        list.push(mark);
+        while (list.length > 80) list.shift();
+        localStorage.setItem(QUEUE_KEY_PREFIX + characterId, JSON.stringify(list));
+    } catch { /* ignore */ }
+}
+
+export function clearListenQueueMarks(characterId: string): void {
+    try {
+        localStorage.removeItem(QUEUE_KEY_PREFIX + characterId);
+    } catch { /* ignore */ }
+}

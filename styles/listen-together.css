@@ -205,6 +205,87 @@
     white-space: nowrap;
 }
 
+/* 谁放的这首 */
+.lt-owner {
+    margin-top: 3px;
+    font-size: 10.5px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lt-owner-char { color: #5b7c99; }
+.lt-owner-user { color: #9aa9b8; }
+
+/* 接下来 */
+.lt-upnext {
+    margin: 0 14px 6px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    max-height: 104px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.lt-upnext-head {
+    font-size: 10.5px;
+    color: #7c93ac;
+    margin-bottom: 4px;
+}
+
+.lt-upnext-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 3px 0;
+    background: none;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.lt-upnext-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: #2c3440;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lt-upnext-artist {
+    font-size: 10.5px;
+    color: #9aa9b8;
+    max-width: 34%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lt-upnext-badge {
+    flex-shrink: 0;
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: #eef2f6;
+    color: #9aa9b8;
+}
+
+.lt-upnext-badge.is-char {
+    background: #e6eef6;
+    color: #5b7c99;
+}
+
+.lt-upnext-badge.is-user {
+    background: #f0f2f4;
+    color: #8b98a6;
+}
+
 .lt-progress {
     height: 3px;
     border-radius: 999px;

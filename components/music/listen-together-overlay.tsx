@@ -12,7 +12,10 @@ import {
     appendListenMessage,
     clearListenMessages,
     genListenMsgId,
+    loadListenQueueMarks,
+    markListenQueueTrack,
     type ListenMessage,
+    type ListenQueueMark,
 } from "@/lib/listen-together-storage";
 import type { Character } from "@/lib/character-types";
 import "./../../styles/listen-together.css";
@@ -34,6 +37,7 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
     const [messages, setMessages] = useState<ListenMessage[]>([]);
     const [input, setInput] = useState("");
     const [thinking, setThinking] = useState(false);
+    const [marks, setMarks] = useState<ListenQueueMark[]>([]);
     const listRef = useRef<HTMLDivElement>(null);
     /** 防止切歌自动触发重复请求 */
     const lastAutoTrackId = useRef<string | null>(null);
@@ -42,6 +46,25 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
     useEffect(() => {
         setMessages(loadListenMessages(character.id));
     }, [character.id]);
+
+    // 队列归属:每次换歌重新读一遍,这样 TA 刚排进来的歌能立刻显示「TA 放的」
+    useEffect(() => {
+        setMarks(loadListenQueueMarks(character.id));
+    }, [character.id, track?.id]);
+
+    const ownerOf = (trackId?: string) => marks.find(item => item.trackId === trackId);
+
+    /** 用户在浮层里点歌 = 你放的 */
+    const playAsUser = (item: { id: string; title: string; artist: string }) => {
+        markListenQueueTrack(character.id, { trackId: item.id, by: "user", addedAt: new Date().toISOString() });
+        setMarks(loadListenQueueMarks(character.id));
+        controls?.playTrack(item as Parameters<NonNullable<typeof controls>["playTrack"]>[0]);
+    };
+
+    const queue = controls?.queue ?? [];
+    const currentIndex = track ? queue.findIndex(item => item.id === track.id) : -1;
+    const upNext = (currentIndex >= 0 ? queue.slice(currentIndex + 1) : queue).slice(0, 5);
+    const currentOwner = ownerOf(track?.id);
 
     // 自动滚动到底
     useEffect(() => {
@@ -149,6 +172,12 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
                             <div className="lt-player-meta">
                                 <div className="lt-player-title">{track.title}</div>
                                 <div className="lt-player-artist">{track.artist}</div>
+                                {currentOwner && (
+                                    <div className={`lt-owner ${currentOwner.by === "character" ? "lt-owner-char" : "lt-owner-user"}`}>
+                                        {currentOwner.by === "character" ? `${character.name} 放的` : "你放的"}
+                                        {currentOwner.note ? ` · 「${currentOwner.note}」` : ""}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="lt-progress"><div className="lt-progress-fill" style={{ width: `${track.duration > 0 ? Math.min(currentTime / track.duration, 1) * 100 : 0}%` }} /></div>
@@ -166,6 +195,27 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
                     </div>
                 )}
             </div>
+
+            {/* 接下来：列表真源还是 music-context 的队列，这里只补「谁放的」 */}
+            {upNext.length > 0 && (
+                <div className="lt-upnext">
+                    <div className="lt-upnext-head">接下来 · {upNext.length} 首</div>
+                    {upNext.map(item => {
+                        const owner = ownerOf(item.id);
+                        return (
+                            <button key={item.id} className="lt-upnext-item" onClick={() => playAsUser(item)}>
+                                <span className="lt-upnext-name">{item.title}</span>
+                                <span className="lt-upnext-artist">{item.artist}</span>
+                                {owner && (
+                                    <span className={`lt-upnext-badge ${owner.by === "character" ? "is-char" : "is-user"}`}>
+                                        {owner.by === "character" ? "TA" : "你"}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* 聊天流 */}
             <div className="lt-chat" ref={listRef}>
