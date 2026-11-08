@@ -4,13 +4,13 @@
 // 存记录而不是只画在界面上，是为了刷新、切回来之后还在——回看时能一眼认出
 // 「这段话是听歌的时候说的」。渲染沿用系统消息那套居中灰字，不额外造样式。
 
-import { loadChatContacts, loadChatSessions, createOrGetSession, pushChatMessage } from "./chat-storage";
+import { loadChatContacts, loadChatSessions, pushChatMessage } from "./chat-storage";
 
 function resolveSingleSession(characterId: string) {
     const contact = loadChatContacts().find(item => item.characterId === characterId);
     if (!contact) return null;
     const sessions = loadChatSessions().filter(item => item.contactId === contact.id && !item.isGroup);
-    if (sessions.length === 0) return createOrGetSession(contact.id);
+    if (sessions.length === 0) return null; // 没有单聊会话就不写，别为了一条分隔线凭空造一个空会话
     // 多会话时挂到最近活跃的那个
     return sessions.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))[0];
 }
