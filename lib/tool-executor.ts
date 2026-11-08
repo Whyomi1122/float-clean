@@ -2575,7 +2575,7 @@ async function resolveMusicTrackById(source: string, songId: unknown): Promise<M
     };
 }
 
-function neteaseResultToTrack(result: NeteaseSearchResult): MusicTrack {
+export function neteaseResultToTrack(result: NeteaseSearchResult): MusicTrack {
     return {
         id: `netease_${result.id}`,
         title: result.name,

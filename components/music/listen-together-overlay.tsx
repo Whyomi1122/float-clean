@@ -6,7 +6,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMusicControlsOptional, useMusicPlayerOptional } from "@/lib/music-context";
-import { generateListenReply } from "@/lib/listen-together-engine";
+import { generateListenReply, type ListenReplyAction } from "@/lib/listen-together-engine";
+import { unifiedSearch } from "@/lib/music-service";
+import { neteaseResultToTrack } from "@/lib/tool-executor";
 import {
     loadListenMessages,
     appendListenMessage,
@@ -18,6 +20,7 @@ import {
     type ListenQueueMark,
 } from "@/lib/listen-together-storage";
 import type { Character } from "@/lib/character-types";
+import type { MusicTrack } from "@/lib/music-storage";
 import "./../../styles/listen-together.css";
 
 type Props = {
@@ -55,10 +58,10 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
     const ownerOf = (trackId?: string) => marks.find(item => item.trackId === trackId);
 
     /** 用户在浮层里点歌 = 你放的 */
-    const playAsUser = (item: { id: string; title: string; artist: string }) => {
+    const playAsUser = (item: MusicTrack) => {
         markListenQueueTrack(character.id, { trackId: item.id, by: "user", addedAt: new Date().toISOString() });
         setMarks(loadListenQueueMarks(character.id));
-        controls?.playTrack(item as Parameters<NonNullable<typeof controls>["playTrack"]>[0]);
+        controls?.playTrack(item);
     };
 
     const queue = controls?.queue ?? [];
@@ -77,6 +80,41 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
         setMessages(prev => [...prev, msg]);
     }, [character.id]);
 
+    /** 角色通过标签点的动作：真的去执行，并记成「TA 放的」 */
+    const runCharAction = useCallback(async (action: ListenReplyAction, note: string) => {
+        if (!controls) return;
+        try {
+            if (action.kind === "next") {
+                controls.next();
+                return;
+            }
+            const results = await unifiedSearch(action.query);
+            const first = results.find(result => (result.source === "local" ? result.localTrack : result.neteaseResult));
+            if (!first) return;
+            const target: MusicTrack | null = first.source === "local" && first.localTrack
+                ? first.localTrack
+                : first.neteaseResult
+                    ? neteaseResultToTrack(first.neteaseResult)
+                    : null;
+            if (!target) return;
+            if (action.kind === "play") {
+                controls.playTrack(target);
+            } else {
+                const cur = controls.queue ?? [];
+                if (!cur.some(item => item.id === target.id)) controls.setQueue([...cur, target]);
+            }
+            markListenQueueTrack(character.id, {
+                trackId: target.id,
+                by: "character",
+                note: note.slice(0, 40),
+                addedAt: new Date().toISOString(),
+            });
+            setMarks(loadListenQueueMarks(character.id));
+        } catch (err) {
+            console.warn("[ListenTogether] 角色动作执行失败:", err);
+        }
+    }, [character.id, controls]);
+
     /** 触发一次 AI 回应(自动场景时 userText 为空) */
     const requestReply = useCallback(async (userText: string, contextHint?: string) => {
         if (thinking) return;
@@ -84,13 +122,16 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
         try {
             const history = loadListenMessages(character.id);
             const reply = await generateListenReply(character, userName, history, userText, contextHint);
-            if (reply) pushCharMessage(reply);
+            if (reply.text) pushCharMessage(reply.text);
+            for (const action of reply.actions) {
+                void runCharAction(action, reply.text || userText || "给你放一首");
+            }
         } catch (err) {
             pushCharMessage(err instanceof Error ? `(!) ${err.message}` : "(!) 网络好像不太好,再试一次?");
         } finally {
             setThinking(false);
         }
-    }, [character, userName, thinking, pushCharMessage]);
+    }, [character, userName, thinking, pushCharMessage, runCharAction]);
 
     // 切歌自动触发:60% 概率让角色说一句
     useEffect(() => {

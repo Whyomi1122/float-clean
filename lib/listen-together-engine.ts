@@ -99,6 +99,11 @@ const SCENE_INSTRUCTION = (userName: string, contextHint: string) =>
         `可以聊当下的歌、歌手、旋律、歌词里戳到你的那一句,也可以借歌说起你们的事。`,
         `不要输出动作括号旁白以外的长段描写;不要复述歌词原文超过一句。`,
         contextHint ? `场景提示:${contextHint}` : "",
+        `【可选动作】想主动放歌时,在回复最后另起一行写一个标签(最多一个):`,
+        `  [点歌:歌名 - 歌手]  立刻换这首`,
+        `  [排队:歌名 - 歌手]  排到队列后面`,
+        `  [切歌]              切下一首`,
+        `只有真的很想放才写;不确定、或者只是想聊聊,就不要写。标签会被隐藏,不要解释它。`,
         `[/listen_together_scene]`,
     ].filter(Boolean).join("\n");
 
@@ -116,7 +121,7 @@ export async function generateListenReply(
     history: ListenMessage[],
     userText: string,
     contextHint?: string,
-): Promise<string> {
+): Promise<{ text: string; actions: ListenReplyAction[] }> {
     const resolved = await resolveListenAssemblerInput(character);
 
     // 用户刚发的那句话已经在 history 里了，触发消息里不要再拼一次（否则模型看到两遍）
@@ -146,5 +151,34 @@ export async function generateListenReply(
         { characterName: `一起听:${resolved.ownerName}` },
         { appId: "listen", appTags: ["listen", "music"] },
     );
-    return raw.trim();
+    return parseListenActionTags(raw);
+}
+
+/**
+ * 动作标签协议：不走 function-call，保持轻量（一起听是短对话，塞工具定义太重）。
+ * 模型可以在回复最后额外写一行：
+ *   [点歌:歌名 - 歌手] / [排队:歌名 - 歌手] / [切歌]
+ * 解析后从正文里抹掉，绝不让标签露给用户。
+ */
+export type ListenReplyAction =
+    | { kind: "play"; query: string }
+    | { kind: "queue"; query: string }
+    | { kind: "next" };
+
+const ACTION_TAG_RE = /\[(点歌|排队|切歌)(?:[:：]([^\]\n]+))?\]/g;
+
+export function parseListenActionTags(raw: string): { text: string; actions: ListenReplyAction[] } {
+    const actions: ListenReplyAction[] = [];
+    const text = raw
+        .replace(ACTION_TAG_RE, (_match, kind: string, arg?: string) => {
+            if (actions.length >= 2) return ""; // 一条回复最多两个动作，防它贪心
+            const query = (arg || "").trim();
+            if (kind === "切歌") actions.push({ kind: "next" });
+            else if (query) actions.push({ kind: kind === "点歌" ? "play" : "queue", query });
+            return "";
+        })
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    return { text, actions };
 }
