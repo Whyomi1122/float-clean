@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import {
-    loadAllTracks, saveTrack, deleteTrack,
+    loadAllTracks, saveTrack, deleteTrack, updateTrackMeta,
     generateTrackId, parseFilename, getAudioDuration,
     type MusicTrack,
 } from "@/lib/music-storage";
@@ -198,6 +198,14 @@ export default function MusicApp({ onClose }: Props) {
         await deleteTrack(trackId);
         setTracks(prev => prev.filter(t => t.id !== trackId));
         if (player.currentTrack?.id === trackId) player.stop();
+    };
+
+    const handleRename = async (trackId: string, title: string, artist: string) => {
+        const cleanTitle = title.trim();
+        const cleanArtist = artist.trim() || "未知歌手";
+        if (!cleanTitle) return;
+        await updateTrackMeta(trackId, { title: cleanTitle, artist: cleanArtist });
+        setTracks(prev => prev.map(t => (t.id === trackId ? { ...t, title: cleanTitle, artist: cleanArtist } : t)));
     };
 
     /** Convert NeteaseSearchResult → MusicTrack */
@@ -436,7 +444,7 @@ export default function MusicApp({ onClose }: Props) {
                                     播放全部<span className="music-playall-count">({tracks.length})</span>
                                 </button>
                             </div>
-                            <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
+                            <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} onRename={handleRename} />
                         </>
                     )}
                 </>
@@ -1204,14 +1212,31 @@ function NeteaseSongRow({ song, index, formatTime, onPlay }: {
 }
 
 // ── Song List (local) ──
-function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
+function SongList({ tracks, player, formatTime, onDelete, onPlay, onRename }: {
     tracks: MusicTrack[];
     player: MusicControlsValue;
     formatTime: (s: number) => string;
     onDelete: (id: string, e: React.MouseEvent) => void;
     onPlay: (t: MusicTrack) => void;
+    onRename: (id: string, title: string, artist: string) => void | Promise<void>;
 }) {
     const [deleteTarget, setDeleteTarget] = useState<MusicTrack | null>(null);
+    const [renameTarget, setRenameTarget] = useState<MusicTrack | null>(null);
+    const [renameTitle, setRenameTitle] = useState("");
+    const [renameArtist, setRenameArtist] = useState("");
+
+    const openRename = (track: MusicTrack) => {
+        setRenameTarget(track);
+        setRenameTitle(track.title);
+        setRenameArtist(track.artist);
+    };
+
+    const submitRename = async () => {
+        const target = renameTarget;
+        if (!target) return;
+        await onRename(target.id, renameTitle, renameArtist);
+        setRenameTarget(null);
+    };
 
     return (
         <div className="music-list">
@@ -1237,6 +1262,11 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
                         </div>
                         <div className="music-song-duration">{formatTime(track.duration)}</div>
                         <div className="music-song-actions">
+                            <button className="music-song-action-btn" onClick={(e) => { e.stopPropagation(); openRename(track); }} title="改名">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                </svg>
+                            </button>
                             <button className="music-song-action-btn" data-danger="" onClick={(e) => { e.stopPropagation(); setDeleteTarget(track); }}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                     <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -1263,10 +1293,46 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
                 </div>
             )}
 
+            {renameTarget && (
+                <div className="music-settings-modal-overlay" onClick={() => setRenameTarget(null)}>
+                    <div className="music-settings-modal-dialog music-rename-dialog" onClick={e => e.stopPropagation()}>
+                        <div className="music-settings-header"><h2>编辑歌曲信息</h2></div>
+                        <div className="music-settings-body">
+                            <label className="music-rename-label">
+                                <span>歌名</span>
+                                <input
+                                    className="music-settings-input"
+                                    value={renameTitle}
+                                    onChange={e => setRenameTitle(e.target.value)}
+                                    placeholder="歌名"
+                                    autoFocus
+                                />
+                            </label>
+                            <label className="music-rename-label">
+                                <span>歌手</span>
+                                <input
+                                    className="music-settings-input"
+                                    value={renameArtist}
+                                    onChange={e => setRenameArtist(e.target.value)}
+                                    placeholder="歌手"
+                                />
+                            </label>
+                            <div className="music-settings-actions">
+                                <button className="music-settings-btn" onClick={() => setRenameTarget(null)}>取消</button>
+                                <button
+                                    className="music-settings-btn music-settings-btn-primary"
+                                    disabled={!renameTitle.trim()}
+                                    onClick={submitRename}
+                                >保存</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }
-
 // ── Online Search Tab ──
 function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
     player: MusicControlsValue;

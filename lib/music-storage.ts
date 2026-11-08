@@ -126,12 +126,26 @@ export function generateTrackId(): string {
     return `trk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Parse filename into title and artist: "Artist - Title.mp3" */
+/** Parse filename into title and artist: "Artist - Title.mp3"
+ *  宽松支持 ` - ` / ` – ` / ` — ` / `_` / `|` / `｜` / `-`，
+ *  但宽松分隔符只在左半段像个歌手名（≤24 字）时才切，避免把歌名里的连字符当分隔符。 */
 export function parseFilename(filename: string): { title: string; artist: string } {
     const name = filename.replace(/\.[^.]+$/, "").trim();
-    const sep = name.indexOf(" - ");
-    if (sep > 0) {
-        return { artist: name.slice(0, sep).trim(), title: name.slice(sep + 3).trim() };
+    for (const sep of [" - ", " – ", " — "]) {
+        const i = name.indexOf(sep);
+        if (i > 0) {
+            const artist = name.slice(0, i).trim();
+            const title = name.slice(i + sep.length).trim();
+            if (title) return { artist, title };
+        }
+    }
+    for (const sep of ["_", "|", "｜", "-"]) {
+        const i = name.indexOf(sep);
+        if (i > 0 && i <= 24) {
+            const artist = name.slice(0, i).trim();
+            const title = name.slice(i + sep.length).trim();
+            if (artist && title) return { artist, title };
+        }
     }
     return { title: name, artist: "未知歌手" };
 }

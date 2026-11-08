@@ -2034,6 +2034,28 @@
     max-width: 280px;
 }
 
+.music-rename-dialog {
+    max-width: 300px;
+}
+
+.music-rename-label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.music-rename-label > span {
+    font-size: calc(10.5px*var(--app-text-scale,1));
+    color: var(--c-music-text);
+    opacity: 0.62;
+    letter-spacing: 0.02em;
+}
+
+.music-rename-dialog .music-settings-actions {
+    margin-top: 14px;
+}
+
 .music-confirm-text {
     font-size: calc(11.7px*var(--app-text-scale,1));
     color: var(--c-music-text);
