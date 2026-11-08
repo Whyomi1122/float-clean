@@ -2,7 +2,7 @@
 
 /**
  * 通话环境音：场景清单 + 本地持久化。
- * 音源放 public/ambience/*.mp3（30-60s 无缝循环，单个 <500KB）。
+ * 音源放 public/ambience/{scene}.wav|.mp3|.ogg（30-60s 无缝循环）。
  * 文件缺失时播放器静默降级，不影响通话。
  */
 
@@ -18,17 +18,27 @@ export type AmbienceSceneId =
 export type AmbienceScene = {
     id: AmbienceSceneId;
     label: string;
-    file: string;
+    /** 候选音源，按优先顺序探测第一个存在的 */
+    files: string[];
 };
 
+/**
+ * 音源后缀优先级：WAV → MP3 → OGG。
+ * WAV(PCM) 没有编码器填充，配合 Web Audio 的 AudioBufferSourceNode.loop 是采样级无缝；
+ * MP3 有编码填充（解码器一般能吃掉）；OGG 在 iOS Safari 不支持，只作最后兜底。
+ */
+function ambienceCandidates(id: AmbienceSceneId): string[] {
+    return [`/ambience/${id}.wav`, `/ambience/${id}.mp3`, `/ambience/${id}.ogg`];
+}
+
 export const AMBIENCE_SCENES: AmbienceScene[] = [
-    { id: "rain", label: "雨夜", file: "/ambience/rain.mp3" },
-    { id: "cafe", label: "咖啡厅", file: "/ambience/cafe.mp3" },
-    { id: "street", label: "夜街", file: "/ambience/street.mp3" },
-    { id: "car", label: "车内", file: "/ambience/car.mp3" },
-    { id: "beach", label: "海边", file: "/ambience/beach.mp3" },
-    { id: "bedroom", label: "卧室", file: "/ambience/bedroom.mp3" },
-    { id: "station", label: "车站", file: "/ambience/station.mp3" },
+    { id: "rain", label: "雨夜", files: ambienceCandidates("rain") },
+    { id: "cafe", label: "咖啡厅", files: ambienceCandidates("cafe") },
+    { id: "street", label: "夜街", files: ambienceCandidates("street") },
+    { id: "car", label: "车内", files: ambienceCandidates("car") },
+    { id: "beach", label: "海边", files: ambienceCandidates("beach") },
+    { id: "bedroom", label: "卧室", files: ambienceCandidates("bedroom") },
+    { id: "station", label: "车站", files: ambienceCandidates("station") },
 ];
 
 export type AmbienceSettings = {
@@ -75,6 +85,11 @@ export function saveAmbienceSettings(next: AmbienceSettings): void {
     }
 }
 
+/** 该场景的全部候选音源（优先顺序），off 返回空数组 */
+export function ambienceFilesOf(scene: AmbienceSceneId | "off"): string[] {
+    return AMBIENCE_SCENES.find(item => item.id === scene)?.files ?? [];
+}
+
 export function ambienceFileOf(scene: AmbienceSceneId | "off"): string | undefined {
-    return AMBIENCE_SCENES.find(item => item.id === scene)?.file;
+    return ambienceFilesOf(scene)[0];
 }
