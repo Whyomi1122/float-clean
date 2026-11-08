@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { ambienceFilesOf, type AmbienceSceneId } from "@/lib/call-ambience";
+import { recordCallDiagnostic } from "@/lib/call-diagnostics";
 
 /** 用户按住说话时环境音自动压低到这个比例，避免麦克风把背景音收进识别 */
 const DUCK_RATIO = 0.2;
@@ -115,11 +116,15 @@ export function CallAmbiencePlayer({ active, scene, volume, ducked = false }: Ca
         ctxRef.current = ctx;
         // 通话按钮链路上已经是用户手势，这里可以直接尝试解锁
         if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+        recordCallDiagnostic(`环境音 ${scene}：ctx=${ctx.state} 候选 ${urls.length} 个`);
 
         let cancelled = false;
         void (async () => {
             const buffer = await loadFirstAvailable(ctx, urls);
-            if (cancelled || tokenRef.current !== token || !buffer) return;
+            if (cancelled || tokenRef.current !== token || !buffer) {
+                if (!buffer) recordCallDiagnostic(`环境音 ${scene}：音源缺失或解码失败（试过 ${urls.length} 个后缀）`);
+                return;
+            }
             if (ctx.state === "suspended") await ctx.resume().catch(() => {});
             const src = ctx.createBufferSource();
             src.buffer = buffer;
@@ -133,6 +138,9 @@ export function CallAmbiencePlayer({ active, scene, volume, ducked = false }: Ca
             src.start(now);
             sourceRef.current = src;
             gainRef.current = gain;
+            recordCallDiagnostic(
+                `环境音 ${scene}：已播放 ${buffer.duration.toFixed(1)}s / 音量 ${Math.round(targetRef.current * 100)}% / ctx=${ctx.state}`
+            );
         })();
 
         return () => {

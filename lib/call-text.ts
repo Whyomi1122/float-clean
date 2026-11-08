@@ -292,6 +292,15 @@ export function splitSentencesForDisplay(text: string): string[] {
             }
             continue;
         }
+        // 整行就是一个括号译文：（记得啊，……看日出吗。我都答应……吧？）
+        // 按句号切开后要逐句补回括号，否则末尾孤立的「）」会自己成一帧（2026-11-08 实机）。
+        const parenOnly = line.match(/^[（(]([^（）()]+)[）)]$/);
+        if (parenOnly) {
+            const innerParts = splitByPunctuation(parenOnly[1].trim());
+            if (innerParts.length > 1) out.push(...innerParts.map(part => `（${part}）`));
+            else out.push(line);
+            continue;
+        }
         const parts = splitByPunctuation(line);
         if (parts.length > 1) out.push(...parts);
         else out.push(line);
