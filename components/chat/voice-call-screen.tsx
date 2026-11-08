@@ -475,8 +475,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             });
             messagesRef.current = [...messagesRef.current, userMsg];
 
-            // Add user subtitle
-            setSubtitles(prev => [...prev, { id: userMsg.id, role: "user", text: userText }]);
+            // Add user subtitle（顺手清掉之前残留的空台词气泡，避免空壳卡在消息中间）
+            setSubtitles(prev => [
+                ...prev.filter(item => !(item.role === "assistant" && !item.text.trim())),
+                { id: userMsg.id, role: "user", text: userText },
+            ]);
         }
 
         // 2. Switch to PROCESSING
@@ -937,7 +940,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             ids.add(selectedSubtitle.id);
             for (const id of ids) deleteChatMessage(id);
             messagesRef.current = loadChatMessages(session.id);
-            setSubtitles(items => items.filter(item => !ids.has(item.id)));
+            // 除了本轮这几条，所有空台词一起清掉（空壳气泡本来就没内容）
+            setSubtitles(items => items.filter(item => !ids.has(item.id) && !(item.role === "assistant" && !item.text.trim())));
             void turnRef.current();
         }
     };
