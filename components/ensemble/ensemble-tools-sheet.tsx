@@ -10,6 +10,7 @@ import {
   BookOpen,
   Scissors,
   Image as ImageIcon,
+  Music2,
   type LucideIcon,
 } from "lucide-react";
 import { TYPE } from "@/components/ensemble/ensemble-tokens";
@@ -45,7 +46,8 @@ export type EnsembleToolId =
   | "statusPanel"
   | "archive"
   | "worldBook"
-  | "storyboard";
+  | "storyboard"
+  | "moodMusic";
 
 export interface EnsembleToolItem {
   id: EnsembleToolId;
@@ -68,6 +70,7 @@ export const ENSEMBLE_TOOLS: EnsembleToolItem[] = [
   { id: "statusPanel", label: "状态面板", labelEn: "STATUS PANEL", Icon: Activity, enabled: true },
   { id: "worldBook", label: "世界书", labelEn: "WORLD BOOK", Icon: BookOpen, enabled: true },
   { id: "storyboard", label: "分镜配图", labelEn: "STORYBOARD", Icon: ImageIcon, enabled: true },
+  { id: "moodMusic", label: "他的心情音乐", labelEn: "MOOD PLAYLIST", Icon: Music2, enabled: true },
   { id: "archive", label: "杀青归档", labelEn: "WRAP · ARCHIVE", Icon: Scissors, enabled: true },
   { id: "customCss", label: "自定义 CSS", labelEn: "CUSTOM STYLE", Icon: Code2, enabled: true },
   { id: "model", label: "模型切换", labelEn: "API · SESSION", Icon: Layers, enabled: true },

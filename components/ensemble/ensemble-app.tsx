@@ -89,6 +89,8 @@ import {
   loadEnsembleFontData,
 } from "@/lib/ensemble-storage";
 import { generateStoryboardImage } from "@/lib/ensemble-storyboard";
+import { buildPlotText } from "@/lib/ensemble-mood-music";
+import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sheet";
 import { hydrateKvDb } from "@/lib/kv-db";
 import { ensureSettingsStorageHydrated } from "@/lib/settings-storage";
 import {
@@ -1415,6 +1417,8 @@ export function EnsembleApp({
   /** 世界书绑定子弹窗（2026-10-09 M2-b） */
   const [showWorldBookSheet, setShowWorldBookSheet] = useState(false);
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
+  /** 他的心情音乐（2026-11-08）：只在剧情室开，弹窗写指令 → 后台生成 */
+  const [showMoodMusicSheet, setShowMoodMusicSheet] = useState(false);
   /** 投递：先选「用哪一句台词作为起点」，再选落点（单聊 / 群聊）。 */
   const [deliverPicker, setDeliverPicker] = useState<{
     turn: EnsembleTurn;
@@ -4618,6 +4622,8 @@ ${lastSpeakerNote}
                 setShowArchiveSheet(true);
               } else if (id === "storyboard") {
                 setShowStoryboardSheet(true);
+              } else if (id === "moodMusic") {
+                setShowMoodMusicSheet(true);
               }
             }}
           />
@@ -5416,6 +5422,24 @@ ${lastSpeakerNote}
                   />
                 </div>
               </div>
+            </MiniSheet>
+          )}
+
+          {showMoodMusicSheet && currentScript && (
+            <MiniSheet
+              title="他的心情音乐"
+              subtitle="MOOD PLAYLIST · 按剧情配乐"
+              onClose={() => {
+                setShowMoodMusicSheet(false);
+                setShowToolsSheet(true);
+              }}
+            >
+              <EnsembleMoodMusicSheet
+                scriptId={currentScript.id}
+                scriptTitle={currentScript.title}
+                apiConfig={resolveEnsembleApiConfig(currentScript.cast[0]?.id, currentScript.apiConfigIdOverride, currentScript.modelOverride)}
+                plotText={buildPlotText((currentScript.turns ?? []).slice(-40))}
+              />
             </MiniSheet>
           )}
 
