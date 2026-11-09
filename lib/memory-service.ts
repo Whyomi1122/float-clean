@@ -98,8 +98,34 @@ export async function retrieveArchivesForPrompt(
     const sorted = [...archives].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+    // 群像归档去重（2026-11-09 用户口径）：同一剧本只注入最新一条。
+    // 群像每次杀青都会写一条新归档，旧归档留着没有任何信息增量，只是把提示词撑长。
+    // 写入侧已经会清掉旧条目，这里是兜底（老数据 / 清理失败时也不会重复注入）。
+    const seenEnsembleKeys = new Set<string>();
+    const deduped = sorted.filter(entry => {
+        const key = ensembleArchiveKey(entry);
+        if (!key) return true;
+        if (seenEnsembleKeys.has(key)) return false;
+        seenEnsembleKeys.add(key);
+        return true;
+    });
     // 归档预算：借用 longTermTokenBudget（归档与大记忆共用一段大预算）
-    return fillByBudget(sorted, config.longTermTokenBudget);
+    return fillByBudget(deduped, config.longTermTokenBudget);
+}
+
+/**
+ * 群像归档的"同一份剧本"分组键：优先用写入时打的 ensembleScriptId，
+ * 老数据没有这个字段时退化成解析正文头部的 `【群像剧情 · 标题 · 日期】`。
+ * 非群像归档返回 null（不参与去重）。
+ */
+function ensembleArchiveKey(entry: MemoryEntry): string | null {
+    if (entry.sourceApp !== "ensemble") return null;
+    const tagged = entry.metadata?.ensembleScriptId;
+    if (typeof tagged === "string" && tagged.trim()) return `id:${tagged.trim()}`;
+    const match = /【群像剧情 · ([^】\n]+)】/.exec(entry.content);
+    if (!match) return null;
+    const title = match[1].split(" · ")[0].trim();
+    return title ? `title:${title}` : null;
 }
 
 /**
@@ -110,6 +136,8 @@ export async function commitArchive(
     characterId: string,
     content: string,
     sourceApp: MemoryEntry["sourceApp"] = "chat",
+    /** 额外元信息（群像用它记录 ensembleScriptId，注入侧据此同剧本只留最新）。 */
+    extraMetadata: Record<string, unknown> = {},
 ): Promise<{ success: boolean; error?: string }> {
     const trimmed = content.trim();
     if (!trimmed) return { success: false, error: "内容为空" };
@@ -136,7 +164,7 @@ export async function commitArchive(
         importance: 1.0,
         createdAt: now,
         updatedAt: now,
-        metadata: { contentHash: hash, archivedAt: now },
+        metadata: { contentHash: hash, archivedAt: now, ...extraMetadata },
     });
     return { success: true };
 }

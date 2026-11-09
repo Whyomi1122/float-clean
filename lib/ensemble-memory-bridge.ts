@@ -7,6 +7,8 @@
 //     archive 是同世界书同级的"始终注入"层，但本模块在正文里加一行"仅在相关时提及"的约束，
 //     避免群像剧情每轮都刷屏占预算。
 //   · 防污染：完全复用 commitArchive —— 墓碑 / contentHash 去重都在里面。
+//   · 同剧本只留最新（2026-11-09 用户口径）：每次杀青都会写一条新归档，旧归档没有信息增量，
+//     留着只会把提示词越撑越长。所以写入新归档后立刻清掉同剧本的旧条目（不进墓碑）。
 
 import type { EnsembleArchiveEntry, EnsembleScript } from "./ensemble-storage";
 import { commitArchive } from "./memory-service";
@@ -44,7 +46,12 @@ export async function syncEnsembleArchiveToMemory(
     const results = await Promise.all(
         characterIds.map(async characterId => {
             try {
-                return await commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE);
+                return await commitArchive(
+                    characterId,
+                    body,
+                    ENSEMBLE_MEMORY_SOURCE,
+                    ensembleArchiveMetadata(script, archive),
+                );
             } catch (error) {
                 return { success: false, error: error instanceof Error ? error.message : String(error) };
             }
@@ -62,24 +69,80 @@ export async function syncEnsembleArchiveToMemory(
             errors[characterId] = r?.error || "未知错误";
         }
     });
+
+    // 写入成功后再清理同剧本的旧归档（保留刚写进去的这一条）
+    await Promise.all(okIds.map(characterId =>
+        pruneOlderEnsembleArchives(characterId, script, body).catch(() => 0)
+    ));
+
     return { written: okIds.length, characterIds: okIds, failed, errors };
 }
 
+/** 群像归档写入记忆库时附带的元信息（注入侧据此"同剧本只留最新"）。 */
+function ensembleArchiveMetadata(
+    script: EnsembleScript,
+    archive: EnsembleArchiveEntry,
+): Record<string, unknown> {
+    return {
+        ensembleScriptId: script.id,
+        ensembleScriptTitle: (script.title || "").trim() || "群像剧情",
+        ensembleArchiveId: archive.id,
+    };
+}
+
 /**
- * 把剧本全部归档按当前 cast **强制**重灌一遍（档案面板"重新同步记忆库"按钮用）。
- * 剧本是唯一事实源：先解除各角色对应正文的墓碑再写入，所以手动在记忆库删过的归档
+ * 清掉该角色记忆库里"同剧本但更旧"的群像归档，只留当前这条。
+ * 走 deleteMemoryEntry 而不是 deleteArchive —— 这里不是用户主动否掉某段记忆，
+ * 只是被更新的同剧本归档取代，不能进墓碑（否则将来撤销杀青再杀青会被拦）。
+ */
+async function pruneOlderEnsembleArchives(
+    characterId: string,
+    script: EnsembleScript,
+    keepBody: string,
+): Promise<number> {
+    const { loadMemoryEntriesByType, deleteMemoryEntry } = await import("./memory-storage");
+    const { computeContentHash } = await import("./memory-types");
+
+    const keepHash = computeContentHash(keepBody);
+    const marker = `【群像剧情 · ${(script.title || "群像剧情").trim()}`;
+    const entries = await loadMemoryEntriesByType(characterId, "archive");
+
+    const stale = entries.filter(entry => {
+        if (entry.sourceApp !== ENSEMBLE_MEMORY_SOURCE) return false;
+        const hash = typeof entry.metadata?.contentHash === "string"
+            ? entry.metadata.contentHash
+            : computeContentHash(entry.content);
+        if (hash === keepHash) return false;
+        const tagged = entry.metadata?.ensembleScriptId;
+        if (typeof tagged === "string" && tagged.trim()) return tagged.trim() === script.id;
+        // 老数据没有 ensembleScriptId：按正文头部标题判断是不是同一个剧本
+        return entry.content.includes(marker);
+    });
+
+    for (const entry of stale) {
+        try {
+            await deleteMemoryEntry(entry.id);
+        } catch {
+            // 清理失败不阻断本次写入（注入侧还有同剧本去重兜底）
+        }
+    }
+    return stale.length;
+}
+
+/**
+ * 把剧本最新一份归档按当前 cast **强制**重灌一遍（档案面板"重新同步记忆库"按钮用）。
+ * 剧本是唯一事实源：先解除对应正文的墓碑再写入，所以手动在记忆库删过的归档
  * 也会被恢复 —— 这是"修复"语义，用户点了就是要修齐。
- * contentHash 幂等：本来就有且内容一致的，commitArchive 去重命中，不产生重复。
+ * 2026-11-09 起只灌**最新一条**并清掉旧的：记忆库里同剧本留多条只会把提示词撑长。
  */
 export async function resyncEnsembleArchivesToMemory(
     script: EnsembleScript,
     archives: EnsembleArchiveEntry[],
 ): Promise<{ synced: number; failed: number; errors: Record<string, string> }> {
     const characterIds = collectCastCharacterIds(script);
-    const bodyCache = archives
-        .map(archive => ({ archive, body: buildEnsembleMemoryContent(script, archive) }))
-        .filter(item => item.body);
-    if (characterIds.length === 0 || bodyCache.length === 0) {
+    const latest = pickLatestArchive(archives);
+    const body = latest ? buildEnsembleMemoryContent(script, latest) : "";
+    if (characterIds.length === 0 || !latest || !body) {
         return { synced: 0, failed: 0, errors: {} };
     }
 
@@ -89,24 +152,46 @@ export async function resyncEnsembleArchivesToMemory(
     let synced = 0;
     let failed = 0;
     const errors: Record<string, string> = {};
-    for (const { body } of bodyCache) {
-        const hash = computeContentHash(body);
-        for (const characterId of characterIds) {
-            try {
-                removeDeletedHash(characterId, hash);
-                const result = await commitArchive(characterId, body, ENSEMBLE_MEMORY_SOURCE);
-                if (result.success) synced += 1;
-                else {
-                    failed += 1;
-                    errors[characterId] = result.error || "写入被拒绝";
-                }
-            } catch (error) {
+    const hash = computeContentHash(body);
+    for (const characterId of characterIds) {
+        try {
+            removeDeletedHash(characterId, hash);
+            const result = await commitArchive(
+                characterId,
+                body,
+                ENSEMBLE_MEMORY_SOURCE,
+                ensembleArchiveMetadata(script, latest),
+            );
+            if (result.success) synced += 1;
+            else {
                 failed += 1;
-                errors[characterId] = error instanceof Error ? error.message : String(error);
+                errors[characterId] = result.error || "写入被拒绝";
             }
+        } catch (error) {
+            failed += 1;
+            errors[characterId] = error instanceof Error ? error.message : String(error);
         }
     }
+    await Promise.all(characterIds.map(characterId =>
+        pruneOlderEnsembleArchives(characterId, script, body).catch(() => 0)
+    ));
     return { synced, failed, errors };
+}
+
+/** 取内容非空、createdAt 最新的那一份归档（时间解析失败时按数组顺序取后面的）。 */
+function pickLatestArchive(archives: EnsembleArchiveEntry[]): EnsembleArchiveEntry | null {
+    let best: EnsembleArchiveEntry | null = null;
+    let bestTime = Number.NEGATIVE_INFINITY;
+    for (const archive of archives) {
+        if (!(archive.content ?? "").trim()) continue;
+        const time = new Date(archive.createdAt || 0).getTime();
+        const value = Number.isFinite(time) ? time : 0;
+        if (!best || value >= bestTime) {
+            best = archive;
+            bestTime = value;
+        }
+    }
+    return best;
 }
 
 /**
