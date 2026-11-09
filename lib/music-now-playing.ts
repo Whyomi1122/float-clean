@@ -116,6 +116,22 @@ function buildLyricWindow(lines: LrcLine[], currentTime: number): string {
     return out.trimEnd();
 }
 
+/** 当前歌词窗口里的句子（去标记、去重）。供「歌词评论配额」判断用。 */
+export function getNowPlayingLyricLines(maxLines = 6): string[] {
+    const s = state;
+    if (!s || !s.lyrics) return [];
+    const lines = parseLrc(s.lyrics);
+    const window = buildLyricWindow(lines, s.currentTime ?? 0);
+    if (!window) return [];
+    const out: string[] = [];
+    for (const raw of window.split("\n")) {
+        const text = raw.replace(/^[▶\s]+/, "").trim();
+        if (text && !out.includes(text)) out.push(text);
+        if (out.length >= maxLines) break;
+    }
+    return out;
+}
+
 /**
  * 生成 [music.now_playing] 提示词块。规则见文件头注释。
  * 返回空串表示本轮不注入。

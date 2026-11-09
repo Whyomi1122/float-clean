@@ -26,6 +26,7 @@ import { prepareShortTermContext } from "./short-term-assembler";
 import { getCustomStickerExample, getCustomStickerNames } from "./custom-sticker-storage";
 import { previewMessagesForApi, sendLLMRequest } from "./chat-engine";
 import { buildNowPlayingPromptBlock } from "./music-now-playing";
+import { buildLyricQuotaNote } from "./listen-together-lyrics";
 import type { ListenMessage } from "./listen-together-storage";
 
 type ListenResolved = {
@@ -133,12 +134,15 @@ export async function generateListenReply(
         content: m.text,
     }));
 
+    const lyricNote = buildLyricQuotaNote(character.id);
     const messages: LLMMessage[] = [
         ...resolved.llmMessages,
         ...recentHistory,
         {
             role: "user",
-            content: SCENE_INSTRUCTION(userName, contextHint ?? "") + (userText ? `\n${userName}:${userText}` : `\n(${userName}没有说话,等待你的反应)`),
+            content: SCENE_INSTRUCTION(userName, contextHint ?? "")
+                + (lyricNote ? `\n${lyricNote}` : "")
+                + (userText ? `\n${userName}:${userText}` : `\n(${userName}没有说话,等待你的反应)`),
             _debugMeta: { marker: "listen_together_trigger" },
         },
     ];

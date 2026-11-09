@@ -1157,6 +1157,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         }
     }, [session.id, messages.length, deliveryRevision]);
 
+    /** 广播「剧情播送中」状态：悬浮球的一起听入口据此禁用 */
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent("float:delivery-state", { detail: { active: isStoryDeliverySession } }));
+    }, [isStoryDeliverySession]);
+
+    useEffect(() => () => {
+        window.dispatchEvent(new CustomEvent("float:delivery-state", { detail: { active: false } }));
+    }, []);
+
     /** 当前会话名下「投递了但还没返回」的剧情对话段（长按菜单里的返回入口用）。 */
     const openStorySession = useMemo(() => {
         try {

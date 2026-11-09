@@ -27,13 +27,15 @@ import { appendListenMarker } from "@/lib/listen-together-markers";
 
 type Props = {
     hidden: boolean;
+    /** 当前所在的 App（离开聊天室要自动结束一起听） */
+    currentApp?: string;
 };
 
 const POS_KEY = "ai_phone_float_ball_pos";
 const LISTEN_USER_KEY = "ai_phone_float_listen_user";
 const LISTEN_CHAR_KEY = "ai_phone_float_listen_char";
 
-export default function MultiFloatBall({ hidden }: Props) {
+export default function MultiFloatBall({ hidden, currentApp }: Props) {
     const controls = useMusicControlsOptional();
     const player = useMusicPlayerOptional();
     const playlist = player?.queue ?? [];
@@ -116,6 +118,17 @@ export default function MultiFloatBall({ hidden }: Props) {
     const [listenCharId, setListenCharId] = useState<string | null>(null);
     const [picker, setPicker] = useState<null | "user" | "char">(null);
     const [listenOpen, setListenOpen] = useState(false);
+    /** 剧情播送中不允许一起听（聊天室会广播这个状态） */
+    const [deliveryActive, setDeliveryActive] = useState(false);
+
+    useEffect(() => {
+        const onDeliveryState = (e: Event) => {
+            const detail = (e as CustomEvent<{ active?: boolean }>).detail;
+            setDeliveryActive(Boolean(detail?.active));
+        };
+        window.addEventListener("float:delivery-state", onDeliveryState as EventListener);
+        return () => window.removeEventListener("float:delivery-state", onDeliveryState as EventListener);
+    }, []);
 
     useEffect(() => {
         if (!panelOpen) return;
@@ -129,6 +142,14 @@ export default function MultiFloatBall({ hidden }: Props) {
 
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
+
+    /** 离开聊天室 → 自动结束一起听（补一条结束标记） */
+    useEffect(() => {
+        if (!listenOpen) return;
+        if (!currentApp || currentApp === "chat") return;
+        setListenOpen(false);
+        if (partner) appendListenMarker(partner.id, "end");
+    }, [currentApp, listenOpen, partner]);
 
     // ── 剧情投递面板(只读摘要 + 背景开关) ──
     const [deliveryList, setDeliveryList] = useState<EnsembleDeliveryPanelSummary[]>([]);
@@ -300,6 +321,7 @@ export default function MultiFloatBall({ hidden }: Props) {
                                     className="mfb-listen"
                                     onClick={() => {
                                         if (!partner) { showToast("先在右边选一个角色"); return; }
+                                        if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
                                         setListenOpen(true);
                                         appendListenMarker(partner.id, "start");
                                     }}

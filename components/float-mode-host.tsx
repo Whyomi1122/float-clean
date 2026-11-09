@@ -5,6 +5,6 @@
 
 import MultiFloatBall from "@/components/multi-float-ball";
 
-export default function FloatModeHost({ hidden }: { hidden: boolean }) {
-    return <MultiFloatBall hidden={hidden} />;
+export default function FloatModeHost({ hidden, currentApp }: { hidden: boolean; currentApp: string }) {
+    return <MultiFloatBall hidden={hidden} currentApp={currentApp} />;
 }

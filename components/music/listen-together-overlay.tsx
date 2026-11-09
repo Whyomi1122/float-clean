@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMusicControlsOptional, useMusicPlayerOptional } from "@/lib/music-context";
 import { generateListenReply, type ListenReplyAction } from "@/lib/listen-together-engine";
+import { recordLyricTalkFromReply } from "@/lib/listen-together-lyrics";
 import { unifiedSearch } from "@/lib/music-service";
 import { neteaseResultToTrack } from "@/lib/tool-executor";
 import {
@@ -122,7 +123,10 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
         try {
             const history = loadListenMessages(character.id);
             const reply = await generateListenReply(character, userName, history, userText, contextHint);
-            if (reply.text) pushCharMessage(reply.text);
+            if (reply.text) {
+                pushCharMessage(reply.text);
+                recordLyricTalkFromReply(character.id, reply.text);
+            }
             for (const action of reply.actions) {
                 void runCharAction(action, reply.text || userText || "给你放一首");
             }
