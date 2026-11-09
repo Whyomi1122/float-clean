@@ -36,8 +36,6 @@ import { CustomAppRunner } from "@/components/app-market/custom-app-runner";
 import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-failure";
 
 import { ChatSettingsPanel } from "./chat-settings-panel";
-import ListenTogetherBar from "./listen-together-bar";
-import { getListenSession, subscribeListenSession, type ListenSession } from "@/lib/listen-together-session";
 import { startPersistentVoiceCall, VOICE_CALL_ENDED } from "./persistent-voice-call";
 import CallReplayScreen from "./call-replay-screen";
 import { VideoCallScreen } from "./video-call-screen";
@@ -1236,14 +1234,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [callInitiatorName, setCallInitiatorName] = useState<string>("");
     const [userIdentity, setUserIdentity] = useState<UserIdentity | null>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(() => loadChatAppSettings().enterToSendEnabled === true);
-    /** 一起听：聊天室里的一个状态（不是独立界面），结束只由用户点状态条上的「结束」 */
-    const [listenSession, setListenSession] = useState<ListenSession | null>(() => getListenSession());
-
-    useEffect(() => {
-        const sync = () => setListenSession(getListenSession());
-        sync();
-        return subscribeListenSession(sync);
-    }, []);
 
     // Rich media input modals
     const [richModal, setRichModal] = useState<RichModalKind | null>(null);
@@ -5631,16 +5621,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     if (showPlusMenu) setShowPlusMenu(false);
                 }}
             >
-                {!session.isGroup
-                    && listenSession
-                    && (listenSession.characterId === session.contactId
-                        || (listenSession.characterName && listenSession.characterName === character?.name)) && (
-                    <ListenTogetherBar
-                        characterId={session.contactId}
-                        characterName={character?.name}
-                        sessionId={session.id}
-                    />
-                )}
                 {offlineMode && (
                     <div className="chat-offline-body">
                         {offlineTurns.length === 0 && !pendingOfflineUserText ? (

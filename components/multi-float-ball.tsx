@@ -24,11 +24,14 @@ import "./../styles/multi-float.css";
 import "./../styles/listen-together.css";
 import { appendListenMarker } from "@/lib/listen-together-markers";
 import {
-    endListenSession,
     getListenSession,
+    recordListenTrack,
     startListenSession,
     subscribeListenSession,
 } from "@/lib/listen-together-session";
+import { finishListenSession } from "@/lib/listen-together-record";
+import { loadChatSessions } from "@/lib/chat-storage";
+import { requestBackgroundChatReply, isBackgroundReplyGenerating } from "@/lib/follow-up-service";
 
 type Props = {
     hidden: boolean;
@@ -147,13 +150,15 @@ export default function MultiFloatBall({ hidden }: Props) {
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
 
-    /** 一起听入口：开始 = 写状态 + 聊天室补一条开始标记（不新开界面）；已经在听 = 结束。 */
+    /** 一起听入口：开始 = 写状态 + 聊天室补一条开始标记（不新开界面）；已经在听 = 结束并写归档。 */
     const handleListenToggle = useCallback(() => {
         if (!partner) { showToast("先在右边选一个角色"); return; }
         if (listenActive) {
-            endListenSession();
-            appendListenMarker(partner.id, "end");
-            showToast("已结束一起听");
+            const charId = partner.id;
+            void finishListenSession().then(() => {
+                appendListenMarker(charId, "end");
+                showToast("已结束一起听，这场已记进归档");
+            });
             return;
         }
         if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
@@ -253,6 +258,37 @@ export default function MultiFloatBall({ hidden }: Props) {
     const duration = playerDuration > 0 ? playerDuration : (track?.duration && track.duration > 0 ? track.duration : 0);
     const currentTime = player?.currentTime ?? 0;
     const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+
+    // ── 一起听：记录这场放过的歌（结束时写成归档） ──
+    useEffect(() => {
+        if (!listenActive || !track) return;
+        recordListenTrack({ id: track.id, title: track.title, artist: track.artist });
+    }, [listenActive, track?.id, track?.title, track?.artist]);
+
+    // ── 一起听：切歌时 TA 有 60% 概率主动说一句（90s 冷却，首帧不触发） ──
+    const lastTrackIdRef = useRef<string | null>(null);
+    const lastNudgeRef = useRef(0);
+    useEffect(() => {
+        const id = track?.id ?? null;
+        const prevId = lastTrackIdRef.current;
+        lastTrackIdRef.current = id;
+        if (!listenActive || !id || !prevId || prevId === id) return;
+        if (Date.now() - lastNudgeRef.current < 90_000) return;
+        if (Math.random() > 0.6) return;
+        const listenSession = getListenSession();
+        if (!listenSession) return;
+        const chatSessionId = loadChatSessions().find(s => s.contactId === listenSession.characterId)?.id;
+        if (!chatSessionId) return;
+        if (isBackgroundReplyGenerating(chatSessionId)) return;
+        lastNudgeRef.current = Date.now();
+        void requestBackgroundChatReply(chatSessionId).catch(() => { /* 静默失败 */ });
+    }, [listenActive, track?.id]);
+
+    /** 快捷跳转到音乐 App（悬浮球面板里的小按钮） */
+    const openMusicApp = useCallback(() => {
+        setPanelOpen(false);
+        try { window.dispatchEvent(new CustomEvent("float:open-app", { detail: { app: "music" } })); } catch { /* ignore */ }
+    }, []);
 
     const fmt = (s: number) => {
         if (!Number.isFinite(s) || s < 0) s = 0;
@@ -387,6 +423,9 @@ export default function MultiFloatBall({ hidden }: Props) {
                                                 <div className="mfb-player-title">{track.title}</div>
                                                 <div className="mfb-player-artist">{track.artist}</div>
                                             </div>
+                                            <button className="mfb-player-open" onClick={openMusicApp} aria-label="打开音乐 App">
+                                                音乐 App ›
+                                            </button>
                                         </div>
                                         <div className="mfb-progress">
                                             <div className="mfb-progress-fill" style={{ width: `${progress * 100}%` }} />
@@ -415,7 +454,9 @@ export default function MultiFloatBall({ hidden }: Props) {
                                 ) : (
                                     <div className="mfb-player mfb-player-idle">
                                         <div className="mfb-player-idle-text">还没有播放歌曲</div>
-                                        <div className="mfb-player-idle-sub">去 音乐App 挑一首吧</div>
+                                        <button className="mfb-player-open mfb-player-open-wide" onClick={openMusicApp}>
+                                            去音乐 App 挑一首 ›
+                                        </button>
                                     </div>
                                 )}
 

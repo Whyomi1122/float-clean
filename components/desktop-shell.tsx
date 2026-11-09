@@ -1110,6 +1110,13 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     };
     window.addEventListener("theme-css-updated", onThemeUpdate);
 
+    // 悬浮球里的小按钮要能直接打开某个 App（一起听面板 → 音乐 App）
+    const onFloatOpenApp = (event: Event) => {
+      const appId = (event as CustomEvent<{ app?: string }>).detail?.app;
+      if (typeof appId === "string" && appId) setActiveApp(appId as DesktopIconId);
+    };
+    window.addEventListener("float:open-app", onFloatOpenApp);
+
     // Listen for iframe communication (DIY Widgets)
     const onIframeMessage = (e: MessageEvent) => {
       if (e.data?.type === "OS_CMD") {
@@ -1133,6 +1140,7 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     return () => {
       window.removeEventListener("theme-css-updated", onThemeUpdate);
       window.removeEventListener("message", onIframeMessage);
+      window.removeEventListener("float:open-app", onFloatOpenApp);
     };
   }, []);
 

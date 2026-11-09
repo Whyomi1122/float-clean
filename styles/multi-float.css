@@ -405,6 +405,32 @@ body:has(.call-keyboard-shift) :is(.mfb-ball, .mfb-restore, .mfb-mask) {
     font-variant-numeric: tabular-nums;
 }
 
+/* 跳到音乐 App 的小按钮 */
+.mfb-player-open {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 5px 9px;
+    border: 1px solid rgba(210, 216, 224, 0.7);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #6b7d8f;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.mfb-player-open:active {
+    transform: scale(0.95);
+    background: #fff;
+}
+
+.mfb-player-open-wide {
+    margin: 8px auto 0;
+    padding: 7px 14px;
+    font-size: 12px;
+}
+
 .mfb-ctrls {
     display: flex;
     align-items: center;

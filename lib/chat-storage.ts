@@ -279,6 +279,7 @@ export type ChatAppSettings = {
     callVibrationEnabled?: boolean; // 语音/视频来电等待接听时循环振动（默认开；iOS 网页不支持振动则无效果）
     maxToolRounds?: number; // 单条消息的工具循环轮数上限（默认 5；每轮=一次模型请求，轮内调用条数不限）
     floatingDockEnabled?: boolean; // 悬浮球贴边半隐藏收拢模式（默认关）
+    listenRecordArchiveEnabled?: boolean; // 一起听结束时把这一场写进记忆归档（默认开）
 };
 
 /** 单条消息工具循环轮数上限（默认 5，夹在 1–20 之间） */

@@ -2063,7 +2063,7 @@ export async function buildChatPromptMessages(
         if (nowPlayingBlock) {
             llmMessages.push({
                 role: "system",
-                content: `${nowPlayingBlock}\n\n【一起听】你此刻正和用户一边听歌一边聊天（用户主动开启）。聊歌词、聊歌本身、聊歌手和风格都可以，自然就好，不用每轮把歌名塞进话里，也别把歌词整段念出来。`,
+                content: `${nowPlayingBlock}\n\n【一起听】你此刻正和用户一边听歌一边聊天（用户主动开启）。聊歌词、聊歌本身、聊歌手和风格都可以，自然就好，不用每轮把歌名塞进话里，也别把歌词整段念出来。\n正在播放的这首已经在一起听了，**不要再用音乐卡片把它推一遍**（想聊就直接用文字说）；要推荐别的歌除外。`,
             });
         }
     }
