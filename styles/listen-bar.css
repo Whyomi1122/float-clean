@@ -1,7 +1,13 @@
 /* styles/listen-bar.css — 聊天室顶部「一起听」状态条 */
 
 .ltb-bar {
-  margin: 8px 12px 0;
+  position: sticky;
+  top: calc(
+    var(--page-header-safe-top, 47px) + var(--page-header-content-height, 42px) +
+      var(--chat-plugin-header-height, 0px)
+  );
+  z-index: 12;
+  margin: 0 12px 4px;
   padding: 8px 10px 0;
   border-radius: 16px;
   background: var(--c-card);

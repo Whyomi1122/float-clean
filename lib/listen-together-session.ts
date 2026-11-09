@@ -10,6 +10,8 @@ const EVENT = "float:listen-session";
 
 export type ListenSession = {
     characterId: string;
+    /** 角色名（兜底匹配用：个别会话的 contactId 与角色 id 对不上时按名字认人） */
+    characterName?: string;
     startedAt: string;
 };
 
@@ -27,6 +29,7 @@ export function getListenSession(): ListenSession | null {
         if (!parsed?.characterId) return null;
         return {
             characterId: parsed.characterId,
+            characterName: typeof parsed.characterName === "string" ? parsed.characterName : undefined,
             startedAt: parsed.startedAt || new Date().toISOString(),
         };
     } catch {
@@ -34,8 +37,12 @@ export function getListenSession(): ListenSession | null {
     }
 }
 
-export function startListenSession(characterId: string): ListenSession {
-    const session: ListenSession = { characterId, startedAt: new Date().toISOString() };
+export function startListenSession(characterId: string, characterName?: string): ListenSession {
+    const session: ListenSession = {
+        characterId,
+        characterName: characterName?.trim() || undefined,
+        startedAt: new Date().toISOString(),
+    };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(session)); } catch { /* ignore */ }
     emit();
     return session;

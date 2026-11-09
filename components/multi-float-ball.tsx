@@ -157,7 +157,7 @@ export default function MultiFloatBall({ hidden }: Props) {
             return;
         }
         if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
-        startListenSession(partner.id);
+        startListenSession(partner.id, partner.name);
         appendListenMarker(partner.id, "start");
         showToast("一起听已开始，回聊天室边听边聊");
         setPanelOpen(false);
