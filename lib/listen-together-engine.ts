@@ -118,7 +118,7 @@ function buildPushQuotaNote(characterId: string): string {
     const used = getDailyPushCount(characterId);
     const left = Math.max(0, limit - used);
     if (left === 0) {
-        return `【推歌额度】今天你已经推了 ${used} 首,额度用完了,这一轮不要写 [点歌] 或 [排队],想换歌也先征询${"对方"}。`;
+        return `【推歌额度】今天你已经推了 ${used} 首,额度用完了,这一轮不要写 [点歌] 或 [排队],想换歌先问问对方。`;
     }
     if (left <= 2) {
         return `【推歌额度】今天还剩 ${left} 首,省着点用,没有特别合适的就别推。`;

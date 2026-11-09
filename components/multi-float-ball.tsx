@@ -143,10 +143,11 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
 
-    /** 离开聊天室 → 自动结束一起听（补一条结束标记） */
+    /** 离开聊天室 → 自动结束一起听（补一条结束标记）。
+     *  例外：去音乐 App 不算离开（那里是播歌的地方，开着一起听去点歌很正常，回来还在）。 */
     useEffect(() => {
         if (!listenOpen) return;
-        if (!currentApp || currentApp === "chat") return;
+        if (!currentApp || currentApp === "chat" || currentApp === "music") return;
         setListenOpen(false);
         if (partner) appendListenMarker(partner.id, "end");
     }, [currentApp, listenOpen, partner]);
