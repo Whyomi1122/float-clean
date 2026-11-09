@@ -36,6 +36,8 @@ import { CustomAppRunner } from "@/components/app-market/custom-app-runner";
 import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-failure";
 
 import { ChatSettingsPanel } from "./chat-settings-panel";
+import ListenTogetherBar from "./listen-together-bar";
+import { getListenSession, subscribeListenSession } from "@/lib/listen-together-session";
 import { startPersistentVoiceCall, VOICE_CALL_ENDED } from "./persistent-voice-call";
 import CallReplayScreen from "./call-replay-screen";
 import { VideoCallScreen } from "./video-call-screen";
@@ -1234,6 +1236,14 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [callInitiatorName, setCallInitiatorName] = useState<string>("");
     const [userIdentity, setUserIdentity] = useState<UserIdentity | null>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(() => loadChatAppSettings().enterToSendEnabled === true);
+    /** 一起听：聊天室里的一个状态（不是独立界面），结束只由用户点状态条上的「结束」 */
+    const [listenSessionCharId, setListenSessionCharId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const sync = () => setListenSessionCharId(getListenSession()?.characterId ?? null);
+        sync();
+        return subscribeListenSession(sync);
+    }, []);
 
     // Rich media input modals
     const [richModal, setRichModal] = useState<RichModalKind | null>(null);
@@ -5606,6 +5616,14 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 slotProps={{ sessionId: session.id, isGroup: !!session.isGroup }}
                 className="chat-plugin-header chat-room-main-pane"
             />
+
+            {!session.isGroup && listenSessionCharId && listenSessionCharId === session.contactId && (
+                <ListenTogetherBar
+                    characterId={session.contactId}
+                    characterName={character?.name}
+                    sessionId={session.id}
+                />
+            )}
 
             {/* Message List */}
             <div

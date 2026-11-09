@@ -22,20 +22,23 @@ import {
 } from "@/lib/ensemble-delivery";
 import "./../styles/multi-float.css";
 import "./../styles/listen-together.css";
-import ListenTogetherOverlay from "@/components/music/listen-together-overlay";
 import { appendListenMarker } from "@/lib/listen-together-markers";
+import {
+    endListenSession,
+    getListenSession,
+    startListenSession,
+    subscribeListenSession,
+} from "@/lib/listen-together-session";
 
 type Props = {
     hidden: boolean;
-    /** 当前所在的 App（离开聊天室要自动结束一起听） */
-    currentApp?: string;
 };
 
 const POS_KEY = "ai_phone_float_ball_pos";
 const LISTEN_USER_KEY = "ai_phone_float_listen_user";
 const LISTEN_CHAR_KEY = "ai_phone_float_listen_char";
 
-export default function MultiFloatBall({ hidden, currentApp }: Props) {
+export default function MultiFloatBall({ hidden }: Props) {
     const controls = useMusicControlsOptional();
     const player = useMusicPlayerOptional();
     const playlist = player?.queue ?? [];
@@ -117,7 +120,8 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
     const [listenUserId, setListenUserId] = useState<string | null>(null);
     const [listenCharId, setListenCharId] = useState<string | null>(null);
     const [picker, setPicker] = useState<null | "user" | "char">(null);
-    const [listenOpen, setListenOpen] = useState(false);
+    /** 一起听 = 聊天室里的状态（不新开界面）；这里只反映"是否已经在听" */
+    const [listenActive, setListenActive] = useState(false);
     /** 剧情播送中不允许一起听（聊天室会广播这个状态） */
     const [deliveryActive, setDeliveryActive] = useState(false);
 
@@ -143,14 +147,29 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
     const me = identities.find(i => i.id === listenUserId) ?? identities[0];
     const partner = characters.find(c => c.id === listenCharId) ?? characters[0];
 
-    /** 离开聊天室 → 自动结束一起听（补一条结束标记）。
-     *  例外：去音乐 App 不算离开（那里是播歌的地方，开着一起听去点歌很正常，回来还在）。 */
+    /** 一起听入口：开始 = 写状态 + 聊天室补一条开始标记（不新开界面）；已经在听 = 结束。 */
+    const handleListenToggle = useCallback(() => {
+        if (!partner) { showToast("先在右边选一个角色"); return; }
+        if (listenActive) {
+            endListenSession();
+            appendListenMarker(partner.id, "end");
+            showToast("已结束一起听");
+            return;
+        }
+        if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
+        startListenSession(partner.id);
+        appendListenMarker(partner.id, "start");
+        showToast("一起听已开始，回聊天室边听边聊");
+        setPanelOpen(false);
+    }, [partner, listenActive, deliveryActive, showToast]);
+
+    /** 一起听改成"聊天室里的状态"：结束只由用户手动点（聊天室顶部状态条），
+     *  切 App / 关页面都不会自动结束。这里只同步按钮的显示状态。 */
     useEffect(() => {
-        if (!listenOpen) return;
-        if (!currentApp || currentApp === "chat" || currentApp === "music") return;
-        setListenOpen(false);
-        if (partner) appendListenMarker(partner.id, "end");
-    }, [currentApp, listenOpen, partner]);
+        const sync = () => setListenActive(Boolean(getListenSession()));
+        sync();
+        return subscribeListenSession(sync);
+    }, []);
 
     // ── 剧情投递面板(只读摘要 + 背景开关) ──
     const [deliveryList, setDeliveryList] = useState<EnsembleDeliveryPanelSummary[]>([]);
@@ -317,15 +336,10 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
                         {/* ─────── 音乐 Tab ─────── */}
                         {tab === "music" && (
                             <div className="mfb-body">
-                                {/* 一起听入口 */}
+                                {/* 一起听入口（选人） */}
                                 <div
                                     className="mfb-listen"
-                                    onClick={() => {
-                                        if (!partner) { showToast("先在右边选一个角色"); return; }
-                                        if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
-                                        setListenOpen(true);
-                                        appendListenMarker(partner.id, "start");
-                                    }}
+                                    onClick={handleListenToggle}
                                 >
                                     <button
                                         className="mfb-avatar-btn"
@@ -350,17 +364,16 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
 
                                 {/* 显式入口：头像块也能点，但没文字太难发现 */}
                                 <button
-                                    className="mfb-listen-enter"
-                                    onClick={() => {
-                                        if (!partner) { showToast("先在右边选一个角色"); return; }
-                                        if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
-                                        setListenOpen(true);
-                                        appendListenMarker(partner.id, "start");
-                                    }}
+                                    className={`mfb-listen-enter ${listenActive ? "mfb-listen-enter-active" : ""}`}
+                                    onClick={handleListenToggle}
                                 >
-                                    <span className="mfb-listen-enter-title">一起听</span>
-                                    <span className="mfb-listen-enter-sub">和 TA 共用一个歌单，边听边聊</span>
-                                    <span className="mfb-listen-enter-arrow">进入 ›</span>
+                                    <span className="mfb-listen-enter-title">{listenActive ? "一起听中" : "一起听"}</span>
+                                    <span className="mfb-listen-enter-sub">
+                                        {listenActive
+                                            ? "回聊天室边听边聊，结束时间由你定"
+                                            : "和 TA 共用一个歌单，边听边聊"}
+                                    </span>
+                                    <span className="mfb-listen-enter-arrow">{listenActive ? "结束 ›" : "开始 ›"}</span>
                                 </button>
 
                                 {/* 当前播放卡片 */}
@@ -380,9 +393,23 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
                                         </div>
                                         <div className="mfb-time"><span>{fmt(currentTime)}</span><span>{fmt(duration)}</span></div>
                                         <div className="mfb-ctrls">
-                                            <button className="mfb-ctrl" onClick={() => player?.prev()}>⏮</button>
-                                            <button className="mfb-ctrl mfb-ctrl-main" onClick={() => controls?.togglePlay()}>{isPlaying ? "⏸" : "▶"}</button>
-                                            <button className="mfb-ctrl" onClick={() => player?.next()}>⏭</button>
+                                            <button className="mfb-ctrl" onClick={() => player?.prev()} aria-label="上一首">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polygon points="19 20 9 12 19 4" fill="currentColor" stroke="none" />
+                                                    <line x1="5" y1="19" x2="5" y2="5" />
+                                                </svg>
+                                            </button>
+                                            <button className="mfb-ctrl mfb-ctrl-main" onClick={() => controls?.togglePlay()} aria-label={isPlaying ? "暂停" : "播放"}>
+                                                {isPlaying
+                                                    ? <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="5" width="3.6" height="14" rx="1.4" /><rect x="13.4" y="5" width="3.6" height="14" rx="1.4" /></svg>
+                                                    : <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.1-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2Z" /></svg>}
+                                            </button>
+                                            <button className="mfb-ctrl" onClick={() => player?.next()} aria-label="下一首">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polygon points="5 4 15 12 5 20" fill="currentColor" stroke="none" />
+                                                    <line x1="19" y1="5" x2="19" y2="19" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 ) : (
@@ -583,19 +610,6 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
                     </div>
                 </div>
             )})()}
-
-            {/* ── 一起听全屏浮层 ── */}
-            {listenOpen && partner && (
-                <ListenTogetherOverlay
-                    character={partner}
-                    userName={me?.name ?? "我"}
-                    userAvatar={me?.avatarUrl}
-                    onClose={() => {
-                        setListenOpen(false);
-                        appendListenMarker(partner.id, "end");
-                    }}
-                />
-            )}
         </>
     );
 }

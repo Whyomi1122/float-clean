@@ -1015,7 +1015,7 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
   return (
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
-      <FloatModeHost hidden={activeApp === "music" || Boolean(musicPlayer?.showFullPlayer)} currentApp={activeApp ?? ""} />
+      <FloatModeHost hidden={activeApp === "music" || Boolean(musicPlayer?.showFullPlayer)} />
     </>
   );
 });
