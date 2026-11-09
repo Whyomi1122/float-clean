@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.09-3",
+    version: "2026.11.09-4",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.09-4",
+            title: "一起听入口写明了",
+            items: [
+                "聊天室点悬浮球 →「音乐」标签 → 顶部现在有一行「一起听 · 进入 ›」，不用再猜头像能不能点",
+            ],
+        },
         {
             version: "2026.11.09-3",
             title: "杀青边界可手动对齐",

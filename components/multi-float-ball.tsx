@@ -348,6 +348,21 @@ export default function MultiFloatBall({ hidden, currentApp }: Props) {
                                     </button>
                                 </div>
 
+                                {/* 显式入口：头像块也能点，但没文字太难发现 */}
+                                <button
+                                    className="mfb-listen-enter"
+                                    onClick={() => {
+                                        if (!partner) { showToast("先在右边选一个角色"); return; }
+                                        if (deliveryActive) { showToast("剧情播送中，先把这段看完再来一起听"); return; }
+                                        setListenOpen(true);
+                                        appendListenMarker(partner.id, "start");
+                                    }}
+                                >
+                                    <span className="mfb-listen-enter-title">一起听</span>
+                                    <span className="mfb-listen-enter-sub">和 TA 共用一个歌单，边听边聊</span>
+                                    <span className="mfb-listen-enter-arrow">进入 ›</span>
+                                </button>
+
                                 {/* 当前播放卡片 */}
                                 {track ? (
                                     <div className="mfb-player">
