@@ -38,7 +38,7 @@ export type ArchiveTurn = {
  *   恢复过，幕的 id 会重新生成，而归档里的旧 id 就永远匹配不到了。
  *   旧逻辑遇到这种情况一律「保守起见全部重杀」，等于每次都要重付一次总结钱。
  *
- * 现在的顺序：① 锚点 id ② 归档创建时间 ↔ 幕创建时间 ③ 归档里记的 turnCount 累计。
+ * 现在的顺序：① 锚点 id ② 归档里 turnCount 累计（每次杀青覆盖了几幕）③ 归档创建时间 ↩ 幕创建时间。
  */
 function resolveAnchorIndex(turns: ArchiveTurn[], archives?: EnsembleArchiveEntry[]): number {
   const list = archives ?? [];
@@ -51,7 +51,11 @@ function resolveAnchorIndex(turns: ArchiveTurn[], archives?: EnsembleArchiveEntr
     if (idx >= 0) return idx;
   }
 
-  // ① 时间兜底：归档创建时刻之前生成的幕，视为已归档
+  // ① 条数兜底：各次归档的 turnCount 累加（每次杀青都记了"这次覆盖了几幕"）
+  const total = list.reduce((sum, entry) => sum + (entry.turnCount ?? 0), 0);
+  if (total > 0) return Math.min(turns.length, total) - 1;
+
+  // ② 时间兜底：归档创建时刻之前生成的幕，视为已归档
   const stamp = last?.createdAt ? Date.parse(last.createdAt) : NaN;
   if (Number.isFinite(stamp)) {
     let idx = -1;
@@ -62,10 +66,6 @@ function resolveAnchorIndex(turns: ArchiveTurn[], archives?: EnsembleArchiveEntr
     }
     if (idx >= 0) return idx;
   }
-
-  // ② 条数兜底：各次归档的 turnCount 累加
-  const total = list.reduce((sum, entry) => sum + (entry.turnCount ?? 0), 0);
-  if (total > 0) return Math.min(turns.length, total) - 1;
 
   return -1;
 }
