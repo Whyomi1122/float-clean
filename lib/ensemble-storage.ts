@@ -190,6 +190,8 @@ export type EnsembleArchiveEntry = {
   createdAt: string;
   /** 归档覆盖到的最后一幕 id（用于增量：下次只归档这之后的新剧情） */
   lastTurnId?: string;
+  /** 归档覆盖到的最后一幕下标快照（幕 id 会因重导而变，用下标兜底） */
+  lastTurnIndex?: number;
   /** 归档时已处理的幕数快照 */
   turnCount: number;
   /** 剧情档案正文（可编辑） */

@@ -3131,6 +3131,7 @@ ${lastSpeakerNote}
         id: `arc_${Date.now().toString(36)}`,
         createdAt: new Date().toISOString(),
         lastTurnId: lastTurn?.id,
+        lastTurnIndex: lastTurn ? s.turns.findIndex(t => t.id === lastTurn.id) : undefined,
         turnCount: target.length,
         content,
         model: s.modelOverride || apiConfig.defaultModel,
@@ -3193,6 +3194,31 @@ ${lastSpeakerNote}
         .catch(() => undefined);
     }
     setToast("已撤销上次杀青");
+  };
+
+  /**
+   * 手动对齐杀青边界：档案正文已经写好、但面板把「已杀青」算成 0 的时候点。
+   * 只改锚点（lastTurnId / lastTurnIndex / turnCount），不动档案内容、不重跑模型。
+   */
+  const handleMarkAllWrapped = () => {
+    const s = currentScript;
+    if (!s || archiveBusy) return;
+    const list = s.archives ?? [];
+    if (list.length === 0 || s.turns.length === 0) return;
+    const lastTurn = s.turns[s.turns.length - 1];
+    const patched = {
+      ...list[list.length - 1],
+      lastTurnId: lastTurn.id,
+      lastTurnIndex: s.turns.length - 1,
+      turnCount: s.turns.length,
+    };
+    const updated = { ...s, archives: [...list.slice(0, -1), patched] };
+    setCurrentScript(updated);
+    saveOrUpdateEnsembleScript(updated);
+    setScripts(loadEnsembleScripts());
+    refreshArchivePanelFor(updated);
+    setArchiveError(null);
+    setToast(`已把当前 ${s.turns.length} 幕全部标为已杀青`);
   };
 
   /** 「重新同步记忆库」：按当前演员表把全部归档重灌一遍（幂等，修"有的角色有有的没有"） */
@@ -5941,6 +5967,17 @@ ${lastSpeakerNote}
                 >
                   {resyncBusy ? "同步中…" : "⟳ 重新同步记忆库（有的角色缺记忆时点这个）"}
                 </button>
+                {/* 手动对齐：归档正文在、但「已杀青」算成 0 时，一键把这批标成已杀青 */}
+                {(currentScript.archives?.length ?? 0) > 0 && archiveStats.pending > 0 ? (
+                  <button
+                    type="button"
+                    disabled={archiveBusy}
+                    onClick={handleMarkAllWrapped}
+                    className="w-full py-2.5 rounded-[16px] border border-dashed border-black/15 text-[11.5px] font-medium text-black/45 active:scale-[0.985] transition-transform disabled:opacity-45 disabled:active:scale-100"
+                  >
+                    边界对不上？（档案已经写好、这里却显示 {archiveStats.pending} 条未杀青）→ 点这里全部标为已杀青
+                  </button>
+                ) : null}
                 {/* 错误提示 */}
                 {archiveError ? (
                   <div className="text-[11px] leading-relaxed text-red-500 break-words">
