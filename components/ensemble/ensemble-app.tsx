@@ -1566,6 +1566,15 @@ export function EnsembleApp({
     pending: number;
   }>({ total: 0, wrapped: 0, pending: 0 });
   const [archiveBusy, setArchiveBusy] = useState(false);
+  /** 杀青耗时秒数：模型偶尔要跑一分钟以上，光写「总结中…」用户会以为卡死 */
+  const [archiveElapsed, setArchiveElapsed] = useState(0);
+  useEffect(() => {
+    if (!archiveBusy) { setArchiveElapsed(0); return; }
+    const started = Date.now();
+    setArchiveElapsed(0);
+    const timer = window.setInterval(() => setArchiveElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [archiveBusy]);
   const [resyncBusy, setResyncBusy] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [showArchiveSheet, setShowArchiveSheet] = useState(false);
@@ -3147,7 +3156,15 @@ ${lastSpeakerNote}
         }
       }).catch(() => setToast(`已杀青 ${target.length} 幕`));
     } catch (e) {
-      setArchiveError(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      // 2026-11-09 用户反馈：卡了很久最后只有一句 `请求失败: Failed to fetch`，不知道该干嘛
+      const isNetwork = /Failed to fetch|NetworkError|Load failed|network|timeout|aborted/i.test(raw);
+      setArchiveError(
+        isNetwork
+          ? `请求没发出去（${raw}）。多半是网络断了、代理没开，或者服务商拒了这次请求。` +
+            `可以：① 直接重试 ② 换个模型 ③ 把上面的条数调小分批杀青。上一次成功的归档不会丢，不会被覆盖。`
+          : raw,
+      );
     } finally {
       setArchiveBusy(false);
     }
@@ -5904,7 +5921,7 @@ ${lastSpeakerNote}
                   onClick={() => handleWrap(archiveCountDraft)}
                   className="w-full py-3 rounded-[16px] bg-[#111111] text-[13px] font-semibold text-white active:scale-[0.985] transition-transform disabled:opacity-45 disabled:active:scale-100"
                 >
-                  {archiveBusy ? "总结中…" : "提炼并杀青"}
+                  {archiveBusy ? `总结中…已 ${archiveElapsed}s` : "提炼并杀青"}
                 </button>
                 {/* 次按钮：撤销上次杀青 */}
                 <button

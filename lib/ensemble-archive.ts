@@ -30,6 +30,47 @@ export type ArchiveTurn = {
 };
 
 /**
+ * 解析「上次杀青覆盖到第几幕」的下标（-1 表示解析不出来）。
+ *
+ * 为什么需要兜底（2026-11-09）：
+ *   用户反馈「刚杀青完，再进来又要求把 33 条全部重杀」。
+ *   根因是 `lastTurnId` 这个锚点对不上——剧本被导出再导入、重开、或从旧备份
+ *   恢复过，幕的 id 会重新生成，而归档里的旧 id 就永远匹配不到了。
+ *   旧逻辑遇到这种情况一律「保守起见全部重杀」，等于每次都要重付一次总结钱。
+ *
+ * 现在的顺序：① 锚点 id ② 归档创建时间 ↔ 幕创建时间 ③ 归档里记的 turnCount 累计。
+ */
+function resolveAnchorIndex(turns: ArchiveTurn[], archives?: EnsembleArchiveEntry[]): number {
+  const list = archives ?? [];
+  if (list.length === 0 || turns.length === 0) return -1;
+  const last = list[list.length - 1];
+
+  const anchorId = last?.lastTurnId;
+  if (anchorId) {
+    const idx = turns.findIndex((t) => t.id === anchorId);
+    if (idx >= 0) return idx;
+  }
+
+  // ① 时间兜底：归档创建时刻之前生成的幕，视为已归档
+  const stamp = last?.createdAt ? Date.parse(last.createdAt) : NaN;
+  if (Number.isFinite(stamp)) {
+    let idx = -1;
+    for (let i = 0; i < turns.length; i++) {
+      const at = turns[i]?.createdAt ? Date.parse(turns[i].createdAt as string) : NaN;
+      if (Number.isFinite(at) && at <= stamp) idx = i;
+      else if (!Number.isFinite(at) && idx >= 0) idx = i; // 无时间戳的幕跟着前一幕算
+    }
+    if (idx >= 0) return idx;
+  }
+
+  // ② 条数兜底：各次归档的 turnCount 累加
+  const total = list.reduce((sum, entry) => sum + (entry.turnCount ?? 0), 0);
+  if (total > 0) return Math.min(turns.length, total) - 1;
+
+  return -1;
+}
+
+/**
  * 计算「本次杀青应覆盖的幕」。
  *
  * 规则（对齐 chill）：从**上次杀青的截止点之后**开始，到最新一幕结束。
@@ -48,16 +89,9 @@ export function computePendingTurns(
   const list = archives ?? [];
   if (list.length === 0) return [...turns];
 
-  // 找最近一次归档覆盖到的最后一幕 id，返回它之后的所有幕
-  const last = list[list.length - 1];
-  const anchorId = last?.lastTurnId;
-  if (!anchorId) return [...turns];
-
-  const idx = turns.findIndex((t) => t.id === anchorId);
-  if (idx < 0) {
-    // 锚点丢失（幕被删过）→ 保守起见：全部视为待杀青，避免漏剧情
-    return [...turns];
-  }
+  const idx = resolveAnchorIndex(turns, list);
+  // 实在解析不出来才全部重杀（极端情况，宁可重杀也不漏剧情）
+  if (idx < 0) return [...turns];
   return turns.slice(idx + 1);
 }
 
@@ -73,9 +107,7 @@ export function computeVisibleTurns(
 ): ArchiveTurn[] {
   const list = archives ?? [];
   if (list.length === 0) return [...turns];
-  const anchorId = list[list.length - 1]?.lastTurnId;
-  if (!anchorId) return [...turns];
-  const idx = turns.findIndex((t) => t.id === anchorId);
+  const idx = resolveAnchorIndex(turns, list);
   if (idx < 0) return [...turns];
   return turns.slice(idx + 1);
 }
@@ -90,9 +122,7 @@ export function computeWrappedTurnIds(
   const wrapped = new Set<string>();
   const list = archives ?? [];
   if (list.length === 0) return wrapped;
-  const anchorId = list[list.length - 1]?.lastTurnId;
-  if (!anchorId) return wrapped;
-  const idx = turns.findIndex((t) => t.id === anchorId);
+  const idx = resolveAnchorIndex(turns, list);
   if (idx < 0) return wrapped;
   for (let i = 0; i <= idx; i++) {
     const t = turns[i];
