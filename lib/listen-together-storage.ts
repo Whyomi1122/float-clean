@@ -85,3 +85,64 @@ export function clearListenQueueMarks(characterId: string): void {
         localStorage.removeItem(QUEUE_KEY_PREFIX + characterId);
     } catch { /* ignore */ }
 }
+
+// ── 每天推歌上限（角色主动 [点歌]/[排队]） ──
+// 用户口径：一天 8 首。调试期可在控制台设
+//   localStorage.setItem("ai_phone_listen_push_limit", "30")
+// 立刻生效；清掉这个键就回到默认 8。
+export const LISTEN_DEFAULT_PUSH_LIMIT = 8;
+const DAILY_KEY_PREFIX = "ai_phone_listen_together_daily_v1_";
+const LIMIT_OVERRIDE_KEY = "ai_phone_listen_push_limit";
+
+type DailyPush = { date: string; count: number };
+
+function dayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function getListenPushLimit(): number {
+    try {
+        const raw = localStorage.getItem(LIMIT_OVERRIDE_KEY);
+        const n = raw ? Number(raw) : NaN;
+        if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+    } catch { /* ignore */ }
+    return LISTEN_DEFAULT_PUSH_LIMIT;
+}
+
+function loadDaily(characterId: string): DailyPush {
+    try {
+        const raw = localStorage.getItem(DAILY_KEY_PREFIX + characterId);
+        if (!raw) return { date: dayKey(), count: 0 };
+        const parsed = JSON.parse(raw) as DailyPush;
+        if (!parsed || parsed.date !== dayKey()) return { date: dayKey(), count: 0 };
+        return { date: parsed.date, count: Number(parsed.count) || 0 };
+    } catch {
+        return { date: dayKey(), count: 0 };
+    }
+}
+
+export function getDailyPushCount(characterId: string): number {
+    return loadDaily(characterId).count;
+}
+
+export function canPushToday(characterId: string): boolean {
+    return getDailyPushCount(characterId) < getListenPushLimit();
+}
+
+/** 角色真的推了一首，记一笔 */
+export function noteDailyPush(characterId: string): void {
+    try {
+        const cur = loadDaily(characterId);
+        localStorage.setItem(
+            DAILY_KEY_PREFIX + characterId,
+            JSON.stringify({ date: dayKey(), count: cur.count + 1 } satisfies DailyPush),
+        );
+    } catch { /* ignore */ }
+}
+
+export function resetDailyPush(characterId: string): void {
+    try {
+        localStorage.removeItem(DAILY_KEY_PREFIX + characterId);
+    } catch { /* ignore */ }
+}

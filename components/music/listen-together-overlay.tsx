@@ -17,6 +17,8 @@ import {
     genListenMsgId,
     loadListenQueueMarks,
     markListenQueueTrack,
+    canPushToday,
+    noteDailyPush,
     type ListenMessage,
     type ListenQueueMark,
 } from "@/lib/listen-together-storage";
@@ -89,6 +91,11 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
                 controls.next();
                 return;
             }
+            if (!canPushToday(character.id)) {
+                // 今天的推歌额度用完了：动作直接丢弃，切歌不受限
+                console.info("[ListenTogether] 今日推歌额度已用完，忽略角色点歌动作");
+                return;
+            }
             const results = await unifiedSearch(action.query);
             const first = results.find(result => (result.source === "local" ? result.localTrack : result.neteaseResult));
             if (!first) return;
@@ -110,6 +117,7 @@ export default function ListenTogetherOverlay({ character, userName, userAvatar,
                 note: note.slice(0, 40),
                 addedAt: new Date().toISOString(),
             });
+            noteDailyPush(character.id);
             setMarks(loadListenQueueMarks(character.id));
         } catch (err) {
             console.warn("[ListenTogether] 角色动作执行失败:", err);

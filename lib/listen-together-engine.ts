@@ -28,9 +28,9 @@ import { previewMessagesForApi, sendLLMRequest } from "./chat-engine";
 import { buildNowPlayingPromptBlock } from "./music-now-playing";
 import { buildLyricQuotaNote } from "./listen-together-lyrics";
 import type { ListenMessage } from "./listen-together-storage";
+import { getDailyPushCount, getListenPushLimit } from "./listen-together-storage";
 
-type ListenResolved = {
-    apiConfig: ApiConfig;
+type ListenResolved = {    apiConfig: ApiConfig;
     preset: PresetConfig | null;
     regexes: RegexConfig[];
     llmMessages: LLMMessage[];
@@ -109,6 +109,24 @@ const SCENE_INSTRUCTION = (userName: string, contextHint: string) =>
     ].filter(Boolean).join("\n");
 
 /**
+ * 每天的推歌额度提示（一天 8 首，可在存储里用 localStorage 覆盖）。
+ * 空串表示不用提示。
+ */
+function buildPushQuotaNote(characterId: string): string {
+    const limit = getListenPushLimit();
+    if (limit <= 0) return `【推歌额度】今天不要再点歌或排歌了。`;
+    const used = getDailyPushCount(characterId);
+    const left = Math.max(0, limit - used);
+    if (left === 0) {
+        return `【推歌额度】今天你已经推了 ${used} 首,额度用完了,这一轮不要写 [点歌] 或 [排队],想换歌也先征询${"对方"}。`;
+    }
+    if (left <= 2) {
+        return `【推歌额度】今天还剩 ${left} 首,省着点用,没有特别合适的就别推。`;
+    }
+    return "";
+}
+
+/**
  * 生成一条角色回应。
  * @param character 一起听的角色
  * @param userName  用户当前身份名
@@ -135,6 +153,7 @@ export async function generateListenReply(
     }));
 
     const lyricNote = buildLyricQuotaNote(character.id);
+    const pushNote = buildPushQuotaNote(character.id);
     const messages: LLMMessage[] = [
         ...resolved.llmMessages,
         ...recentHistory,
@@ -142,6 +161,7 @@ export async function generateListenReply(
             role: "user",
             content: SCENE_INSTRUCTION(userName, contextHint ?? "")
                 + (lyricNote ? `\n${lyricNote}` : "")
+                + (pushNote ? `\n${pushNote}` : "")
                 + (userText ? `\n${userName}:${userText}` : `\n(${userName}没有说话,等待你的反应)`),
             _debugMeta: { marker: "listen_together_trigger" },
         },
