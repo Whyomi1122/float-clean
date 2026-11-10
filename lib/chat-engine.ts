@@ -2059,7 +2059,7 @@ export async function buildChatPromptMessages(
     // 一起听（2026-11-09）：把"正在播放"作为系统事实注入。
     // 之前它只挂在 {{musicNowPlaying}} 模板宏上，默认人设模板没有这个宏 → 角色根本不知道用户在听什么。
     if (!session.isGroup && isListeningWith(character.id)) {
-        const nowPlayingBlock = buildNowPlayingPromptBlock();
+        const nowPlayingBlock = buildNowPlayingPromptBlock({ listenMode: true });
         if (nowPlayingBlock) {
             llmMessages.push({
                 role: "system",

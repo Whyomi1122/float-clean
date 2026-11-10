@@ -266,6 +266,15 @@ export async function getNeteasePlayUrl(songId: number): Promise<string | null> 
     return info.url;
 }
 
+/** 网易云歌词的官方中文翻译缓存（按歌曲 ID）。只用于提示词注入，不影响播放器显示。 */
+const lyricTranslationCache = new Map<number, string>();
+
+/** 取已缓存的歌词中文翻译（没有就返回空串）。 */
+export function getCachedLyricTranslation(songId?: number): string {
+    if (!songId) return "";
+    return lyricTranslationCache.get(songId) || "";
+}
+
 /** Get lyrics for a Netease song */
 export async function getNeteaseLyrics(songId: number): Promise<string> {
     const base = neteaseBase();
@@ -273,6 +282,8 @@ export async function getNeteaseLyrics(songId: number): Promise<string> {
     try {
         const resp = await fetch(withNeteaseParams(`${base}/lyric?id=${songId}`));
         const data = await resp.json();
+        // 顺手缓存官方中文翻译：韩语歌只有原文时，角色读不懂歌词就会瞎猜主题
+        lyricTranslationCache.set(songId, data?.tlyric?.lyric || "");
         return data?.lrc?.lyric || "";
     } catch {
         return "";

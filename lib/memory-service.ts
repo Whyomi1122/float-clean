@@ -138,7 +138,7 @@ export async function commitArchive(
     sourceApp: MemoryEntry["sourceApp"] = "chat",
     /** 额外元信息（群像用它记录 ensembleScriptId，注入侧据此同剧本只留最新）。 */
     extraMetadata: Record<string, unknown> = {},
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; contentHash?: string }> {
     const trimmed = content.trim();
     if (!trimmed) return { success: false, error: "内容为空" };
 
@@ -151,7 +151,7 @@ export async function commitArchive(
     }
     const existing = await loadMemoryEntriesByType(characterId, "archive");
     if (existing.some(e => (e.metadata?.contentHash as string) === hash)) {
-        return { success: true };
+        return { success: true, contentHash: hash };
     }
 
     const now = new Date().toISOString();
@@ -166,7 +166,28 @@ export async function commitArchive(
         updatedAt: now,
         metadata: { contentHash: hash, archivedAt: now, ...extraMetadata },
     });
-    return { success: true };
+    return { success: true, contentHash: hash };
+}
+
+/**
+ * 聊天归档「同角色只留最新」：写入新的普通模式归档后，把本聊天室更旧的归档清掉。
+ * 刻意不走 deleteArchive（不进墓碑），否则用户之后重写同样内容会被指纹拦下。
+ * 一起听记录（metadata.listenRecord）与群像归档（ensembleScriptId）不在此列，各自保留。
+ */
+export async function pruneOlderChatArchives(characterId: string, keepContentHash: string): Promise<number> {
+    const { deleteMemoryEntry } = await import("./memory-storage");
+    const existing = await loadMemoryEntriesByType(characterId, "archive");
+    const stale = existing.filter((entry) => {
+        if (entry.sourceApp !== "chat") return false;
+        if (entry.metadata?.contentHash === keepContentHash) return false;
+        if (entry.metadata?.listenRecord) return false;
+        if (entry.metadata?.ensembleScriptId) return false;
+        return true;
+    });
+    for (const entry of stale) {
+        await deleteMemoryEntry(entry.id);
+    }
+    return stale.length;
 }
 
 /** 删除一条归档（进墓碑，防复活）。 */

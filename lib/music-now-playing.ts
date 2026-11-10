@@ -1,5 +1,6 @@
 // lib/music-now-playing.ts — 正在播放状态的共享桥 + 提示词注入块
 //
+import { getCachedLyricTranslation } from "./music-service";
 // 音乐播放器(music-context)把实时播放状态写进这里(模块级变量,非 React 状态,
 // 避免 4次/秒 的 timeupdate 触发重渲染);聊天引擎组装提示词时同步读取,
 // 生成 [music.now_playing] 独立 system 块——每轮现拼,不进聊天历史。
@@ -132,11 +133,32 @@ export function getNowPlayingLyricLines(maxLines = 6): string[] {
     return out;
 }
 
+/** 一起听用：整首歌词（去时间轴、去重复副歌），截断到 maxChars。 */
+function buildFullLyricText(lines: LrcLine[], maxChars: number, translation?: Map<number, string>): string {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    let len = 0;
+    for (const line of lines) {
+        const text = (line.text || "").trim();
+        if (!text) continue;
+        if (seen.has(text)) continue; // 副歌重复只保留一次
+        seen.add(text);
+        const zh = translation?.get(Math.round(line.time * 1000));
+        const merged = zh && zh.trim() && zh.trim() !== text ? `${text} ／ ${zh.trim()}` : text;
+        out.push(merged);
+        len += merged.length + 1;
+        if (len >= maxChars) break;
+    }
+    return out.join("\n");
+}
+
 /**
  * 生成 [music.now_playing] 提示词块。规则见文件头注释。
  * 返回空串表示本轮不注入。
+ * listenMode：一起听场景。给整首歌词、允许谈歌，不套「不要写进叙事」的禁令。
  */
-export function buildNowPlayingPromptBlock(): string {
+export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): string {
+    const listenMode = options?.listenMode === true;
     const s = state;
     if (!s) return "";
     // 暂停超过 10 分钟不注入(睡觉挂机场景)
@@ -150,13 +172,38 @@ export function buildNowPlayingPromptBlock(): string {
 
     if (s.lyrics) {
         const parsed = parseLrc(s.lyrics);
-        const window = buildLyricWindow(parsed, s.currentTime);
-        if (window) {
-            lines.push("歌词(▶ 为当前句):");
-            lines.push(window);
+        if (listenMode) {
+            // 韩语/日语歌只有原文时角色容易瞎猜主题，这里并上网易云官方中文翻译
+            let translation: Map<number, string> | undefined;
+            const zhRaw = getCachedLyricTranslation(s.neteaseId);
+            if (zhRaw) {
+                translation = new Map<number, string>();
+                for (const line of parseLrc(zhRaw)) {
+                    const text = (line.text || "").trim();
+                    if (text) translation.set(Math.round(line.time * 1000), text);
+                }
+            }
+            const full = buildFullLyricText(parsed, 1600, translation);
+            if (full) {
+                lines.push(translation ? "歌词全文(原文 ／ 中文翻译，用于理解这首歌在讲什么):" : "歌词全文(可用于理解这首歌在讲什么):");
+                lines.push(full);
+            }
+        } else {
+            const window = buildLyricWindow(parsed, s.currentTime);
+            if (window) {
+                lines.push("歌词(▶ 为当前句):");
+                lines.push(window);
+            }
         }
     }
     lines.push("[/music.now_playing]");
-    lines.push("以上是用户现实中的设备正在播放的音乐,属于用户的真实环境,与当前对话可能存在的剧情/角色扮演世界无关——不要把它写进叙事、场景描写或角色对白。你可以自然地感知到它的存在,但不要主动复述歌词全文;除非话题相关,否则不必每轮都提起音乐。");
+    if (listenMode) {
+        lines.push(
+            "你们此刻正在一起听这首歌。谈歌时请以上面的真实歌词为依据——歌词是什么语言就读什么语言，不要凭歌名、歌手或印象猜主题；"
+            + "可以聊歌词在讲什么、情绪、歌手和风格，但不要把整段歌词念出来，也不要每轮都把歌名塞进话里。",
+        );
+    } else {
+        lines.push("以上是用户现实中的设备正在播放的音乐,属于用户的真实环境,与当前对话可能存在的剧情/角色扮演世界无关——不要把它写进叙事、场景描写或角色对白。你可以自然地感知到它的存在,但不要主动复述歌词全文;除非话题相关,否则不必每轮都提起音乐。");
+    }
     return lines.join("\n");
 }

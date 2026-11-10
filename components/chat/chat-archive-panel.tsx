@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Sparkles, Trash2, Check, X } from "lucide-react";
 import { loadChatMessages, type ChatMessage } from "@/lib/chat-storage";
 import { loadMemoryEntriesByType } from "@/lib/memory-storage";
-import { commitArchive, deleteArchive } from "@/lib/memory-service";
+import { commitArchive, deleteArchive, pruneOlderChatArchives } from "@/lib/memory-service";
 import { simpleLLMCall } from "@/lib/api-helpers";
-import { resolveAuxiliaryApiConfig } from "@/lib/settings-storage";
+import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import type { MemoryEntry } from "@/lib/memory-types";
 
 const DRAFT_STORE_PREFIX = "ai_phone_chat_archive_draft_";
@@ -92,6 +92,8 @@ export function ChatArchivePanel({
 
     const collectTranscript = useCallback((): string => {
         if (!sessionId) return "";
+        // 用用户在本角色下的称呼（拿不到就「用户」），避免模型把「我」写进归档正文
+        const userName = resolveUserIdentity(characterId, "chat")?.name?.trim() || "用户";
         const msgs: ChatMessage[] = loadChatMessages(sessionId);
         const lines: string[] = [];
         let inStory = false;
@@ -102,7 +104,7 @@ export function ChatArchivePanel({
             if (isStory && !inStory) lines.push("", "---------- 以下为剧情模式 ----------");
             else if (!isStory && inStory) lines.push("", "---------- 以上为剧情模式 ----------", "");
             inStory = isStory;
-            const role = m.role === "user" ? "我" : m.role === "assistant" ? characterName : null;
+            const role = m.role === "user" ? userName : m.role === "assistant" ? characterName : null;
             if (!role) continue;
             const text = messageTranscriptText(m);
             if (!text) continue;
@@ -110,7 +112,7 @@ export function ChatArchivePanel({
         }
         if (inStory) lines.push("", "---------- 以上为剧情模式 ----------");
         return lines.join("\n").trim();
-    }, [sessionId, characterName]);
+    }, [sessionId, characterName, characterId]);
 
     const handleSummarize = useCallback(async () => {
         const transcript = collectTranscript();
@@ -127,6 +129,7 @@ export function ChatArchivePanel({
             }
             const now = new Date();
             const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+            const modeLabel = transcript.includes("剧情模式") ? "" : " · 普通模式";
             const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
                 Promise.race([
                     p,
@@ -140,19 +143,30 @@ export function ChatArchivePanel({
                         content:
                             "你是记忆归档助手，负责把聊天记录整理成一份可长期存档的「剧情档案」，供角色日后回忆。\n" +
                             "严格按以下格式输出（纯文本，不要任何 Markdown 符号如 ** # ` >）：\n\n" +
-                            "─────  归档 · 至 " + dateStr + "  ─────\n" +
+                            "─────  归档" + modeLabel + " · 至 " + dateStr + "  ─────\n" +
                             "【剧情正文】\n\n" +
-                            "（以日期或场景开头的段落，第三人称叙述发生了什么；按时间顺序分段，段与段之间空行；" +
-                            "保留关键对白要点、情绪、动作、关系变化、物品/地点状态。只写已发生的事，不编造、不评价。）\n\n" +
+                            "（段落标题统一写成「【普通模式 · 08-11】场景名」；普通模式就是日常玩手机的时间，日期直接用上面的归档日期。\n" +
+                            "记录里被「---------- 剧情模式 ----------」隔开的部分写成「【剧情 · 剧情内时间】场景名」，" +
+                            "剧情内时间只能从记录里推断（出现过的日期、季节、天气、事件），推断不出就只写场景名，绝不编日期。\n" +
+                            "正文按时间顺序分段，段与段之间空行，保留关键对白要点、情绪、动作、关系变化、物品/地点状态。只写已发生的事，不编造、不评价。）\n\n" +
                             "【硬性要求】\n" +
                             "1. 只依据聊天记录里真实出现的内容。记录中没有的对白、动作、结尾一律不许补写，" +
                             "不要使用「突然」「叫住」「要求你回来」这类记录里没有的戏剧化收尾。\n" +
                             "2. 对话在记录里中断就如实写到中断处为止，不要替它补一个收场。\n" +
-                            "3. 记录里「---------- 以下为剧情模式 ----------」隔开的段落属于另一场戏，" +
+                            "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
+                            "一句只写一个主语，两个人的动作不要合并成一句；分不清谁做、谁说的，宁可不写这句。\n" +
+                            "4. 记录里「---------- 以下为剧情模式 ----------」隔开的段落属于另一场戏，" +
                             "要各自叙述，不得与日常聊天串写、混为一件事。\n" +
-                            "4. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
+                            "5. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
                             "【关键锚点】\n" +
-                            "· 一条一条列出的重要事实（约定、承诺、关系里程碑、标志性物品、下次行程等）\n\n" +
+                            "· 3–5 条，每条写「状态推移 + 原话引用」（例如：约好下次一起去海边 → 他答应了，原话「等你有空」）\n" +
+                            "· 不收瞬时状态：正在听哪首歌、发了几个表情、今天吃了几顿饭这类不进锚点\n\n" +
+                            "【当前锚点】\n" +
+                            "· 时间地点与在场的人\n" +
+                            "· 双方各自的状态各一句\n" +
+                            "· 已聊过：…（一行，防止重复聊同一件事）\n" +
+                            "· 待发生：…（1–2 条线头）\n\n" +
+                            "全文控制在 1000 字以内，超了先删细节，保住事实与锚点。\n" +
                             "只输出档案正文本身，不要额外解释。",
                     },
                     { role: "user", content: transcript },
@@ -178,6 +192,8 @@ export function ChatArchivePanel({
         try {
             const res = await commitArchive(characterId, text, "chat");
             if (res.success) {
+                // 同角色只留最新：清掉本聊天室更旧的归档，避免旧归档和新归档一起注入
+                if (res.contentHash) await pruneOlderChatArchives(characterId, res.contentHash);
                 onNotice("已归档，写入角色记忆");
                 setDraft("");
                 await load();
@@ -196,7 +212,10 @@ export function ChatArchivePanel({
         try {
             await deleteArchive(characterId, entry.id);
             const res = await commitArchive(characterId, text, entry.sourceApp);
-            if (res.success) { onNotice("已保存"); setEditingId(null); await load(); }
+            if (res.success) {
+                if (res.contentHash) await pruneOlderChatArchives(characterId, res.contentHash);
+                onNotice("已保存"); setEditingId(null); await load();
+            }
             else onNotice(res.error || "保存失败");
         } finally {
             setSaving(false);
