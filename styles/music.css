@@ -3404,6 +3404,22 @@
     text-shadow: 0 0 10px rgba(180, 208, 255, 0.25);
 }
 
+/* 双语歌词的中文小字（原文 ／ 译文） */
+.mp-lyric-zh {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.74em;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    line-height: 1.45;
+    color: rgba(205, 224, 252, 0.62);
+    text-shadow: none;
+}
+
+.mp-lyric-line[data-active] .mp-lyric-zh {
+    color: rgba(232, 242, 255, 0.86);
+}
+
 .mp-lyric-line[data-active] {
     font-size: calc(18.9px*var(--app-text-scale,1));
     color: #ffffff;

@@ -225,7 +225,7 @@ export default function MusicPlayer() {
     }, [showMusicToast]);
 
     // ── Parse LRC lyrics ──
-    const parsedLyrics = useRef<{ time: number; text: string }[]>([]);
+    const parsedLyrics = useRef<{ time: number; text: string; translation?: string }[]>([]);
     const [activeLyricIdx, setActiveLyricIdx] = useState(-1);
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -235,13 +235,18 @@ export default function MusicPlayer() {
             parsedLyrics.current = [];
             return;
         }
-        const lines: { time: number; text: string }[] = [];
+        const lines: { time: number; text: string; translation?: string }[] = [];
         for (const line of lrc.split("\n")) {
             const match = line.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
             if (match) {
                 const mins = parseInt(match[1], 10);
                 const secs = parseFloat(match[2]);
-                lines.push({ time: mins * 60 + secs, text: match[3].trim() });
+                // 双语歌词：`原文 ／ 译文`，后半段渲染成小字
+                const raw = match[3].trim();
+                const sep = raw.indexOf(" ／ ");
+                const text = sep > 0 ? raw.slice(0, sep).trim() : raw;
+                const translation = sep > 0 ? raw.slice(sep + 3).trim() : undefined;
+                lines.push({ time: mins * 60 + secs, text, translation });
             }
         }
         lines.sort((a, b) => a.time - b.time);
@@ -495,6 +500,9 @@ export default function MusicPlayer() {
                                             onClick={(e) => handleLyricClick(i, e)}
                                         >
                                             {line.text || " "}
+                                            {line.translation ? (
+                                                <span className="mp-lyric-zh">{line.translation}</span>
+                                            ) : null}
                                         </div>
                                     );
                                 })}

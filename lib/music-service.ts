@@ -312,6 +312,37 @@ export function getCachedLyricTranslation(songId?: number): string {
     return lyricTranslationCache.get(songId) || "";
 }
 
+/** 把 LRC 里的一行解析成「秒 + 文本」。 */
+function parseTimedLine(line: string): { sec: number; text: string } | null {
+    const m = line.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+    if (!m) return null;
+    return { sec: parseInt(m[1], 10) * 60 + parseFloat(m[2]), text: m[3].trim() };
+}
+
+/**
+ * 把官方中文翻译并进歌词：同一行写成「原文 ／ 译文」，播放器会把后半段渲染成小字。
+ * 两边的行可能不是逐行对齐的，用双指针按时间就近匹配（±0.35 秒）。
+ */
+function mergeLyricsWithTranslation(lrc: string, tlyric: string): string {
+    if (!lrc) return "";
+    if (!tlyric) return lrc;
+    const zhLines = tlyric.split("\n").map(parseTimedLine).filter((v): v is { sec: number; text: string } => !!v && !!v.text);
+    if (zhLines.length === 0) return lrc;
+    const out: string[] = [];
+    let j = 0;
+    for (const raw of lrc.split("\n")) {
+        const parsed = parseTimedLine(raw);
+        if (!parsed || !parsed.text) {
+            out.push(raw);
+            continue;
+        }
+        while (j + 1 < zhLines.length && zhLines[j + 1].sec <= parsed.sec + 0.05) j += 1;
+        const zh = zhLines[j] && Math.abs(zhLines[j].sec - parsed.sec) <= 0.35 ? zhLines[j].text : "";
+        out.push(zh && zh !== parsed.text ? `${raw.replace(/\s+$/, "")} ／ ${zh}` : raw);
+    }
+    return out.join("\n");
+}
+
 /** Get lyrics for a Netease song */
 export async function getNeteaseLyrics(songId: number): Promise<string> {
     const base = neteaseBase();
@@ -319,9 +350,12 @@ export async function getNeteaseLyrics(songId: number): Promise<string> {
     try {
         const resp = await fetch(withNeteaseParams(`${base}/lyric?id=${songId}`));
         const data = await resp.json();
-        // 顺手缓存官方中文翻译：韩语歌只有原文时，角色读不懂歌词就会瞎猜主题
-        lyricTranslationCache.set(songId, data?.tlyric?.lyric || "");
-        return data?.lrc?.lyric || "";
+        const lrc: string = data?.lrc?.lyric || "";
+        const tlyric: string = data?.tlyric?.lyric || "";
+        // 官方中文翻译缓存下来（提示词那边还会单独用）
+        lyricTranslationCache.set(songId, tlyric);
+        // 播放器直接显示双语：韩语歌只给原文，用户看不懂也没法聊
+        return mergeLyricsWithTranslation(lrc, tlyric);
     } catch {
         return "";
     }

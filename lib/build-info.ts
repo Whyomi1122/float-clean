@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.10-4",
+    version: "2026.11.10-5",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.10-5",
+            title: "歌词看得懂了",
+            items: [
+                "音乐 App 歌词页显示网易云官方中文翻译：原文下面一行小字译文（没有官方翻译的歌就只有原文）",
+            ],
+        },
         {
             version: "2026.11.10-4",
             title: "歌名不再说错",

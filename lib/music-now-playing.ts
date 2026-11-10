@@ -1,6 +1,6 @@
 // lib/music-now-playing.ts — 正在播放状态的共享桥 + 提示词注入块
 //
-import { getCachedLyricTranslation, getCachedAliases } from "./music-service";
+import { getCachedAliases } from "./music-service";
 import { getSongInfo } from "./song-info-service";
 // 音乐播放器(music-context)把实时播放状态写进这里(模块级变量,非 React 状态,
 // 避免 4次/秒 的 timeupdate 触发重渲染);聊天引擎组装提示词时同步读取,
@@ -135,7 +135,7 @@ export function getNowPlayingLyricLines(maxLines = 6): string[] {
 }
 
 /** 一起听用：整首歌词（去时间轴、去重复副歌），截断到 maxChars。 */
-function buildFullLyricText(lines: LrcLine[], maxChars: number, translation?: Map<number, string>): string {
+function buildFullLyricText(lines: LrcLine[], maxChars: number): string {
     const seen = new Set<string>();
     const out: string[] = [];
     let len = 0;
@@ -144,10 +144,8 @@ function buildFullLyricText(lines: LrcLine[], maxChars: number, translation?: Ma
         if (!text) continue;
         if (seen.has(text)) continue; // 副歌重复只保留一次
         seen.add(text);
-        const zh = translation?.get(Math.round(line.time * 1000));
-        const merged = zh && zh.trim() && zh.trim() !== text ? `${text} ／ ${zh.trim()}` : text;
-        out.push(merged);
-        len += merged.length + 1;
+        out.push(text);
+        len += text.length + 1;
         if (len >= maxChars) break;
     }
     return out.join("\n");
@@ -179,19 +177,10 @@ export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): 
     if (s.lyrics) {
         const parsed = parseLrc(s.lyrics);
         if (listenMode) {
-            // 韩语/日语歌只有原文时角色容易瞎猜主题，这里并上网易云官方中文翻译
-            let translation: Map<number, string> | undefined;
-            const zhRaw = getCachedLyricTranslation(s.neteaseId);
-            if (zhRaw) {
-                translation = new Map<number, string>();
-                for (const line of parseLrc(zhRaw)) {
-                    const text = (line.text || "").trim();
-                    if (text) translation.set(Math.round(line.time * 1000), text);
-                }
-            }
-            const full = buildFullLyricText(parsed, 1600, translation);
+            // 歌词里已经带官方中文翻译（「原文 ／ 译文」），直接用
+            const full = buildFullLyricText(parsed, 1600);
             if (full) {
-                lines.push(translation ? "歌词全文(原文 ／ 中文翻译，用于理解这首歌在讲什么):" : "歌词全文(可用于理解这首歌在讲什么):");
+                lines.push("歌词全文(用于理解这首歌在讲什么):");
                 lines.push(full);
             }
         } else {
