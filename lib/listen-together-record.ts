@@ -1,7 +1,7 @@
 // lib/listen-together-record.ts — 一起听结束时写进"普通模式归档"
 //
 // 2026-11-09 用户口径：不需要重播/回放，只要一条记录，供普通聊天做归档时参考。
-// 形态：`【一起听 · 11月9日 20:35–21:10】这次一起听了 35 分钟，放了 8 首歌：A - B、C - D…`
+// 形态：`【一起听 · 11月9日 20:35–21:10】` + `这次和xxx一起听了 35 分钟，放了 8 首歌：` + 每首一行 `神메뉴 - Stray Kids`
 // 位置：记忆库 → 归档（type: archive，sourceApp: chat），和普通聊天归档同处，会被注入提示词。
 
 import { commitArchive } from "./memory-service";
@@ -26,12 +26,14 @@ export function buildListenRecordContent(session: ListenSession, endedAt: Date =
     const songs = session.tracks
         .map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title))
         .filter(Boolean);
+    const partner = (session.characterName || "").trim() || "你";
     const lines = [
         "（以下是你和用户一起听歌的记录，属于你们共同的经历；只在话题相关时自然提起，不必主动复述。）",
         `【一起听 · ${dateLabel} ${clock(startSafe)}–${clock(endedAt)}】`,
         songs.length > 0
-            ? `这次一起听了 ${duration}，放了 ${songs.length} 首歌：${songs.join("、")}。`
-            : `这次一起听了 ${duration}，没有放歌，主要是聊天。`,
+            ? `这次和${partner}一起听了 ${duration}，放了 ${songs.length} 首歌：`
+            : `这次和${partner}一起听了 ${duration}，没有放歌，主要是聊天。`,
+        ...songs,
     ];
     return lines.join("\n");
 }

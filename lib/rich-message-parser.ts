@@ -646,8 +646,19 @@ export function parseAIResponse(rawText: string, previousState: StateValue[]): P
         .replace(/\n\n+(?=\[表情包[：:][^\]]+\])/g, "\n")
         .replace(/(\[表情包[：:][^\]]+\])\n\n+/g, "$1\n");
 
+    // 2.7. 语音条译文并条：模型偶尔把「原文|译文」的右半边另起一条（甚至隔一个空行），
+    //      会让译文单独长成一个「|…」气泡。这里并回语音条；语音条已带译文时丢掉多余译文。
+    const voiceMerged = stickerMerged
+        .replace(/(\[语音条[：:][^\]]*?[|｜][^\]]*\])\s*\n+\s*[|｜][^\n]+/g, "$1")
+        .replace(/(\[语音条[：:]([^\]]+)\])\s*\n+\s*[|｜]\s*([^\n]+)/g,
+            (match, tag: string, label: string, translation: string) => {
+                const trimmed = label.trim();
+                if (!trimmed || /[|｜]/.test(trimmed)) return match;
+                return `[语音条:${trimmed}|${translation.trim()}]`;
+            });
+
     // 3. Split by double newlines (placeholders still in place)
-    const segments = stickerMerged.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+    const segments = voiceMerged.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
 
     // 4. Parse each segment
     const parts: ParsedMessagePart[] = [];

@@ -122,33 +122,50 @@ function uiRole(msg: ChatMessage): string {
     return msg.role;
 }
 
+/** 语音条的文字（语音条 content 是空的，文字存在 mediaData.label 里）。 */
+function voiceMessageText(msg: ChatMessage): string {
+    return (msg.mediaData?.label || msg.content || "").trim();
+}
+
+/** 语音条是否已经是「原文 | 译文」双语（已有译文就不再重复拼接）。 */
+function voiceTextHasTranslation(text: string): boolean {
+    const parts = text.split(/\s*[|｜]\s*/);
+    return parts.length === 2 && !!parts[0].trim() && !!parts[1].trim();
+}
+
 /**
- * 若消息正文是「独立的纯括号中文译文」（如「（删了吧，留着这东西干嘛。）」，
- * 括号外没有任何其他内容），返回括号内的译文；否则返回 null。
- * 用于语音转写双语统一：模型偶尔把译文拆成紧随语音条后的独立消息。
+ * 若消息正文是「独立的纯译文」返回译文，否则返回 null。
+ * 两种形态：全角括号「（删了吧。）」，以及竖线「|删了吧。」「｜删了吧。」。
+ * 用于语音转写双语统一：模型偶尔把「原文|译文」的右半边另起一条、甚至隔一个空行发出，
+ * 会让译文单独长成一个「|…」气泡。
  */
-function extractStandaloneParenTranslation(msg: ChatMessage): string | null {
+function extractStandaloneVoiceTranslation(msg: ChatMessage): string | null {
     const raw = (msg.content || "").trim();
     if (!raw || raw.includes("\n")) return null;
-    // 去掉可能的动作/旁白包裹后必须整体就是一对全角括号
-    const m = raw.match(/^（([^（）]+)）$/);
-    if (!m) return null;
-    const inner = m[1].trim();
+    const paren = raw.match(/^（([^（）]+)）$/);
+    const pipe = raw.match(/^[|｜]\s*(.+)$/);
+    const inner = (paren ? paren[1] : pipe ? pipe[1] : "").trim();
+    if (!inner) return null;
     // 必须含 CJK（中文译文），纯标点/纯数字不算
     if (!/[\u3400-\u9fff]/.test(inner)) return null;
+    // 还带着竖线/括号说明不是「纯译文」，不并
+    if (/[|｜（）()]/.test(inner)) return null;
     return inner;
 }
 
 function canMergeVoiceTranslation(voice: ChatMessage, translation: ChatMessage): boolean {
-    return voice.mediaType === "audio"
-        && !translation.mediaType
-        && voice.role === translation.role
-        && voice.senderCharacterId === translation.senderCharacterId
-        && voice.deliverySessionId === translation.deliverySessionId
-        && !voice.isRetracted && !translation.isRetracted
-        && /[가-힣ぁ-ゟ゠-ヿa-zA-Z]/.test(voice.content)
-        && !/[\u3400-\u9fff]/.test(voice.content)
-        && !!extractStandaloneParenTranslation(translation);
+    const voiceText = voiceMessageText(voice);
+    if (voice.mediaType !== "audio") return false;
+    if (!voiceText) return false;
+    if (!extractStandaloneVoiceTranslation(translation)) return false;
+    if (translation.mediaType || translation.isRetracted || voice.isRetracted) return false;
+    if (voice.role !== translation.role) return false;
+    if (voice.senderCharacterId !== translation.senderCharacterId) return false;
+    if (voice.deliverySessionId !== translation.deliverySessionId) return false;
+    // 语音条本身已带译文：这条纯译文属于重复输出，吞掉即可
+    if (voiceTextHasTranslation(voiceText)) return true;
+    // 否则要求原文不含中文，避免把「普通中文文本 + 括号解释」误并
+    return !/[\u3400-\u9fff]/.test(voiceText);
 }
 
 function isChatRoomElementVisible(element: HTMLElement | null): boolean {
@@ -5928,7 +5945,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         && nextRawMsg.mediaType !== "audio"
                         && renderMsg.mediaType === "audio"
                         && voiceTextIds.has(msg.id)
-                        ? extractStandaloneParenTranslation(nextRawMsg)
+                        ? extractStandaloneVoiceTranslation(nextRawMsg)
                         : null;
                     const hasFollowingParenTranslation = !!parenTranslationText;
 
@@ -5939,7 +5956,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         && canMergeVoiceTranslation(prevRawMsg, msg)
                         && uiRole(msg) !== "system"
                         && msg.mediaType !== "audio"
-                        && !!extractStandaloneParenTranslation(msg);
+                        && !!extractStandaloneVoiceTranslation(msg);
 
                     // 已并入上一条语音转写的独立译文消息：整条跳过渲染（气泡与附件都不出）
                     if (mergedIntoPrevVoice) return null;
@@ -6202,9 +6219,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                         <BilingualTextBlock
                                             text={(() => {
                                                 const raw = msg.displayProjected ? (renderMsg.mediaData?.label || "") : renderDisplayText(renderMsg.mediaData?.label || "", msg.role === "user" ? 1 : 2, false);
-                                                // 双语格式统一：模型有时把中文译文拆成紧随其后的独立「（…）」消息。
-                                                // 若下一条件成立，把它并入转写气泡组成标准双语块，并隐藏原消息。
-                                                if (hasFollowingParenTranslation) return `${raw} | ${parenTranslationText}`;
+                                                // 双语格式统一：模型有时把中文译文拆成紧随其后的独立「（…）」/「|…」消息。
+                                                // 若下一条件成立，把它并入转写气泡组成标准双语块，并隐藏原消息；
+                                                // 转写自带译文时只隐藏多余那条，不重复拼。
+                                                if (hasFollowingParenTranslation && !voiceTextHasTranslation(voiceMessageText(msg))) {
+                                                    return `${raw} | ${parenTranslationText}`;
+                                                }
                                                 return raw;
                                             })()}
                                             mode="markdown"

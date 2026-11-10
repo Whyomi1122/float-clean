@@ -2,6 +2,7 @@
 
 import type { VoiceApiConfig, ContentAppId } from "./settings-types";
 import { loadVoiceConfigs, loadBindingConfig, resolveBinding } from "./settings-storage";
+import { holdMusicDuck, releaseMusicDuck } from "./music-duck";
 
 export type VoiceApiConfigResolved = VoiceApiConfig;
 
@@ -394,6 +395,8 @@ let _activeMediaAbort: (() => void) | null = null;
 function playAudioBlobElement(blob: Blob): { promise: Promise<void>; abort: () => void } {
     // Settle the previous owner before replacing the shared element's source.
     _activeMediaAbort?.();
+    // 说话期间压低背景音乐（类似环境音 ducking）
+    holdMusicDuck("tts-element");
     const url = URL.createObjectURL(blob);
     const audio = getSharedAudio();
     audio.muted = false;
@@ -410,6 +413,7 @@ function playAudioBlobElement(blob: Blob): { promise: Promise<void>; abort: () =
         audio.removeEventListener("pause", onTerminalEvent);
         audio.removeEventListener("abort", onTerminalEvent);
         URL.revokeObjectURL(url);
+        releaseMusicDuck("tts-element");
         if (_activeMediaAbort === finalize) {
             _activeMediaAbort = null;
             try { audio.pause(); audio.removeAttribute("src"); audio.load(); } catch {}
@@ -448,6 +452,15 @@ export function playAudioBlob(blob: Blob): { promise: Promise<void>; abort: () =
     const ctx = getAudioContext();
     if (!ctx) return playAudioBlobElement(blob);
 
+    // 说话期间压低背景音乐（类似环境音 ducking）；cleanupWebAudio 里统一归还
+    let duckHeld = true;
+    holdMusicDuck("tts-web");
+    const releaseDuck = () => {
+        if (!duckHeld) return;
+        duckHeld = false;
+        releaseMusicDuck("tts-web");
+    };
+
     let settled = false;
     let resolveFn: () => void = () => {};
     let source: AudioBufferSourceNode | null = null;
@@ -461,6 +474,7 @@ export function playAudioBlob(blob: Blob): { promise: Promise<void>; abort: () =
 
     const cleanupWebAudio = () => {
         ctx.removeEventListener("statechange", onContextStateChange);
+        releaseDuck();
         if (source) {
             source.onended = null;
             try { source.stop(); } catch {}
@@ -520,8 +534,7 @@ export function playAudioBlob(blob: Blob): { promise: Promise<void>; abort: () =
                     settled = true;
                     fallbackAbort = null;
                     resolveFn();
-                });
-            }
+                });            }
         })();
     });
 

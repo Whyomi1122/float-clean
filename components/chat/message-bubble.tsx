@@ -12,6 +12,7 @@ import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
+import { holdMusicDuck, releaseMusicDuck } from "@/lib/music-duck";
 import { cleanSpeechFragment, splitNarration, stripPerformanceTags } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
@@ -2407,7 +2408,10 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
         const audio = new Audio(src);
         audioRef.current = audio;
         setPlaying(true);
+        // 语音条播放期间压低背景音乐（类似环境音 ducking）
+        holdMusicDuck("voice-bar");
         const finalize = () => {
+            releaseMusicDuck("voice-bar");
             if (audioRef.current === audio) audioRef.current = null;
             try { audio.pause(); audio.removeAttribute("src"); audio.load(); } catch { /* ignore */ }
             setPlaying(false);
@@ -2424,6 +2428,7 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
         if (playing && audioRef.current) {
             const active = audioRef.current;
             audioRef.current = null;
+            releaseMusicDuck("voice-bar");
             try { active.pause(); active.removeAttribute("src"); active.load(); } catch { /* ignore */ }
             setPlaying(false);
             return;
@@ -2452,7 +2457,7 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
             });
     };
 
-    useEffect(() => () => { audioRef.current?.pause(); }, []);
+    useEffect(() => () => { audioRef.current?.pause(); releaseMusicDuck("voice-bar"); }, []);
 
     // Wave bars — slightly irregular heights so the idle state already looks intentional.
     const barCount = Math.min(Math.max(4, Math.round(duration / 2)), 9);

@@ -21,6 +21,21 @@ function saveArchiveDraft(characterId: string, text: string): void {
     } catch { /* ignore */ }
 }
 
+/** 归档提炼用的一条消息文本：语音条/图片/音乐分享的文字在 mediaData.label 里，content 常为空。 */
+function messageTranscriptText(m: ChatMessage): string {
+    const text = (m.content || "").trim();
+    const label = (m.mediaData?.label || "").trim();
+    if (m.mediaType === "audio") {
+        const spoken = label || text;
+        return spoken ? `[语音] ${spoken}` : "[语音]";
+    }
+    if (m.mediaType === "image") {
+        const caption = text || label;
+        return caption ? `[图片] ${caption}` : "[图片]";
+    }
+    return text || label;
+}
+
 /** 归档弹窗：把聊天记录提炼成一份可编辑的长文档，确认后写入角色记忆（世界书级）。 */
 export function ChatArchivePanel({
     characterId,
@@ -89,7 +104,7 @@ export function ChatArchivePanel({
             inStory = isStory;
             const role = m.role === "user" ? "我" : m.role === "assistant" ? characterName : null;
             if (!role) continue;
-            const text = (m.content || "").trim();
+            const text = messageTranscriptText(m);
             if (!text) continue;
             lines.push(`${role}：${text}`);
         }
@@ -129,6 +144,13 @@ export function ChatArchivePanel({
                             "【剧情正文】\n\n" +
                             "（以日期或场景开头的段落，第三人称叙述发生了什么；按时间顺序分段，段与段之间空行；" +
                             "保留关键对白要点、情绪、动作、关系变化、物品/地点状态。只写已发生的事，不编造、不评价。）\n\n" +
+                            "【硬性要求】\n" +
+                            "1. 只依据聊天记录里真实出现的内容。记录中没有的对白、动作、结尾一律不许补写，" +
+                            "不要使用「突然」「叫住」「要求你回来」这类记录里没有的戏剧化收尾。\n" +
+                            "2. 对话在记录里中断就如实写到中断处为止，不要替它补一个收场。\n" +
+                            "3. 记录里「---------- 以下为剧情模式 ----------」隔开的段落属于另一场戏，" +
+                            "要各自叙述，不得与日常聊天串写、混为一件事。\n" +
+                            "4. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
                             "【关键锚点】\n" +
                             "· 一条一条列出的重要事实（约定、承诺、关系里程碑、标志性物品、下次行程等）\n\n" +
                             "只输出档案正文本身，不要额外解释。",

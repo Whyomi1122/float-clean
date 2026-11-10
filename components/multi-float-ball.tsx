@@ -30,7 +30,7 @@ import {
     subscribeListenSession,
 } from "@/lib/listen-together-session";
 import { finishListenSession } from "@/lib/listen-together-record";
-import { loadChatSessions } from "@/lib/chat-storage";
+import { loadChatMessages, loadChatSessions } from "@/lib/chat-storage";
 import { requestBackgroundChatReply, isBackgroundReplyGenerating } from "@/lib/follow-up-service";
 
 type Props = {
@@ -283,6 +283,47 @@ export default function MultiFloatBall({ hidden }: Props) {
         lastNudgeRef.current = Date.now();
         void requestBackgroundChatReply(chatSessionId).catch(() => { /* 静默失败 */ });
     }, [listenActive, track?.id]);
+
+    // ── 一起听：弹性主动对话 ──
+    // 角色太闷会让整场发干（用户不主动开口，它可以 30 多分钟一句话不说）。
+    // 规则很轻：本场它已经说了 8 条以上就不干涉；否则沉默超过 6 分钟轻推一次，
+    // 两次之间至少隔 6 分钟，整场最多推 4 次。目的只是「必要处开个口」，不是刷屏。
+    const forcedSpeakRef = useRef({ at: 0, count: 0 });
+    useEffect(() => {
+        if (!listenActive) {
+            forcedSpeakRef.current = { at: 0, count: 0 };
+            return;
+        }
+        const timer = window.setInterval(() => {
+            const listenSession = getListenSession();
+            if (!listenSession) return;
+            const chatSessionId = loadChatSessions().find(s => s.contactId === listenSession.characterId)?.id;
+            if (!chatSessionId) return;
+            if (isBackgroundReplyGenerating(chatSessionId)) return;
+            const state = forcedSpeakRef.current;
+            if (state.count >= 4) return;
+            const now = Date.now();
+            const startedAt = Date.parse(listenSession.startedAt || "") || now;
+            if (now - state.at < 6 * 60_000) return;
+            const spoken = loadChatMessages(chatSessionId).filter((m) => {
+                if (m.role !== "assistant") return false;
+                const at = Date.parse(m.createdAt || "");
+                return Number.isFinite(at) && at >= startedAt;
+            });
+            if (spoken.length >= 8) return;
+            const lastSpokenAt = spoken.length > 0
+                ? (Date.parse(spoken[spoken.length - 1].createdAt || "") || startedAt)
+                : startedAt;
+            if (now - lastSpokenAt < 6 * 60_000) return;
+            forcedSpeakRef.current = { at: now, count: state.count + 1 };
+            void requestBackgroundChatReply(chatSessionId, {
+                extraSystemInstructions:
+                    "【一起听】你们已经安静了一阵子。请主动开口说一两句：可以聊正在听/刚听完的这首、歌词、歌手、风格，"
+                    + "也可以聊别的，但别问「你在干嘛」这类空话，也别复述歌单。自然、简短，一两句就够。",
+            }).catch(() => { /* 静默失败 */ });
+        }, 60_000);
+        return () => window.clearInterval(timer);
+    }, [listenActive]);
 
     /** 快捷跳转到音乐 App（悬浮球面板里的小按钮） */
     const openMusicApp = useCallback(() => {

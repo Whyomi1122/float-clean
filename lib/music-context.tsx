@@ -8,6 +8,7 @@ import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayI
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { setNowPlayingTrack, updateNowPlayingTime, setNowPlayingPlaying, clearNowPlaying, getNowPlayingSnapshot } from "./music-now-playing";
+import { getMusicDuckRatio, subscribeMusicDuck } from "./music-duck";
 
 // ── Types ──
 
@@ -113,6 +114,19 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         persistQueue(queue);
     }, [queue]);
+
+    // 音量：用户设定 × ducking 系数（语音播放时临时压低，类似环境音）
+    const volumePercentRef = useRef(0.8);
+    const applyMusicVolume = useCallback(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+        const target = volumePercentRef.current * getMusicDuckRatio();
+        audio.volume = Math.max(0, Math.min(1, target));
+    }, []);
+    useEffect(() => {
+        applyMusicVolume();
+        return subscribeMusicDuck(applyMusicVolume);
+    }, [applyMusicVolume]);
 
     /** Wrapped setQueue with max size enforcement */
     const setQueue = useCallback((tracks: MusicTrack[]) => {
@@ -335,9 +349,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     const setVolume = useCallback((vol: number) => {
         const clamped = Math.max(0, Math.min(1, vol));
+        volumePercentRef.current = clamped;
         setVolumeState(clamped);
-        if (audioRef.current) audioRef.current.volume = clamped;
-    }, []);
+        applyMusicVolume();
+    }, [applyMusicVolume]);
 
     const stop = useCallback(() => {
         const audio = audioRef.current;
