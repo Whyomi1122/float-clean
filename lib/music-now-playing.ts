@@ -1,6 +1,6 @@
 // lib/music-now-playing.ts — 正在播放状态的共享桥 + 提示词注入块
 //
-import { getCachedLyricTranslation } from "./music-service";
+import { getCachedLyricTranslation, getCachedAliases } from "./music-service";
 import { getSongInfo } from "./song-info-service";
 // 音乐播放器(music-context)把实时播放状态写进这里(模块级变量,非 React 状态,
 // 避免 4次/秒 的 timeupdate 触发重渲染);聊天引擎组装提示词时同步读取,
@@ -170,6 +170,11 @@ export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): 
     lines.push(`正在播放:${s.title} - ${s.artist}(${fmtTime(s.currentTime)} / ${fmtTime(s.duration)}${s.isPlaying ? "" : ",已暂停"})`);
     // 明确告知"你就是能从设备上看到",避免角色答"我不知道"或瞎猜歌单
     lines.push("这些字段是系统直接提供的真实数据,你(角色)能像看到手机屏幕一样看到它——被问到「我在听什么歌」时,照此回答歌名/歌手即可,不要说不知道,不要猜别的歌单或别的场景。");
+    // 别名/译名：韩语歌常见「原名 (English)」，给全了才不会把歌名说错或自己乱翻译
+    const aliases = getCachedAliases(s.neteaseId);
+    if (aliases.length > 0) {
+        lines.push(`别名/译名:${aliases.join(" / ")}(提到这首歌时用原名,需要时括号补译名;不要自己另编或翻译歌名)`);
+    }
 
     if (s.lyrics) {
         const parsed = parseLrc(s.lyrics);
@@ -207,6 +212,7 @@ export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): 
         }
         lines.push(
             "你们此刻正在一起听这首歌。谈歌时请以上面的真实歌词和资料为依据——歌词是什么语言就读什么语言，不要凭歌名、歌手或印象猜主题；"
+            + "歌名用上面给的原名（有译名可一起说），不要自己另编英文名。"
             + "可以聊歌词在讲什么、情绪、歌手和风格，但不要把整段歌词念出来，也不要每轮都把歌名塞进话里。",
         );
     } else {

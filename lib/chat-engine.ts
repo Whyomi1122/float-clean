@@ -39,6 +39,7 @@ import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMConte
 import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
 import { buildNowPlayingPromptBlock, getNowPlayingSnapshot } from "./music-now-playing";
 import { ensureSongInfo } from "./song-info-service";
+import { getCachedAliases } from "./music-service";
 import { isListeningWith } from "./listen-together-session";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
@@ -2064,7 +2065,7 @@ export async function buildChatPromptMessages(
         const npSnapshot = getNowPlayingSnapshot();
         if (npSnapshot?.title) {
             try {
-                await ensureSongInfo(npSnapshot.title, npSnapshot.artist || "");
+                await ensureSongInfo(npSnapshot.title, npSnapshot.artist || "", getCachedAliases(npSnapshot.neteaseId));
             } catch { /* 静默 */ }
         }
         const nowPlayingBlock = buildNowPlayingPromptBlock({ listenMode: true });

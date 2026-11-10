@@ -98,6 +98,8 @@ export type NeteaseSearchResult = {
     album: string;
     duration: number; // ms
     coverUrl?: string;
+    /** 别名/译名（alia、tns，或「原名 (English)」拆出来的部分） */
+    aliases?: string[];
 };
 
 export type NeteasePlaylistDetail = NeteasePlaylist & {
@@ -168,7 +170,41 @@ export type NeteaseToplist = NeteasePlaylist & {
     tracks?: Array<{ first: string; second: string }>;
 };
 
+/** 歌曲的别名/译名缓存（按网易云 ID）。一起听注入提示词、联网搜资料都用得上。 */
+const neteaseAliasCache = new Map<number, string[]>();
+
+/** 取已缓存的别名/译名（没有就返回空数组）。 */
+export function getCachedAliases(songId?: number): string[] {
+    if (!songId) return [];
+    return neteaseAliasCache.get(songId) || [];
+}
+
+/**
+ * 收集一首歌的别名/译名：网易云的 alia/alias/tns 字段，
+ * 外加「原名 (English)」这种写法拆出来的两部分（例：걘 아니야 (actually)）。
+ */
+function collectAliases(s: any): string[] {
+    const name = typeof s?.name === "string" ? s.name.trim() : "";
+    const out = new Set<string>();
+    const push = (value: unknown) => {
+        if (typeof value === "string" && value.trim()) out.add(value.trim());
+    };
+    for (const field of [s?.alia, s?.alias, s?.tns]) {
+        if (Array.isArray(field)) field.forEach(push);
+        else push(field);
+    }
+    const bracket = name.match(/^(.*?)\s*[（(]([^）)]+)[）)]\s*$/);
+    if (bracket) {
+        push(bracket[1]);
+        push(bracket[2]);
+    }
+    if (name) out.delete(name);
+    return Array.from(out).filter(Boolean).slice(0, 4);
+}
+
 function mapSongToSearchResult(s: any): NeteaseSearchResult {
+    const aliases = collectAliases(s);
+    if (s?.id && aliases.length > 0) neteaseAliasCache.set(s.id, aliases);
     return {
         id: s.id,
         name: s.name || "",
@@ -176,6 +212,7 @@ function mapSongToSearchResult(s: any): NeteaseSearchResult {
         album: s.al?.name || s.album?.name || "",
         duration: s.dt || s.duration || 0,
         coverUrl: secureHttpUrl(s.al?.picUrl || s.album?.picUrl),
+        aliases,
     };
 }
 

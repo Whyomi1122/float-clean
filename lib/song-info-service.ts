@@ -85,7 +85,7 @@ function buildSummary(payload: unknown): string {
  * 确保这首歌的资料已缓存（有缓存直接返回；没有就联网搜一次）。
  * 返回资料摘要，拿不到就返回空串。
  */
-export async function ensureSongInfo(title: string, artist: string): Promise<string> {
+export async function ensureSongInfo(title: string, artist: string, aliases: string[] = []): Promise<string> {
     if (!title) return "";
     const key = cacheKeyOf(title, artist);
     const cache = readCache();
@@ -97,7 +97,9 @@ export async function ensureSongInfo(title: string, artist: string): Promise<str
     const apiKey = resolveSearchApiKey();
     if (!apiKey) return hit?.summary || "";
 
-    const query = `${artist} ${title} 这首歌 歌词含义 主题 背景`;
+    // 别名/译名一起进检索词：韩语歌的中文资料往往挂在中/英译名下，只搜原名会搜空
+    const aliasText = aliases.filter(Boolean).slice(0, 3).join(" ");
+    const query = `${artist} ${title} ${aliasText} 这首歌 歌词含义 主题 背景`.replace(/\s+/g, " ").trim();
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
