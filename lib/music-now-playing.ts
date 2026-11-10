@@ -1,6 +1,7 @@
 // lib/music-now-playing.ts — 正在播放状态的共享桥 + 提示词注入块
 //
 import { getCachedLyricTranslation } from "./music-service";
+import { getSongInfo } from "./song-info-service";
 // 音乐播放器(music-context)把实时播放状态写进这里(模块级变量,非 React 状态,
 // 避免 4次/秒 的 timeupdate 触发重渲染);聊天引擎组装提示词时同步读取,
 // 生成 [music.now_playing] 独立 system 块——每轮现拼,不进聊天历史。
@@ -198,8 +199,14 @@ export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): 
     }
     lines.push("[/music.now_playing]");
     if (listenMode) {
+        // 联网检索到的歌曲资料（主题/背景/衍生），比只看歌词更容易聊到点上
+        const info = getSongInfo(s.title, s.artist);
+        if (info) {
+            lines.push("这首歌的资料（联网检索，供你理解背景与主题，不要逐字复述）:");
+            lines.push(info);
+        }
         lines.push(
-            "你们此刻正在一起听这首歌。谈歌时请以上面的真实歌词为依据——歌词是什么语言就读什么语言，不要凭歌名、歌手或印象猜主题；"
+            "你们此刻正在一起听这首歌。谈歌时请以上面的真实歌词和资料为依据——歌词是什么语言就读什么语言，不要凭歌名、歌手或印象猜主题；"
             + "可以聊歌词在讲什么、情绪、歌手和风格，但不要把整段歌词念出来，也不要每轮都把歌名塞进话里。",
         );
     } else {

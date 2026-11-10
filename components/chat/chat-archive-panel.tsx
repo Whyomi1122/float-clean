@@ -96,21 +96,16 @@ export function ChatArchivePanel({
         const userName = resolveUserIdentity(characterId, "chat")?.name?.trim() || "用户";
         const msgs: ChatMessage[] = loadChatMessages(sessionId);
         const lines: string[] = [];
-        let inStory = false;
         for (const m of msgs) {
             if (m.isRetracted) continue;
-            // 剧情投递段（群像投递进来）用分界线隔开，提炼时与日常聊天分开叙述
-            const isStory = Boolean(m.deliverySessionId);
-            if (isStory && !inStory) lines.push("", "---------- 以下为剧情模式 ----------");
-            else if (!isStory && inStory) lines.push("", "---------- 以上为剧情模式 ----------", "");
-            inStory = isStory;
+            // 剧情模式（群像投递进来的那几段）归群像剧本自己的归档，这里只吃普通聊天
+            if (m.deliverySessionId) continue;
             const role = m.role === "user" ? userName : m.role === "assistant" ? characterName : null;
             if (!role) continue;
             const text = messageTranscriptText(m);
             if (!text) continue;
             lines.push(`${role}：${text}`);
         }
-        if (inStory) lines.push("", "---------- 以上为剧情模式 ----------");
         return lines.join("\n").trim();
     }, [sessionId, characterName, characterId]);
 
@@ -129,7 +124,7 @@ export function ChatArchivePanel({
             }
             const now = new Date();
             const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
-            const modeLabel = transcript.includes("剧情模式") ? "" : " · 普通模式";
+            const modeLabel = " · 普通模式";
             const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
                 Promise.race([
                     p,
@@ -145,9 +140,7 @@ export function ChatArchivePanel({
                             "严格按以下格式输出（纯文本，不要任何 Markdown 符号如 ** # ` >）：\n\n" +
                             "─────  归档" + modeLabel + " · 至 " + dateStr + "  ─────\n" +
                             "【剧情正文】\n\n" +
-                            "（段落标题统一写成「【普通模式 · 08-11】场景名」；普通模式就是日常玩手机的时间，日期直接用上面的归档日期。\n" +
-                            "记录里被「---------- 剧情模式 ----------」隔开的部分写成「【剧情 · 剧情内时间】场景名」，" +
-                            "剧情内时间只能从记录里推断（出现过的日期、季节、天气、事件），推断不出就只写场景名，绝不编日期。\n" +
+                            "（段落标题统一写成「【普通模式 · 08-11】场景名」，日期用上面的归档日期。" +
                             "正文按时间顺序分段，段与段之间空行，保留关键对白要点、情绪、动作、关系变化、物品/地点状态。只写已发生的事，不编造、不评价。）\n\n" +
                             "【硬性要求】\n" +
                             "1. 只依据聊天记录里真实出现的内容。记录中没有的对白、动作、结尾一律不许补写，" +
@@ -155,9 +148,7 @@ export function ChatArchivePanel({
                             "2. 对话在记录里中断就如实写到中断处为止，不要替它补一个收场。\n" +
                             "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，两个人的动作不要合并成一句；分不清谁做、谁说的，宁可不写这句。\n" +
-                            "4. 记录里「---------- 以下为剧情模式 ----------」隔开的段落属于另一场戏，" +
-                            "要各自叙述，不得与日常聊天串写、混为一件事。\n" +
-                            "5. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
+                            "4. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
                             "【关键锚点】\n" +
                             "· 3–5 条，每条写「状态推移 + 原话引用」（例如：约好下次一起去海边 → 他答应了，原话「等你有空」）\n" +
                             "· 不收瞬时状态：正在听哪首歌、发了几个表情、今天吃了几顿饭这类不进锚点\n\n" +

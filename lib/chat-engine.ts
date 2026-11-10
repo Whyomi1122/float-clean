@@ -37,7 +37,8 @@ import {
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
 import { buildEnsembleDeliveryPromptBackground } from "./ensemble-delivery";
-import { buildNowPlayingPromptBlock } from "./music-now-playing";
+import { buildNowPlayingPromptBlock, getNowPlayingSnapshot } from "./music-now-playing";
+import { ensureSongInfo } from "./song-info-service";
 import { isListeningWith } from "./listen-together-session";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
@@ -2059,6 +2060,13 @@ export async function buildChatPromptMessages(
     // 一起听（2026-11-09）：把"正在播放"作为系统事实注入。
     // 之前它只挂在 {{musicNowPlaying}} 模板宏上，默认人设模板没有这个宏 → 角色根本不知道用户在听什么。
     if (!session.isGroup && isListeningWith(character.id)) {
+        // 先确保这首歌的联网资料已缓存（没配搜索 Key / 网络失败都会静默跳过）
+        const npSnapshot = getNowPlayingSnapshot();
+        if (npSnapshot?.title) {
+            try {
+                await ensureSongInfo(npSnapshot.title, npSnapshot.artist || "");
+            } catch { /* 静默 */ }
+        }
         const nowPlayingBlock = buildNowPlayingPromptBlock({ listenMode: true });
         if (nowPlayingBlock) {
             llmMessages.push({
