@@ -16,6 +16,8 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
+import { getSongInfoStatus, getSongInfoStatusLabel } from "@/lib/song-info-service";
+import { getListenSession } from "@/lib/listen-together-session";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -253,6 +255,23 @@ export default function MusicPlayer() {
         parsedLyrics.current = lines;
     }, [player.currentTrack?.lyrics]);
 
+    // ── 一起听时才显示「资料：已获取 / 未配 Key / 未搜到」这行小字（直接排版面自查） ──
+    const [songInfoLabel, setSongInfoLabel] = useState("");
+    useEffect(() => {
+        const refresh = () => {
+            const current = player.currentTrack;
+            if (!current || !getListenSession()) {
+                setSongInfoLabel("");
+                return;
+            }
+            setSongInfoLabel(getSongInfoStatusLabel(getSongInfoStatus(current.title, current.artist)));
+        };
+        refresh();
+        const timer = setInterval(refresh, 4000);
+        return () => clearInterval(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [player.currentTrack?.id, player.currentTrack?.title]);
+
     useEffect(() => {
         const lyrics = parsedLyrics.current;
         if (lyrics.length === 0) { setActiveLyricIdx(-1); return; }
@@ -463,6 +482,7 @@ export default function MusicPlayer() {
                         {track.artist || "未知歌手"}
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 5 7 7-7 7" /></svg>
                     </button>
+                    {songInfoLabel && <div className="mp-info-status">{songInfoLabel}</div>}
                 </div>
                 <div className="mp-top-actions">
                     <button className="music-player-ctrl-btn mp-top-btn" onClick={togglePlayerStyle} title={playerStyle === "vinyl" ? "切换现代样式" : "切换黑胶样式"}>

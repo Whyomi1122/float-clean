@@ -64,6 +64,32 @@ export function getSongInfo(title: string, artist: string): string {
     return hit?.summary || "";
 }
 
+export type SongInfoStatus = "ready" | "nokey" | "failed" | "pending" | "none";
+
+/**
+ * 这首歌的资料状态（同步，给 UI 用，判断到底有没有命中）。
+ * ready=已获取 / nokey=聊天工具箱里没配 Tavily Key / failed=搜过但没搜到 / pending=还没搜
+ */
+export function getSongInfoStatus(title: string, artist: string): SongInfoStatus {
+    if (!title) return "none";
+    const hit = readCache()[cacheKeyOf(title, artist)];
+    const now = Date.now();
+    if (hit?.summary && now - hit.fetchedAt < MAX_AGE) return "ready";
+    if (hit?.failedAt && now - hit.failedAt < FAIL_BACKOFF) return "failed";
+    if (!resolveSearchApiKey()) return "nokey";
+    return "pending";
+}
+
+export function getSongInfoStatusLabel(status: SongInfoStatus): string {
+    switch (status) {
+        case "ready": return "资料：已获取";
+        case "nokey": return "资料：未配 Key";
+        case "failed": return "资料：未搜到";
+        case "pending": return "资料：未获取";
+        default: return "";
+    }
+}
+
 function buildSummary(payload: unknown): string {
     if (!payload || typeof payload !== "object") return "";
     const data = payload as { answer?: string; results?: Array<{ title?: string; content?: string }> };

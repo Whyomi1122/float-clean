@@ -1,11 +1,17 @@
 // lib/listen-together-record.ts — 一起听结束时写进"普通模式归档"
 //
 // 2026-11-09 用户口径：不需要重播/回放，只要一条记录，供普通聊天做归档时参考。
-// 形态：`【一起听 · 11月9日 20:35–21:10】` + `这次和xxx一起听了 35 分钟，放了 8 首歌：` + 每首一行 `神메뉴 - Stray Kids`
+// 形态（2026-11-11 v7 统一成普通模式归档格式，独立一条）：
+//   ─────  归档 · 普通模式 · 至 2026.11.11  ─────
+//   【普通模式 · 11-11】一起听
+//   20:35 起，xxx和yyy隔着手机一起听歌，35 分钟里放了 8 首：   ← 一行一首
+//   21:10 结束。
+//   【一起听：11月11日 20:35–21:10，8 首】
 // 位置：记忆库 → 归档（type: archive，sourceApp: chat），和普通聊天归档同处，会被注入提示词。
 
 import { commitArchive } from "./memory-service";
 import { loadChatAppSettings } from "./chat-storage";
+import { resolveUserIdentity } from "./settings-storage";
 import { endListenSession, type ListenSession } from "./listen-together-session";
 
 const SOURCE_APP = "chat" as const;
@@ -26,14 +32,20 @@ export function buildListenRecordContent(session: ListenSession, endedAt: Date =
     const songs = session.tracks
         .map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title))
         .filter(Boolean);
-    const partner = (session.characterName || "").trim() || "你";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const archiveDate = `${endedAt.getFullYear()}.${pad(endedAt.getMonth() + 1)}.${pad(endedAt.getDate())}`;
+    const sectionDate = `${pad(startSafe.getMonth() + 1)}-${pad(startSafe.getDate())}`;
+    const partner = (session.characterName || "").trim() || "对方";
+    const userName = (resolveUserIdentity(session.characterId, SOURCE_APP)?.name || "").trim() || "用户";
     const lines = [
-        "（以下是你和用户一起听歌的记录，属于你们共同的经历；只在话题相关时自然提起，不必主动复述。）",
-        `【一起听 · ${dateLabel} ${clock(startSafe)}–${clock(endedAt)}】`,
+        `─────  归档 · 普通模式 · 至 ${archiveDate}  ─────`,
+        `【普通模式 · ${sectionDate}】一起听`,
         songs.length > 0
-            ? `这次和${partner}一起听了 ${duration}，放了 ${songs.length} 首歌：`
-            : `这次和${partner}一起听了 ${duration}，没有放歌，主要是聊天。`,
+            ? `${clock(startSafe)} 起，${partner}和${userName}隔着手机一起听歌，${duration}里放了 ${songs.length} 首：`
+            : `${clock(startSafe)} 起，${partner}和${userName}隔着手机一起听了 ${duration}，没有放歌，主要是在聊天。`,
         ...songs,
+        `${clock(endedAt)} 结束。`,
+        `【一起听：${dateLabel} ${clock(startSafe)}–${clock(endedAt)}，${songs.length} 首】`,
     ];
     return lines.join("\n");
 }

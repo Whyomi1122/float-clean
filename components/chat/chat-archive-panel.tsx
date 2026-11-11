@@ -7,6 +7,7 @@ import { loadMemoryEntriesByType } from "@/lib/memory-storage";
 import { commitArchive, deleteArchive, pruneOlderChatArchives } from "@/lib/memory-service";
 import { simpleLLMCall } from "@/lib/api-helpers";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
+import { buildArchiveSettingBrief } from "@/lib/archive-setting-brief";
 import type { MemoryEntry } from "@/lib/memory-types";
 
 const DRAFT_STORE_PREFIX = "ai_phone_chat_archive_draft_";
@@ -130,6 +131,11 @@ export function ChatArchivePanel({
                     p,
                     new Promise<T>((_, rej) => setTimeout(() => rej(new Error("请求超时（60秒无响应）")), ms)),
                 ]);
+            const settingBrief = buildArchiveSettingBrief(characterId, characterName);
+            const settingBriefText = settingBrief
+                ? "【设定（只用来判断双方各自在哪里、是什么关系，不得据此编造事件、动作或场景）】\n" +
+                settingBrief + "\n\n"
+                : "";
             const res = await withTimeout(simpleLLMCall(
                 apiConfig,
                 [
@@ -141,19 +147,29 @@ export function ChatArchivePanel({
                             "─────  归档" + modeLabel + " · 至 " + dateStr + "  ─────\n" +
                             "【剧情正文】\n\n" +
                             "（段落标题统一写成「【普通模式 · 08-11】场景名」，日期用上面的归档日期。" +
-                            "正文按时间顺序分段，段与段之间空行，保留关键对白要点、情绪、动作、关系变化、物品/地点状态。只写已发生的事，不编造、不评价。）\n\n" +
+                            "正文按时间顺序分段，段与段之间空行，保留关键对白要点、情绪、关系变化、物品/地点状态；" +
+                            "这些也必须是记录里明确出现的，动作、表情、环境、氛围一律不写。）\n\n" +
                             "【硬性要求】\n" +
-                            "1. 只依据聊天记录里真实出现的内容。记录中没有的对白、动作、结尾一律不许补写，" +
+                            "1. 白名单，只能写三类内容：(a) 记录里出现过的对白，可原话引用；(b) 双方明确说过的状态" +
+                            "（去了哪、做了什么、心情如何、身体怎么样）；(c) 系统事实（时间、一起听了哪几首、听了多久）。" +
+                            "除此以外的一切动作、表情、环境、氛围、心理描写都不许写——" +
+                            "「他哼起了歌」「靠在椅背上敲桌面」这类记录里没有的细节一个都不要。\n" +
+                            "2. 逐段自检：每一段都要能在记录里找到对应的原句，找不到就整段删掉；宁可短，不许凑。\n" +
+                            "3. 不补对白、不补结尾：对话在记录里中断就如实写到中断处为止，不要替它补一个收场，" +
                             "不要使用「突然」「叫住」「要求你回来」这类记录里没有的戏剧化收尾。\n" +
-                            "2. 对话在记录里中断就如实写到中断处为止，不要替它补一个收场。\n" +
-                            "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
+                            "4. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，两个人的动作不要合并成一句；分不清谁做、谁说的，宁可不写这句。\n" +
-                            "4. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
+                            "5. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
+                            "隔着手机聊天——不写任何需要共享物理空间的动作（「歪头看向手机屏幕」「把手机推过来」" +
+                            "「递过去」之类），也不要把任何一方搬到对方的城市。" +
+                            "设定里没写的地方，就写「那边」「国内」「首尔」这种不具体的地点，不要猜。\n" +
+                            "6. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
+                            settingBriefText +
                             "【关键锚点】\n" +
                             "· 3–5 条，每条写「状态推移 + 原话引用」（例如：约好下次一起去海边 → 他答应了，原话「等你有空」）\n" +
                             "· 不收瞬时状态：正在听哪首歌、发了几个表情、今天吃了几顿饭这类不进锚点\n\n" +
                             "【当前锚点】\n" +
-                            "· 时间地点与在场的人\n" +
+                            "· 时间 + 双方各自所在地（按设定写，不确定就写「各自那边」，不许写成在一起）\n" +
                             "· 双方各自的状态各一句\n" +
                             "· 已聊过：…（一行，防止重复聊同一件事）\n" +
                             "· 待发生：…（1–2 条线头）\n\n" +
@@ -174,7 +190,7 @@ export function ChatArchivePanel({
         } finally {
             setSummarizing(false);
         }
-    }, [collectTranscript, characterName, onNotice]);
+    }, [collectTranscript, characterId, characterName, onNotice]);
 
     const handleConfirmArchive = useCallback(async () => {
         const text = draft.trim();

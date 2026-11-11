@@ -343,22 +343,88 @@ function mergeLyricsWithTranslation(lrc: string, tlyric: string): string {
     return out.join("\n");
 }
 
+/** 网易云对部分歌曲只返回「作词 : X / 编曲 : Y」这类制作信息行，一句正词都没有。 */
+const LYRIC_CREDIT_RE =
+    /^[\[\(（]\s*(作词|作曲|编曲|制作人|监制|出品|发行|录音师?|混音|母带|吉他|贝斯|鼓|键盘|和声|弦乐|统筹|企划|词|曲|lyrics?|words|composed?|composer|arranged?|arranger|produced?|producer|mixed?|mastered?|mastering|music|guitar|bass|drums?|keyboard|vocals?|strings|chorus|label|publishing|copyright|distributed)\s*[:：]/i;
+
+/** 判断 LRC 是否真的带逐行歌词：只有制作信息行 / 没有时间轴，都算不可用。 */
+export function isUsableLyrics(lrc: string): boolean {
+    if (!lrc) return false;
+    const texts: string[] = [];
+    for (const line of lrc.split("\n")) {
+        const parsed = parseTimedLine(line);
+        if (parsed && parsed.text) texts.push(parsed.text);
+    }
+    if (texts.length === 0) return false;
+    return texts.some(text => !LYRIC_CREDIT_RE.test(text));
+}
+
+/** 备用歌词端点 /lyric/new（有的代理没部署，失败就当没有）。 */
+async function fetchLyricNew(base: string, songId: number): Promise<{ lrc: string; tlyric: string }> {
+    try {
+        const resp = await fetch(withNeteaseParams(`${base}/lyric/new?id=${songId}`));
+        const data = await resp.json();
+        return {
+            lrc: String(data?.lrc?.lyric || data?.yrc?.lyric || ""),
+            tlyric: String(data?.tlyric?.lyric || ""),
+        };
+    } catch {
+        return { lrc: "", tlyric: "" };
+    }
+}
+
 /** Get lyrics for a Netease song */
 export async function getNeteaseLyrics(songId: number): Promise<string> {
     const base = neteaseBase();
     if (!base) return "";
-    try {
-        const resp = await fetch(withNeteaseParams(`${base}/lyric?id=${songId}`));
-        const data = await resp.json();
-        const lrc: string = data?.lrc?.lyric || "";
-        const tlyric: string = data?.tlyric?.lyric || "";
-        // 官方中文翻译缓存下来（提示词那边还会单独用）
-        lyricTranslationCache.set(songId, tlyric);
-        // 播放器直接显示双语：韩语歌只给原文，用户看不懂也没法聊
-        return mergeLyricsWithTranslation(lrc, tlyric);
-    } catch {
-        return "";
+
+    const fetchLyric = async (id: number): Promise<{ lrc: string; tlyric: string }> => {
+        try {
+            const resp = await fetch(withNeteaseParams(`${base}/lyric?id=${id}`));
+            const data = await resp.json();
+            return { lrc: String(data?.lrc?.lyric || ""), tlyric: String(data?.tlyric?.lyric || "") };
+        } catch {
+            return { lrc: "", tlyric: "" };
+        }
+    };
+
+    let { lrc, tlyric } = await fetchLyric(songId);
+
+    // ① 只有制作信息时，换 /lyric/new 端点再试一次
+    if (!isUsableLyrics(lrc)) {
+        const alt = await fetchLyricNew(base, songId);
+        if (isUsableLyrics(alt.lrc)) {
+            lrc = alt.lrc;
+            if (!tlyric) tlyric = alt.tlyric;
+        }
     }
+
+    // ② 还拿不到：按「歌名 + 歌手」搜同曲的另一条记录再试（被版权卡掉歌词的版本很常见）
+    if (!isUsableLyrics(lrc)) {
+        try {
+            const detail = await getNeteaseSongDetail(songId);
+            const query = [detail?.name, detail?.artists].filter(Boolean).join(" ").trim();
+            if (query) {
+                const candidates = await searchNetease(query, 6);
+                for (const song of candidates.slice(0, 4)) {
+                    if (!song?.id || Number(song.id) === songId) continue;
+                    const alt = await fetchLyric(Number(song.id));
+                    if (isUsableLyrics(alt.lrc)) {
+                        lrc = alt.lrc;
+                        if (!tlyric) tlyric = alt.tlyric;
+                        break;
+                    }
+                }
+            }
+        } catch { /* 搜不到就算了 */ }
+    }
+
+    // 官方中文翻译缓存下来（提示词那边还会单独用）
+    lyricTranslationCache.set(songId, tlyric);
+    // 实在没有逐行歌词就返回空串，让播放器显示「暂无歌词」，别把制作信息当歌词
+    if (!isUsableLyrics(lrc)) return "";
+    // 播放器直接显示双语：韩语歌只给原文，用户看不懂也没法聊
+    return mergeLyricsWithTranslation(lrc, tlyric);
 }
 
 /** Get song detail (cover, artist ids, etc.) */
