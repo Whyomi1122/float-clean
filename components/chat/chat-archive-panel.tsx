@@ -7,7 +7,7 @@ import { loadMemoryEntriesByType } from "@/lib/memory-storage";
 import { commitArchive, deleteArchive, pruneOlderChatArchives } from "@/lib/memory-service";
 import { simpleLLMCall } from "@/lib/api-helpers";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
-import { buildArchiveSettingBrief } from "@/lib/archive-setting-brief";
+import { buildArchiveContextPack } from "@/lib/archive-context-pack";
 import type { MemoryEntry } from "@/lib/memory-types";
 
 const DRAFT_STORE_PREFIX = "ai_phone_chat_archive_draft_";
@@ -131,10 +131,15 @@ export function ChatArchivePanel({
                     p,
                     new Promise<T>((_, rej) => setTimeout(() => rej(new Error("请求超时（60秒无响应）")), ms)),
                 ]);
-            const settingBrief = buildArchiveSettingBrief(characterId, characterName);
-            const settingBriefText = settingBrief
-                ? "【设定（只用来判断双方各自在哪里、是什么关系，不得据此编造事件、动作或场景）】\n" +
-                settingBrief + "\n\n"
+            // 背景包：人设 + 世界书 + 长期记忆 + 既往归档（归档原本什么都看不到，只能瞎猜地点关系）
+            const pack = await buildArchiveContextPack(characterId);
+            const settingsText = pack.settings
+                ? "【角色设定与世界书（只用来判断双方各自在哪、什么关系，不得据此编造本次记录之外的情节）】\n" +
+                pack.settings + "\n\n"
+                : "";
+            const historyText = pack.history
+                ? "【长期记忆与既往归档（只当已知背景，不要复述，也不要当成这次发生的事）】\n" +
+                pack.history + "\n\n"
                 : "";
             const res = await withTimeout(simpleLLMCall(
                 apiConfig,
@@ -164,7 +169,8 @@ export function ChatArchivePanel({
                             "「递过去」之类），也不要把任何一方搬到对方的城市。" +
                             "设定里没写的地方，就写「那边」「国内」「首尔」这种不具体的地点，不要猜。\n" +
                             "6. 标注为「[语音]」的内容是角色说出口的话，可作为对白引用。\n\n" +
-                            settingBriefText +
+                            settingsText +
+                            historyText +
                             "【关键锚点】\n" +
                             "· 3–5 条，每条写「状态推移 + 原话引用」（例如：约好下次一起去海边 → 他答应了，原话「等你有空」）\n" +
                             "· 不收瞬时状态：正在听哪首歌、发了几个表情、今天吃了几顿饭这类不进锚点\n\n" +
@@ -205,7 +211,9 @@ export function ChatArchivePanel({
                         },
                         {
                             role: "user",
-                            content: "【聊天记录】\n" + transcript + "\n\n【待审校的归档草稿】\n" + firstDraft,
+                            content:
+                                (settingsText ? settingsText : "") +
+                                "【聊天记录】\n" + transcript + "\n\n【待审校的归档草稿】\n" + firstDraft,
                         },
                     ],
                     { temperature: 0.1, label: "chat-archive-check" },
