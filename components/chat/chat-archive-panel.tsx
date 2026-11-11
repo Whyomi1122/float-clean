@@ -184,7 +184,36 @@ export function ChatArchivePanel({
                 onNotice(res.error || "提炼失败");
                 return;
             }
-            setDraft(res.content.trim());
+            const firstDraft = res.content.trim();
+            // 第二轮自检：逐句核对，把记录里找不到依据的句子删掉。
+            // 归档是手动触发，多花一次调用（成本×2）换「不编」，失败就退回第一版。
+            let finalText = firstDraft;
+            try {
+                const checked = await withTimeout(simpleLLMCall(
+                    apiConfig,
+                    [
+                        {
+                            role: "system",
+                            content:
+                                "你是归档审校员。下面给你一份聊天记录和一份归档草稿。\n" +
+                                "逐句核对草稿：每一句都必须在聊天记录里找到依据（出现过的对白、双方明确说过的状态、系统事实）。\n" +
+                                "1. 记录里没有的动作、表情、环境、氛围、心理描写，编造的对白与结尾，全部删掉。\n" +
+                                "2. 把两人写成同一空间、共享物理空间的句子（「歪头看向手机屏幕」「把手机推过来」「递过去」等），" +
+                                "改写成各自在各自所在地、隔着手机。\n" +
+                                "3. 不要新增任何内容，不要改格式，不要加解释，不要写修订说明。\n" +
+                                "按原格式输出修订后的全文（纯文本）。草稿若已全部有依据，就原样输出。",
+                        },
+                        {
+                            role: "user",
+                            content: "【聊天记录】\n" + transcript + "\n\n【待审校的归档草稿】\n" + firstDraft,
+                        },
+                    ],
+                    { temperature: 0.1, label: "chat-archive-check" },
+                ), 60000);
+                const checkedText = checked.content?.trim();
+                if (checkedText && checkedText.includes("─────")) finalText = checkedText;
+            } catch { /* 自检失败就用第一版 */ }
+            setDraft(finalText);
         } catch (e) {
             onNotice(e instanceof Error ? e.message : "提炼失败");
         } finally {
