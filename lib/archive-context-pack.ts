@@ -5,7 +5,7 @@
 // 这里把该同步的上下文按顺序拼好一起喂进去（每段都有字数上限，别把转录挤没）：
 //   1. 角色设定（persona + 时区）
 //   2. 世界书（绑定在「聊天」上的书，全部启用条目）
-//   3. 长期记忆（核心记忆 + 长期记忆）
+//   3. 长期记忆（核心记忆已于 2026-10-15 废弃，不再注入）
 //   4. 既往归档（只当背景，不要求复述）
 //
 // 归档正文本身仍然只写「这次聊天记录里有的东西」，背景只用于判断地点、关系与已发生过的事。
@@ -13,12 +13,8 @@
 import { loadCharacters } from "./character-storage";
 import { loadWorldBooks, loadBindingConfig, resolveBinding, resolveUserIdentity } from "./settings-storage";
 import { loadMemoryConfig } from "./memory-storage";
-import {
-    retrieveMemoriesForPrompt,
-    retrieveCoreMemoriesForPrompt,
-    retrieveArchivesForPrompt,
-} from "./memory-service";
-import { formatArchivesForPrompt, formatLongTermMemories, formatCoreMemories } from "./memory-injector";
+import { retrieveMemoriesForPrompt, retrieveArchivesForPrompt } from "./memory-service";
+import { formatArchivesForPrompt, formatLongTermMemories } from "./memory-injector";
 
 const LIMITS = {
     persona: 2000,
@@ -96,13 +92,11 @@ export async function buildArchiveContextPack(characterId: string): Promise<{ se
     let history = "";
     try {
         const memConfig = loadMemoryConfig();
-        const [memResults, coreResults, archiveResults] = await Promise.all([
+        const [memResults, archiveResults] = await Promise.all([
             retrieveMemoriesForPrompt(characterId, settings, memConfig).catch(() => null),
-            retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => null),
             retrieveArchivesForPrompt(characterId, memConfig).catch(() => null),
         ]);
         const pieces = [
-            coreResults ? clip(formatCoreMemories(coreResults), LIMITS.memories) : "",
             memResults ? clip(formatLongTermMemories(memResults), LIMITS.memories) : "",
             archiveResults ? clip(formatArchivesForPrompt(archiveResults), LIMITS.archives) : "",
         ].filter(Boolean);
