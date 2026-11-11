@@ -5,22 +5,21 @@
 // 这里把该同步的上下文按顺序拼好一起喂进去（每段都有字数上限，别把转录挤没）：
 //   1. 角色设定（persona + 时区）
 //   2. 世界书（绑定在「聊天」上的书，全部启用条目）
-//   3. 长期记忆（核心记忆已于 2026-10-15 废弃，不再注入）
-//   4. 既往归档（只当背景，不要求复述）
+//   3. 长期记忆（核心记忆已于 2026-10-15 废弃，不再注入；归档由归档面板单独喂）
+//   4. 归档的「上一版」不在这里读：归档面板自己读最新那条，避免重复注入。
 //
 // 归档正文本身仍然只写「这次聊天记录里有的东西」，背景只用于判断地点、关系与已发生过的事。
 
 import { loadCharacters } from "./character-storage";
 import { loadWorldBooks, loadBindingConfig, resolveBinding, resolveUserIdentity } from "./settings-storage";
 import { loadMemoryConfig } from "./memory-storage";
-import { retrieveMemoriesForPrompt, retrieveArchivesForPrompt } from "./memory-service";
-import { formatArchivesForPrompt, formatLongTermMemories } from "./memory-injector";
+import { retrieveMemoriesForPrompt } from "./memory-service";
+import { formatLongTermMemories } from "./memory-injector";
 
 const LIMITS = {
     persona: 2000,
     worldBook: 4000,
     memories: 1500,
-    archives: 2000,
 };
 
 function clip(text: string, max: number): string {
@@ -81,27 +80,21 @@ function buildWorldBookSection(characterId: string): string {
 /**
  * 归档用的完整背景包。
  * - settings：人设 + 时区 + 世界书（够判断双方各自在哪、是什么关系）
- * - history：长期记忆 + 既往归档（知道之前发生过什么，避免重复叙述）
+ * - memories：长期记忆（知道更早发生过什么，避免重复叙述；上一版归档由归档面板单独喂）
  */
-export async function buildArchiveContextPack(characterId: string): Promise<{ settings: string; history: string }> {
-    if (typeof window === "undefined") return { settings: "", history: "" };
+export async function buildArchiveContextPack(characterId: string): Promise<{ settings: string; memories: string }> {
+    if (typeof window === "undefined") return { settings: "", memories: "" };
     const settings = [buildSettingsSection(characterId), buildWorldBookSection(characterId)]
         .filter(Boolean)
         .join("\n\n");
 
-    let history = "";
+    // 只给长期记忆：归档本身（上一版）由归档面板单独喂，避免重复注入
+    let memories = "";
     try {
         const memConfig = loadMemoryConfig();
-        const [memResults, archiveResults] = await Promise.all([
-            retrieveMemoriesForPrompt(characterId, settings, memConfig).catch(() => null),
-            retrieveArchivesForPrompt(characterId, memConfig).catch(() => null),
-        ]);
-        const pieces = [
-            memResults ? clip(formatLongTermMemories(memResults), LIMITS.memories) : "",
-            archiveResults ? clip(formatArchivesForPrompt(archiveResults), LIMITS.archives) : "",
-        ].filter(Boolean);
-        history = pieces.join("\n\n");
+        const memResults = await retrieveMemoriesForPrompt(characterId, settings, memConfig).catch(() => null);
+        if (memResults) memories = clip(formatLongTermMemories(memResults), LIMITS.memories);
     } catch { /* 记忆读不到就算了 */ }
 
-    return { settings, history };
+    return { settings, memories };
 }

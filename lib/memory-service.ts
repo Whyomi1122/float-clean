@@ -170,6 +170,35 @@ export async function commitArchive(
 }
 
 /**
+ * 原地更新一条归档（普通模式归档是「单条滚动」的：增量追加，不新建、不删旧）。
+ */
+export async function updateArchiveEntry(
+    characterId: string,
+    entryId: string,
+    content: string,
+): Promise<{ success: boolean; error?: string; contentHash?: string }> {
+    const trimmed = content.trim();
+    if (!trimmed) return { success: false, error: "内容为空" };
+
+    const { computeContentHash } = await import("./memory-types");
+    const { saveMemoryEntry } = await import("./memory-storage");
+
+    const existing = await loadMemoryEntriesByType(characterId, "archive");
+    const target = existing.find(entry => entry.id === entryId);
+    if (!target) return { success: false, error: "找不到那条归档（可能已被删除）" };
+
+    const hash = computeContentHash(trimmed);
+    const now = new Date().toISOString();
+    await saveMemoryEntry({
+        ...target,
+        content: trimmed,
+        updatedAt: now,
+        metadata: { ...(target.metadata || {}), contentHash: hash, archivedAt: now },
+    });
+    return { success: true, contentHash: hash };
+}
+
+/**
  * 聊天归档「同角色只留最新」：写入新的普通模式归档后，把本聊天室更旧的归档清掉。
  * 刻意不走 deleteArchive（不进墓碑），否则用户之后重写同样内容会被指纹拦下。
  * 一起听记录（metadata.listenRecord）与群像归档（ensembleScriptId）不在此列，各自保留。
