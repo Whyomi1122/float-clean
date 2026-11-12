@@ -154,6 +154,8 @@ export function ChatArchivePanel({
         const userName = resolveUserIdentity(characterId, "chat")?.name?.trim() || "用户";
         const msgs: ChatMessage[] = loadChatMessages(sessionId);
         const lines: string[] = [];
+        let lastDayKey = "";
+        const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
         for (const m of msgs) {
             if (m.isRetracted) continue;
             // 剧情模式（群像投递进来的那几段）归群像剧本自己的归档，这里只吃普通聊天
@@ -162,12 +164,69 @@ export function ChatArchivePanel({
             if (!role) continue;
             const text = messageTranscriptText(m);
             if (!text) continue;
-            // 每行带发送时刻：归档要靠它判断「隔了多久才回」「聊到几点」
-            const stamp = m.createdAt ? fmtClock(new Date(m.createdAt)) : "";
+            // 每行带「日期 + 时刻」：模型必须靠这个判断跨天与「隔了多久才回」，不许自己猜
+            const when = m.createdAt ? new Date(m.createdAt) : null;
+            const dayKey = when ? dayKeyOf(when) : "";
+            if (when && dayKey !== lastDayKey) {
+                lines.push(`—— ${when.getMonth() + 1}月${when.getDate()}日 ${WEEKDAY_CN[when.getDay()]} ——`);
+                lastDayKey = dayKey;
+            }
+            const stamp = when ? fmtClock(when) : "";
             lines.push(stamp ? `${stamp} ${role}：${text}` : `${role}：${text}`);
         }
         return lines.join("\n").trim();
     }, [sessionId, characterName, characterId]);
+
+    /** 本轮系统事实（代码算，不让模型猜）：本轮时间范围 + 一起听的歌单。 */
+    const collectSessionFacts = useCallback(async (): Promise<string> => {
+        const facts: string[] = [];
+        try {
+            const msgs = await loadChatMessages(sessionId || characterId);
+            const normal = msgs.filter(m => !m.deliverySessionId && !m.isRetracted && (m.role === "user" || m.role === "assistant"));
+            const times = normal.map(m => m.createdAt).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+            if (times.length > 0) {
+                const first = new Date(times[0]);
+                const last = new Date(times[times.length - 1]);
+                facts.push(
+                    `· 本轮聊天时间：${first.getMonth() + 1}-${pad2(first.getDate())} ${WEEKDAY_CN[first.getDay()]} ` +
+                    `${fmtClock(first)} 至 ${last.getMonth() + 1}-${pad2(last.getDate())} ${WEEKDAY_CN[last.getDay()]} ${fmtClock(last)}` +
+                    `（共 ${normal.length} 条消息）。段落标题的日期与星期以这行为准。`,
+                );
+            }
+        } catch { /* 读不到就算了 */ }
+        try {
+            const { getListenSession } = await import("@/lib/listen-together-session");
+            const session = getListenSession();
+            if (session && (session.tracks?.length || 0) > 0) {
+                const start = new Date(session.startedAt);
+                const songs = session.tracks
+                    .map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title))
+                    .filter(Boolean);
+                const minute = Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000));
+                facts.push(
+                    `· 一起听（进行中/刚结束）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)} 起，` +
+                    `两人隔着手机一起听歌 ${minute} 分钟，放了 ${songs.length} 首：\n` +
+                    songs.map(s => `  - ${s}`).join("\n") +
+                    `\n  这件事要写进正文，并在正文最后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(new Date())}，${songs.length} 首】`,
+                );
+            }
+        } catch { /* 一起听状态读不到就算了 */ }
+        return facts.length > 0 ? "【本轮系统事实（代码生成，直接可信，以此为准）】\n" + facts.join("\n") + "\n\n" : "";
+    }, [sessionId, characterId]);
+
+    /** 一起听 footer（代码兜底，模型漏了也补）：`【一起听：11月11日 20:35–21:10，8 首】` */
+    const collectListenFootnote = useCallback(async (): Promise<string> => {
+        try {
+            const { getListenSession } = await import("@/lib/listen-together-session");
+            const session = getListenSession();
+            if (!session || (session.tracks?.length || 0) <= 0) return "";
+            const start = new Date(session.startedAt);
+            const end = new Date();
+            return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
+        } catch {
+            return "";
+        }
+    }, []);
 
     const handleSummarize = useCallback(async () => {
         const transcript = collectTranscript();
@@ -191,6 +250,7 @@ export function ChatArchivePanel({
                 ]);
             // 背景包：人设 + 世界书 + 长期记忆（归档上一版单独喂，见下）
             const pack = await buildArchiveContextPack(characterId);
+            const factsText = await collectSessionFacts();
             const settingsText = pack.settings
                 ? "【角色设定与世界书（只用来判断双方各自在哪、什么关系，不得据此编造本轮记录之外的情节）】\n" +
                 pack.settings + "\n\n"
@@ -227,22 +287,30 @@ export function ChatArchivePanel({
                             "· 关系变化：…\n" +
                             "· 待兑现：…\n\n" +
                             "【写法要求】\n" +
-                            "1. 只写这一轮记录里真实发生的内容。可以写动作、场景、语气，以及这一方对另一方行为的判断，" +
-                            "但每一句都要能在本轮记录里找到依据；不许凭空补对白、不许补结尾、" +
-                            "不许加记录里没有的环境与氛围细节。\n" +
-                            "2. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
+                            "1. 只写这一轮记录里真实发生的内容。这一轮是「隔着手机聊天」：双方各自在各自所在地，" +
+                            "记录里只有打字、发语音、发图片这些动作——除此之外的一切肢体动作" +
+                            "（放下手机、贴在耳边、倒扣在床头柜、指着窗外、抬头、转身、走到谁身边）" +
+                            "都是记录里不存在的，一个都不许写。可以写「他说」「她发来」「隔着屏幕」，仅此而已。\n" +
+                            "2. 可以写语气与判断（「像是赌气」「听起来不高兴」），但必须有记录依据；" +
+                            "不许凭空补对白、不许补结尾、不许加记录里没有的环境细节（雨声、霓虹灯、床头柜）。\n" +
+                            "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，分不清谁做、谁说的，宁可不写这句。\n" +
                             "3. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
                             "隔着手机——不写任何需要共享物理空间的动作（「歪头看向手机屏幕」「把手机推过来」「递过去」之类），" +
                             "也不要把任何一方搬到对方的城市；设定里没写的地方就写「那边」「国内」「首尔」。\n" +
-                            "4. 段落标题用真实时刻「【11-11 周二 20:35 - 21:10】」，时间取记录每行前面的 HH:MM。" +
-                            "跨天、跨时段就分段。\n" +
+                            "4. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
+                            "日期与星期从记录的日期分隔行和【本轮系统事实】里取，时刻取每行前面的 HH:MM。" +
+                            "标题里不要写人名。跨天、跨时段就分段。\n" +
                             "5. 「[语音]」是角色说出口的话，可原话引用；「[图片]/[红包]/[位置]/[音乐分享]/[通话]」" +
                             "这类是真实发生过的动作，要写清楚发生了什么、对方怎么接的。\n" +
-                            "6. 【关键锚点】整块重写：在上一版锚点的基础上更新，五类都写，" +
-                            "某一类确实没有变化就写「无变化」，不要留空。\n" +
-                            "7. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
-                            "8. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
+                            "6. 台词必须保持记录里的原语言，禁止翻译或改写：记录里是中文就引中文，" +
+                            "记录里是韩语（角色偶尔用韩语回）才引韩语。绝对禁止把中文台词自行翻成韩语再写进归档，" +
+                            "也禁止给没说过的话配外语版本。\n" +
+                            "7. 【关键锚点】整块重写：在上一版锚点的基础上更新，五类都写，" +
+                            "某一类确实没有变化就写「无变化」，不要留空。锚点里禁止出现记录中不存在的概念" +
+                            "（如「权限」「授权」「邀约」这类记录里没提过的词）。\n" +
+                            "8. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
+                            "9. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
                             settingsText +
                             "【输出前的自检】每写一段，回查本轮记录：这条信息是哪句话/哪个媒体给的？" +
                             "找不到依据的句子直接删掉，宁短不凑。",
@@ -251,8 +319,9 @@ export function ChatArchivePanel({
                         role: "user",
                         content:
                             memoriesText +
+                            factsText +
                             previousText +
-                            "【本轮聊天记录（每行前面是发送时间 HH:MM）】\n" + transcript,
+                            "【本轮聊天记录（每行前面是发送时间 HH:MM，跨天会插日期分隔行）】\n" + transcript,
                     },
                 ],
                 { temperature: 0.3, label: "chat-archive" },
@@ -277,15 +346,20 @@ export function ChatArchivePanel({
                             content:
                                 "你是归档审校员。给你本轮聊天记录和一段新增归档，逐句核对：" +
                                 "每一句都必须能在这轮记录里找到依据（出现过的对白、媒体事件、双方明确说过的状态）。\n" +
-                                "1. 记录里没有的动作、表情、环境、氛围、心理判断，编造的对白与结尾，全部删掉。\n" +
-                                "2. 把写成同一空间、共享物理空间的句子（「歪头看向手机屏幕」「把手机推过来」「递过去」等），" +
-                                "改写成各自在各自所在地、隔着手机。\n" +
-                                "3. 不要新增内容，不要改格式，不要写解释或修订说明。\n" +
-                                "4. 原样输出这两块：【新增段落】…【关键锚点】…（五类都保留）。",
+                                "1. 这一轮是隔着手机聊天：记录里没有的肢体动作（放下手机、贴在耳边、倒扣在床头柜、" +
+                                "指着窗外、抬头、转身），编造的韩语/外语台词，编造的对白与结尾，全部删掉。\n" +
+                                "2. 台词保持原语言：中文台词不许被翻成韩语。\n" +
+                                "3. 把写成同一空间、共享物理空间的句子，改写成各自在各自所在地、隔着手机。\n" +
+                                "4. 段落标题必须是「【MM-DD 周X HH:MM - HH:MM】」格式，不带人名；" +
+                                "日期星期以【本轮系统事实】为准。\n" +
+                                "5. 锚点里出现记录中不存在的概念（「权限」「授权」等）就删掉。\n" +
+                                "6. 不要新增内容，不要改格式，不要写解释或修订说明。\n" +
+                                "7. 原样输出这两块：【新增段落】…【关键锚点】…（五类都保留）。",
                         },
                         {
                             role: "user",
                             content:
+                                factsText +
                                 settingsText +
                                 "【本轮聊天记录】\n" + transcript +
                                 "\n\n【待审校的新增部分】\n【新增段落】\n" + added.body +
@@ -300,15 +374,17 @@ export function ChatArchivePanel({
                     if (revised.body) added = { body: revised.body, anchors: revised.anchors || added.anchors };
                 }
             } catch { /* 自检失败就用第一版 */ }
+            // 一起听 footer 由代码兜底：模型漏写也补上（只按本轮系统事实拼，不去重模型写过的）
+            const factsFootnote = await collectListenFootnote();
             const bodyParts = [previousParts.body, added.body].filter(Boolean).join("\n\n");
             const anchorPart = added.anchors || previousParts.anchors;
-            setDraft([header, bodyParts, anchorPart].filter(Boolean).join("\n\n"));
+            setDraft([header, bodyParts, factsFootnote, anchorPart].filter(Boolean).join("\n\n"));
         } catch (e) {
             onNotice(e instanceof Error ? e.message : "提炼失败");
         } finally {
             setSummarizing(false);
         }
-    }, [collectTranscript, characterId, characterName, onNotice]);
+    }, [collectTranscript, collectSessionFacts, collectListenFootnote, characterId, characterName, onNotice]);
 
     const handleConfirmArchive = useCallback(async () => {
         const text = draft.trim();
