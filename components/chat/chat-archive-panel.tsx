@@ -36,17 +36,25 @@ function messageTranscriptText(m: ChatMessage): string {
     }
     // 其他富媒体（红包/转账/位置/礼物/名片/音乐分享/贴纸…）：尽量留下「发生过什么」，别整行丢掉
     if (m.mediaType || m.mediaData) {
-        const kind = (m.mediaData as { type?: string } | undefined)?.type || "";
+        const media = m.mediaData as
+            | { type?: string; musicTitle?: string; musicArtist?: string; musicId?: string | number; amount?: string | number; place?: string }
+            | undefined;
+        const kind = media?.type || "";
+        // 音乐分享卡：mediaType 就是 "music_share"，歌名在 mediaData.musicTitle
+        if (m.mediaType === "music_share" || kind === "music_share") {
+            const title = media?.musicTitle || text || label || "";
+            const artist = media?.musicArtist ? ` - ${media.musicArtist}` : "";
+            return title ? `[音乐分享] ${title}${artist}` : "[音乐分享]";
+        }
         const tag =
-            kind === "music_share" ? "[音乐分享]" :
-                kind === "red_packet" || kind === "transfer" ? "[红包]" :
-                    kind === "location" ? "[位置]" :
-                        kind === "voice_call" ? "[通话]" :
-                            kind === "sticker" ? "[贴纸]" :
-                                kind === "gift" ? "[礼物]" :
-                                    kind === "contact_card" || kind === "app_card" ? "[卡片]" :
-                                        kind === "quote" ? "[引用]" :
-                                            m.mediaType === "video" ? "[视频]" : "";
+            m.mediaType === "red_packet" || kind === "red_packet" || kind === "transfer" ? "[红包]" :
+                m.mediaType === "location" || kind === "location" ? "[位置]" :
+                    m.mediaType === "voice_call" || kind === "voice_call" ? "[通话]" :
+                        m.mediaType === "sticker" || kind === "sticker" ? "[贴纸]" :
+                            m.mediaType === "gift" || kind === "gift" ? "[礼物]" :
+                                m.mediaType === "contact_card" || m.mediaType === "app_card" || kind === "contact_card" || kind === "app_card" ? "[卡片]" :
+                                    kind === "quote" ? "[引用]" :
+                                        m.mediaType === "video" ? "[视频]" : "";
         const body = text || label;
         if (tag) return body ? `${tag} ${body}` : tag;
     }
@@ -160,6 +168,13 @@ export function ChatArchivePanel({
             if (m.isRetracted) continue;
             // 剧情模式（群像投递进来的那几段）归群像剧本自己的归档，这里只吃普通聊天
             if (m.deliverySessionId) continue;
+            // 系统事件行（「正在加入播放列表…」「已加入播放列表，共 1 首」）照单收：
+            // 「加进去了」这类含糊台词全靠它才不会被误读成「加了好友」
+            if (m.role === "system") {
+                const sys = (m.content || m.mediaData?.label || "").trim();
+                if (sys) lines.push(`[系统] ${sys}`);
+                continue;
+            }
             const role = m.role === "user" ? userName : m.role === "assistant" ? characterName : null;
             if (!role) continue;
             const text = messageTranscriptText(m);
@@ -331,14 +346,18 @@ export function ChatArchivePanel({
                             "不许凭空补对白、不许补结尾、不许加记录里没有的环境细节（雨声、霓虹灯、床头柜）。\n" +
                             "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，分不清谁做、谁说的，宁可不写这句。\n" +
-                            "4. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
+                            "4. 「语气带着不耐烦」这类笼统标签一次都不许用：每写一处语气，必须落到他/她的具体用词上" +
+                            "（例：「他连回三条都是短句，是真的烦了」），说不出具体依据就不写语气。\n" +
+                            "5. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
                             "隔着手机——不写任何需要共享物理空间的动作（「歪头看向手机屏幕」「把手机推过来」「递过去」之类），" +
                             "也不要把任何一方搬到对方的城市；设定里没写的地方就写「那边」「国内」「首尔」。\n" +
                             "5. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
                             "日期与星期从记录的日期分隔行和【本轮系统事实】里取，时刻取每行前面的 HH:MM。" +
                             "标题里不要写人名。跨天、跨时段就分段。\n" +
                             "5. 「[语音]」是角色说出口的话，可原话引用；「[图片]/[红包]/[位置]/[音乐分享]/[通话]」" +
-                            "这类是真实发生过的动作，要写清楚发生了什么、对方怎么接的。\n" +
+                            "这类是真实发生过的动作，要写清楚发生了什么、对方怎么接的。「[系统]」行是手机系统的动作" +
+                            "（如「正在加入播放列表」「已加入播放列表」），照实写成「把歌加进了一起听的播放列表」——" +
+                            "不是加了好友、不是联系方式，不许引申。\n" +
                             "6. 台词必须保持记录里的原语言，禁止翻译或改写：记录里是中文就引中文，" +
                             "记录里是韩语（角色偶尔用韩语回）才引韩语。绝对禁止把中文台词自行翻成韩语再写进归档，" +
                             "也禁止给没说过的话配外语版本。\n" +

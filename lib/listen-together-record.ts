@@ -40,9 +40,8 @@ export function buildListenRecordContent(session: ListenSession, endedAt: Date =
     const lines = [
         `─────  归档 · 普通模式 · 至 ${archiveDate}  ─────`,
         `【普通模式 · ${sectionDate}】一起听`,
-        songs.length > 0
-            ? `${clock(startSafe)} 起，${partner}和${userName}隔着手机一起听歌，${duration}里放了 ${songs.length} 首：`
-            : `${clock(startSafe)} 起，${partner}和${userName}隔着手机一起听了 ${duration}，没有放歌，主要是在聊天。`,
+        `${clock(startSafe)} 起，${partner}和${userName}隔着手机一起听歌，${duration}里放了 ${songs.length} 首。`,
+        `哪首是谁放的、对方怎么接的：看聊天记录，这里不展开。`,
         ...songs,
         `${clock(endedAt)} 结束。`,
         `【一起听：${dateLabel} ${clock(startSafe)}–${clock(endedAt)}，${songs.length} 首】`,
