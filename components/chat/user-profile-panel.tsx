@@ -621,7 +621,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">一起听写进归档</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">结束一起听时，把这一场（时间 + 时长 + 歌单）记进记忆归档</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">结束一起听时写一条歌单存档（只作记录，不进长期记忆——歌单已经写进聊天归档了）</span>
                             </div>
                             <Toggle checked={listenRecordArchiveEnabled} onChange={handleListenRecordToggle} />
                         </div>

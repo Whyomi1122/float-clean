@@ -454,10 +454,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         const base = options?.replace ? [] : queue;
         const seen = new Set(base.map(track => track.id));
         const merged = [...base];
+        let added = 0;
         for (const track of cleanTracks) {
             if (seen.has(track.id)) continue;
             seen.add(track.id);
             merged.push(track);
+            added += 1;
         }
         const nextQueue = merged.slice(0, QUEUE_MAX_SIZE);
         setQueueRaw(nextQueue);
@@ -466,9 +468,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             await playResolvedTrack(cleanTracks[0]);
         }
 
+        // 反馈必须说真话：重复的歌会跳过，不能还报「已加入」
+        const firstTitle = cleanTracks[0]?.title || "";
+        const label = cleanTracks.length > 1 ? `《${firstTitle}》等 ${cleanTracks.length} 首` : `《${firstTitle}》`;
+        let message: string;
+        if (options?.replace) {
+            message = `已替换播放列表，共 ${nextQueue.length} 首`;
+        } else if (added > 0) {
+            message = `已加入播放列表${label}，列表共 ${nextQueue.length} 首`;
+        } else {
+            message = `${label}已经在播放列表里了，列表共 ${nextQueue.length} 首`;
+        }
         return {
             ok: true,
-            message: options?.replace ? `已替换播放列表，共 ${cleanTracks.length} 首` : `已加入播放列表，共 ${cleanTracks.length} 首`,
+            message,
             queue: nextQueue.length > 0 ? nextQueue : cleanTracks,
         };
     }, [playResolvedTrack, queue]);

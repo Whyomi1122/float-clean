@@ -103,6 +103,9 @@ export async function retrieveArchivesForPrompt(
     // 写入侧已经会清掉旧条目，这里是兜底（老数据 / 清理失败时也不会重复注入）。
     const seenEnsembleKeys = new Set<string>();
     const deduped = sorted.filter(entry => {
+        // 一起听歌单记录只作存档，不进提示词（2026-11-12）：
+        // 聊天归档正文里已经写了这一轮的歌单，每场一条歌单记录会越攒越多，把真正的剧情归档挤出预算。
+        if (entry.metadata?.listenRecord) return false;
         const key = ensembleArchiveKey(entry);
         if (!key) return true;
         if (seenEnsembleKeys.has(key)) return false;
