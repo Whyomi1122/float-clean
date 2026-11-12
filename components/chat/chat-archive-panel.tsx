@@ -102,6 +102,151 @@ function splitNewParts(text: string): { body: string; anchors: string } {
     return { body: rest.slice(0, idx).trim(), anchors: rest.slice(idx).trim() };
 }
 
+// ─────────────────────────────────────────────────────────────
+// 归档硬校验：以下几条不靠模型自觉，生成后用代码查、代码改
+// ─────────────────────────────────────────────────────────────
+
+/** 正文台词引用上限（超过就是照抄记录，不是叙述） */
+const QUOTE_LIMIT = 10;
+
+/** 隔着手机聊天时不可能存在的描写；记录里真出现过的字眼不算（见 hasCueInTranscript） */
+const BODY_FABRICATION_CUES = [
+    "床头柜", "床沿", "耳边", "窗外", "霓虹", "睫毛", "镜片", "闷响", "指间", "喉结",
+    "抬头", "低头", "转身", "放下手机", "推过来", "递过去", "屏幕转向", "飘着", "细雨", "雨声",
+    "蓝光", "气息", "肩膀", "指尖", "掌心",
+];
+
+/** 锚点里不许出现：记录外的概念、聊天话题、互相的看法 */
+const ANCHOR_FORBIDDEN_CUES = [
+    "权限", "授权", "敏感话题", "邀约", "依赖性", "非对称", "未授权", "认为", "看法", "态度",
+    "不解", "评价", "推测", "认知差异", "可能性", "情绪不稳定",
+];
+
+const ANCHOR_CATEGORIES = ["物品与状态", "认知与事实澄清", "违规隐患", "关系变化", "待兑现"];
+const ANCHOR_DEFAULT = "【关键锚点】\n" + ANCHOR_CATEGORIES.map(k => `· ${k}：无变化`).join("\n");
+
+const hasHangul = (s: string) => /[\uAC00-\uD7A3\u1100-\u11FF]/.test(s);
+
+/** 正文引号数（「…」和 “…” 都算一处台词引用） */
+function countQuoteSpans(text: string): number {
+    return (text.match(/「[^」\n]{1,80}」/g) || []).length + (text.match(/“[^”\n]{1,80}”/g) || []).length;
+}
+
+export type ArchiveIssue = { detail: string };
+
+/**
+ * 代码硬校验：返回不合规清单（空数组=通过）。
+ * 只查四件最要命的事：照抄记录行 / 引号超标 / 编造动作细节 / 锚点跑偏。
+ */
+export function auditArchivePart(body: string, anchors: string, transcript: string): ArchiveIssue[] {
+    const issues: ArchiveIssue[] = [];
+    const push = (detail: string) => { if (issues.length < 8) issues.push({ detail }); };
+
+    // 1) 照抄记录行（「17:02 金成帝：…」原样搬进正文）
+    const copied = body.match(/^\s*\d{1,2}:\d{2}\s+[^：:\n]{1,12}[：:]\s*\S/m);
+    if (copied) push(`正文里还在照抄记录行：${copied[0].trim().slice(0, 40)}`);
+
+    // 2) 引号超标
+    const quotes = countQuoteSpans(body);
+    if (quotes > QUOTE_LIMIT) {
+        push(`正文有 ${quotes} 处引号（上限 ${QUOTE_LIMIT}）：只保留最能代表这一轮的几句原话，其余改成转述、不带引号`);
+    }
+
+    // 3) 隔着手机却写肢体动作 / 环境细节
+    for (const sentence of body.split(/(?<=[。！？\n])/)) {
+        const cues = BODY_FABRICATION_CUES.filter(cue => sentence.includes(cue) && !transcript.includes(cue));
+        if (cues.length > 0) push(`这句写了记录里没有的肢体/环境（${cues.join("、")}）：${sentence.trim().slice(0, 36)}`);
+    }
+
+    // 4) 段落标题缺日期
+    for (const line of body.split("\n")) {
+        const m = line.match(/^【([^】]+)】\s*$/);
+        if (!m) continue;
+        const inner = m[1].trim();
+        if (/\d{1,2}:\d{2}/.test(inner) && !/^\d{1,2}-\d{1,2}/.test(inner)) {
+            push(`段落标题缺日期：${line.trim()}（要写成【MM-DD 周X HH:MM - HH:MM】）`);
+        }
+    }
+
+    // 5) 「用韩语」却写中文，或同一句韩语反复括注
+    for (const m of body.matchAll(/(韩语)[^「\n]{0,10}「([^」]*)」/g)) {
+        if (!hasHangul(m[2])) push(`写了「用韩语」，引号里却是中文：${m[0].slice(0, 30)}`);
+    }
+    const annotated = [...body.matchAll(/「([^」]*[\uAC00-\uD7A3][^」]*)」（[^）\n]{1,20}）/g)].map(m => m[1]);
+    const dupAnnotated = annotated.filter((q, i) => annotated.indexOf(q) !== i);
+    if (dupAnnotated.length > 0) push(`韩语台词重复括注：${dupAnnotated[0].slice(0, 20)}（只在首次出现时注中文）`);
+
+    // 6) 锚点跑偏
+    for (const line of anchors.split("\n")) {
+        const m = line.match(/^\s*[·•\-*]\s*(物品与状态|认知与事实澄清|违规隐患|关系变化|待兑现)\s*[：:]\s*(.*)$/);
+        if (!m) continue;
+        const content = m[2].trim();
+        const bad = ANCHOR_FORBIDDEN_CUES.filter(c => content.includes(c));
+        const fake = BODY_FABRICATION_CUES.filter(c => content.includes(c) && !transcript.includes(c));
+        const badWords = [...bad, ...fake];
+        if (badWords.length > 0) {
+            push(`锚点「${m[1]}」写了${badWords.join("、")}——这不是本轮的状态或约定，删掉后写真实状态，没有就写「无变化」`);
+        }
+    }
+    return issues;
+}
+
+/** 段落标题补日期：模型常只写【16:57 - 17:18】，日期取记录里的日期分隔行 */
+function fixParagraphHeaders(body: string, transcript: string, now: Date): string {
+    const sep = transcript.match(/——\s*(\d{1,2})月(\d{1,2})日\s*(周[一二三四五六日天])?\s*——/);
+    const datePrefix = sep
+        ? `${pad2(Number(sep[1]))}-${pad2(Number(sep[2]))}${sep[3] ? " " + sep[3] : ""}`
+        : `${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${WEEKDAY_CN[now.getDay()]}`;
+    return body.split("\n").map(line => {
+        const m = line.match(/^(\s*)【([^】]+)】\s*$/);
+        if (!m) return line;
+        const inner = m[2].trim();
+        if (/^\d{1,2}-\d{1,2}/.test(inner)) return line;
+        if (!/\d{1,2}:\d{2}/.test(inner)) return line;
+        return `${m[1]}【${datePrefix} ${inner}】`;
+    }).join("\n");
+}
+
+/** 引号超限：保留前 N 处原话，其余去掉引号（读起来是转述，不再是逐句照搬） */
+function trimExcessQuotes(body: string, limit: number): string {
+    let kept = 0;
+    return body
+        .replace(/「[^」\n]{1,80}」/g, m => (++kept <= limit ? m : m.slice(1, -1)))
+        .replace(/“[^”\n]{1,80}”/g, m => (++kept <= limit ? m : m.slice(1, -1)));
+}
+
+/** 兜底删句：记录里没有的肢体/环境分句，直接从句子里剪掉 */
+function dropFabricatedClauses(body: string, transcript: string): string {
+    const cues = BODY_FABRICATION_CUES.filter(c => !transcript.includes(c));
+    if (cues.length === 0) return body;
+    const pattern = new RegExp(`[^。，；！？\\n]*(${cues.join("|")})[^。，；！？\\n]*[，；]?`, "g");
+    return body.split("\n").map(line => {
+        if (/^\s*【[^】]+】\s*$/.test(line)) return line; // 标题不动
+        let next = line.replace(pattern, "");
+        next = next.replace(/^[，；、]+/, "").replace(/[，；]{2,}/g, "，").replace(/，。/g, "。").trim();
+        if (!next.trim()) return line; // 整句删空就留给人工看，不做静默清空
+        return next;
+    }).join("\n");
+}
+
+/** 锚点兜底清洗：命中禁用词/编造细节的类别直接写「无变化」，五类补齐 */
+function sanitizeAnchors(anchors: string, transcript: string): string {
+    const found = new Map<string, string>();
+    for (const line of (anchors || "").split("\n")) {
+        const m = line.match(/^\s*[·•\-*]\s*(物品与状态|认知与事实澄清|违规隐患|关系变化|待兑现)\s*[：:]\s*(.*)$/);
+        if (!m || found.has(m[1])) continue;
+        found.set(m[1], m[2].trim());
+    }
+    const lines = ANCHOR_CATEGORIES.map(key => {
+        const content = found.get(key) || "";
+        const bad =
+            ANCHOR_FORBIDDEN_CUES.some(c => content.includes(c)) ||
+            BODY_FABRICATION_CUES.some(c => content.includes(c) && !transcript.includes(c));
+        return `· ${key}：${!content || bad ? "无变化" : content}`;
+    });
+    return "【关键锚点】\n" + lines.join("\n");
+}
+
 /** 归档弹窗：把聊天记录提炼成一份可编辑的长文档，确认后写入角色记忆（世界书级）。 */
 export function ChatArchivePanel({
     characterId,
@@ -344,34 +489,35 @@ export function ChatArchivePanel({
                             "都是记录里不存在的，一个都不许写。可以写「他说」「她发来」「隔着屏幕」，仅此而已。\n" +
                             "2. 可以写语气与判断（「像是赌气」「听起来不高兴」），但必须有记录依据；" +
                             "不许凭空补对白、不许补结尾、不许加记录里没有的环境细节（雨声、霓虹灯、床头柜）。\n" +
-                            "3. 引用台词有度：正文是叙述，只在关键转折处引原话（全文引用不超过 8–10 句），" +
-                            "其余用转述（「他让她别盯着屏幕太久」）；不要每一句都带引号。\n" +
+                            "3. 引用台词有度：正文是叙述，只在关键转折处引原话（全文带引号的原话最多 10 句，这是硬上限，" +
+                            "代码会数），其余用转述（「他让她别盯着屏幕太久」）；不要每一句都带引号。\n" +
                             "4. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，分不清谁做、谁说的，宁可不写这句。\n" +
-                            "4. 「语气带着不耐烦」这类笼统标签一次都不许用：每写一处语气，必须落到他/她的具体用词上" +
+                            "5. 「语气带着不耐烦」这类笼统标签一次都不许用：每写一处语气，必须落到他/她的具体用词上" +
                             "（例：「他连回三条都是短句，是真的烦了」），说不出具体依据就不写语气。\n" +
-                            "5. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
+                            "6. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
                             "隔着手机——不写任何需要共享物理空间的动作（「歪头看向手机屏幕」「把手机推过来」「递过去」之类），" +
                             "也不要把任何一方搬到对方的城市；设定里没写的地方就写「那边」「国内」「首尔」。\n" +
-                            "6. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
+                            "7. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
                             "日期与星期从记录的日期分隔行和【本轮系统事实】里取，时刻取每行前面的 HH:MM。" +
                             "标题里不要写人名。跨天、跨时段就分段。\n" +
-                            "7. 「[语音]」是角色说出口的话，可原话引用；「[图片]/[红包]/[位置]/[音乐分享]/[通话]」" +
+                            "8. 「[语音]」是角色说出口的话，可原话引用；「[图片]/[红包]/[位置]/[音乐分享]/[通话]」" +
                             "这类是真实发生过的动作，要写清楚发生了什么、对方怎么接的。「[系统]」行是手机系统的动作" +
                             "（如「正在加入播放列表」「已加入播放列表」），照实写成「把歌加进了一起听的播放列表」——" +
                             "不是加了好友、不是联系方式，不许引申。\n" +
-                            "8. 台词必须保持记录里的原语言，禁止翻译或改写：记录里是中文就引中文，" +
+                            "9. 台词必须保持记录里的原语言，禁止翻译或改写：记录里是中文就引中文，" +
                             "记录里是韩语（角色偶尔用韩语回）才引韩语。绝对禁止把中文台词自行翻成韩语再写进归档，" +
-                            "也禁止给没说过的话配外语版本。韩语台词首次出现时可在括号里注中文意思，此后直接用原句。\n" +
-                            "9. 【关键锚点】整块重写：在上一版锚点的基础上更新，五类都写，" +
+                            "也禁止给没说过的话配外语版本；写了「用韩语」就必须真是韩语原文。" +
+                            "韩语台词首次出现时可在括号里注中文意思，此后直接用原句、不再括注。\n" +
+                            "10. 【关键锚点】整块重写：在上一版锚点的基础上更新，五类都写，" +
                             "某一类确实没有变化就写「无变化」。每条锚点要写成一句带状态的话" +
                             "（例：「他嗓子哑着，两天没好」「约了周三视频，钟点没定」），" +
                             "不许是名词罗列（例：「耳机、手机、手腕酸」这种直接打回重写）。" +
                             "锚点只写「状态、约定、悬而未决的事」，不写聊天里的话题和互相的看法" +
                             "（「他对泰版流星花园表示不解」是话题，不是锚点）；" +
                             "锚点里禁止出现记录中不存在的概念（如「权限」「授权」「邀约」这类记录里没提过的词）。\n" +
-                            "10. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
-                            "11. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
+                            "11. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
+                            "12. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
                             settingsText +
                             "【输出前的自检】每写一段，回查本轮记录：这条信息是哪句话/哪个媒体给的？" +
                             "找不到依据的句子直接删掉；每段开头若还是「HH:MM 名字：」，整段重写成叙述。",
@@ -441,6 +587,61 @@ export function ChatArchivePanel({
                     if (revised.body) added = { body: revised.body, anchors: revised.anchors || added.anchors };
                 }
             } catch { /* 自检失败就用第一版 */ }
+
+            // 第三轮：代码硬校验（照抄 / 引号超标 / 编造动作 / 锚点跑偏 / 标题缺日期），查出问题先定点返修一次
+            let issues = auditArchivePart(added.body, added.anchors, transcript);
+            if (issues.length > 0) {
+                try {
+                    const repaired = await withTimeout(simpleLLMCall(
+                        apiConfig,
+                        [
+                            {
+                                role: "system",
+                                content:
+                                    "你是归档修订员。下面这份新增归档经程序校验有几处不合规，只改这几处，其余原样保留。\n" +
+                                    "【必须修的问题】\n" +
+                                    issues.map((it, i) => `${i + 1}. ${it.detail}`).join("\n") + "\n\n" +
+                                    "修法：\n" +
+                                    "· 引号超标：只保留最能代表这一轮的 10 句原话（带引号），其余改成转述、不再带引号。\n" +
+                                    "· 写了记录里没有的肢体动作/环境：删掉该分句，或改写成隔着手机的表达（「他发来」「她隔着屏幕问」）。\n" +
+                                    "· 锚点跑偏：只写状态、约定、悬而未决的事；记录里没有的概念、聊天话题、互相的看法一律删掉，" +
+                                    "没得写就写「无变化」。\n" +
+                                    "· 段落标题必须是「【MM-DD 周X HH:MM - HH:MM】」，日期星期以【本轮系统事实】为准。\n" +
+                                    "· 写了「用韩语」就必须是韩语原文；韩语台词只在首次出现时括注中文。\n" +
+                                    "除这几处外不得改动，不许新增情节，不许压缩。只输出两块：【新增段落】…【关键锚点】…（五类齐全）。",
+                            },
+                            {
+                                role: "user",
+                                content:
+                                    factsText + settingsText +
+                                    "【本轮聊天记录】\n" + transcript +
+                                    "\n\n【待修订的新增部分】\n【新增段落】\n" + added.body +
+                                    "\n\n" + (added.anchors || ANCHOR_DEFAULT),
+                            },
+                        ],
+                        { temperature: 0.1, label: "chat-archive-fix" },
+                    ), 60000);
+                    const fixedText = repaired.content?.trim();
+                    if (fixedText && fixedText.includes("【新增段落】")) {
+                        const revised = splitNewParts(fixedText);
+                        if (revised.body) added = { body: revised.body, anchors: revised.anchors || added.anchors };
+                    }
+                } catch { /* 返修失败就交给下面的代码兜底 */ }
+            }
+
+            // 代码兜底：模型没改干净的由程序直接改——补日期、剪掉编造分句、引号限量、锚点写「无变化」
+            added = {
+                body: trimExcessQuotes(
+                    dropFabricatedClauses(fixParagraphHeaders(added.body, transcript, now), transcript),
+                    QUOTE_LIMIT,
+                ),
+                anchors: added.anchors ? sanitizeAnchors(added.anchors, transcript) : ANCHOR_DEFAULT,
+            };
+            issues = auditArchivePart(added.body, added.anchors, transcript);
+            if (issues.length > 0) {
+                onNotice(`归档还有 ${issues.length} 处要你看一眼：${issues[0].detail}`);
+            }
+
             // 一起听 footer 由代码兜底：模型漏写也补上（只按本轮系统事实拼，不去重模型写过的）
             const factsFootnote = await collectListenFootnote();
             const bodyParts = [previousParts.body, added.body].filter(Boolean).join("\n\n");
