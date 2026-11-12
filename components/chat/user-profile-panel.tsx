@@ -313,8 +313,6 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const profileAvatarInputRef = useRef<HTMLInputElement>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
     const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
-    /** 一起听结束时把这一场（时间 + 时长 + 歌单）写进记忆归档 */
-    const [listenRecordArchiveEnabled, setListenRecordArchiveEnabled] = useState(true);
 
     useEffect(() => {
         const syncIdentity = () => setIdentity(resolveUserIdentity());
@@ -356,7 +354,6 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         setNotifEnabled(settings.browserNotificationsEnabled === true && browserGranted);
         setEnterToSendEnabled(settings.enterToSendEnabled === true);
         setCallVibrationEnabled(settings.callVibrationEnabled !== false);
-        setListenRecordArchiveEnabled(settings.listenRecordArchiveEnabled !== false);
         if (settings.browserNotificationsEnabled === true && !browserGranted) {
             setNotifHint(readBrowserNotificationPermissionHint());
         }
@@ -427,11 +424,6 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const handleCallVibrationToggle = (enabled: boolean) => {
         setCallVibrationEnabled(enabled);
         saveChatAppSettings({ ...loadChatAppSettings(), callVibrationEnabled: enabled });
-    };
-
-    const handleListenRecordToggle = (enabled: boolean) => {
-        setListenRecordArchiveEnabled(enabled);
-        saveChatAppSettings({ ...loadChatAppSettings(), listenRecordArchiveEnabled: enabled });
     };
 
     if (showFollowUpEditor) {
@@ -617,13 +609,6 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">角色来电等待接听时手机振动（iOS 网页不支持振动）</span>
                             </div>
                             <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
-                        </div>
-                        <div className="prefs-row">
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">一起听写进归档</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">结束一起听时写一条歌单存档（只作记录，不进长期记忆——歌单已经写进聊天归档了）</span>
-                            </div>
-                            <Toggle checked={listenRecordArchiveEnabled} onChange={handleListenRecordToggle} />
                         </div>
                         <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">

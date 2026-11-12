@@ -371,20 +371,24 @@ export function ChatArchivePanel({
                     `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的），并在新增段落之后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(new Date())}，${songs.length} 首】`,
                 );
             } else {
-                // 已结束：从记忆库最近一条歌单记录（metadata.listenRecord）读，48 小时内才算「本轮」
-                const archives = await loadMemoryEntriesByType(characterId, "archive");
-                const listenEntry = archives
-                    .filter(entry => entry.metadata?.listenRecord && entry.metadata?.listenEndedAt)
-                    .sort((a, b) => String(b.metadata?.listenEndedAt || "").localeCompare(String(a.metadata?.listenEndedAt || "")))[0];
-                if (listenEntry) {
-                    const endedAtMs = new Date(String(listenEntry.metadata?.listenEndedAt)).getTime();
-                    if (Number.isFinite(endedAtMs) && Date.now() - endedAtMs < 48 * 3600 * 1000) {
-                        const inner = String(listenEntry.content || "")
-                            .replace(/^─────[^\n]*\n/, "")
-                            .replace(/^【普通模式 · [^\n]*】一起听\s*/, "")
-                            .replace(/【一起听：[^\n]*】\s*$/, "")
-                            .trim();
-                        if (inner) facts.push(`· 一起听（本场已结束，记录如下，要写成叙述进正文）：\n${inner}`);
+                // 已结束：读「最近结束的一场」（48 小时内的本地存档，不再走记忆库歌单记录）
+                const { getLastListenSession } = await import("@/lib/listen-together-session");
+                const last = getLastListenSession();
+                const matches = last && (!last.characterId || last.characterId === characterId || last.characterName === characterName);
+                if (last && matches) {
+                    const start = new Date(last.startedAt);
+                    const end = new Date(last.endedAt);
+                    const songs = last.tracks
+                        .map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title))
+                        .filter(Boolean);
+                    if (songs.length > 0) {
+                        const minute = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+                        facts.push(
+                            `· 一起听（本场已结束）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)}–${fmtClock(end)}，` +
+                            `两人隔着手机一起听歌 ${minute} 分钟，放了 ${songs.length} 首：\n` +
+                            songs.map(s => `  - ${s}`).join("\n") +
+                            `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的），并在新增段落之后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${songs.length} 首】`,
+                        );
                     }
                 }
             }
@@ -392,29 +396,26 @@ export function ChatArchivePanel({
         return facts.length > 0 ? "【本轮系统事实（代码生成，直接可信，以此为准）】\n" + facts.join("\n") + "\n\n" : "";
     }, [sessionId, characterId]);
 
-    /** 一起听 footer（代码兜底，模型漏了也补）：进行中取会话，已结束取最近那条歌单记录。 */
+    /** 一起听 footer（代码兜底，模型漏了也补）：进行中取会话，已结束取「最近结束的一场」本地存档。 */
     const collectListenFootnote = useCallback(async (): Promise<string> => {
         try {
-            const { getListenSession } = await import("@/lib/listen-together-session");
+            const { getListenSession, getLastListenSession } = await import("@/lib/listen-together-session");
             const session = getListenSession();
             if (session && (session.tracks?.length || 0) > 0) {
                 const start = new Date(session.startedAt);
                 const end = new Date();
                 return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
             }
-            const archives = await loadMemoryEntriesByType(characterId, "archive");
-            const listenEntry = archives
-                .filter(entry => entry.metadata?.listenRecord && entry.metadata?.listenEndedAt)
-                .sort((a, b) => String(b.metadata?.listenEndedAt || "").localeCompare(String(a.metadata?.listenEndedAt || "")))[0];
-            if (!listenEntry) return "";
-            const endedAtMs = new Date(String(listenEntry.metadata?.listenEndedAt)).getTime();
-            if (!Number.isFinite(endedAtMs) || Date.now() - endedAtMs >= 48 * 3600 * 1000) return "";
-            const foot = String(listenEntry.content || "").match(/【一起听：[^\n]*】/);
-            return foot ? foot[0] : "";
+            const last = getLastListenSession();
+            if (!last || (last.characterId && last.characterId !== characterId && last.characterName !== characterName)) return "";
+            if (!last.tracks?.length) return "";
+            const start = new Date(last.startedAt);
+            const end = new Date(last.endedAt);
+            return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${last.tracks.length} 首】`;
         } catch {
             return "";
         }
-    }, [characterId]);
+    }, [characterId, characterName]);
 
     const handleSummarize = useCallback(async () => {
         const transcript = collectTranscript();

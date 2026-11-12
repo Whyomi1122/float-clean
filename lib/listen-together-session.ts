@@ -6,6 +6,7 @@
 //   · 结束时把这场一起听写进**普通模式的记忆归档**（时间 + 时长 + 歌单），供日后聊天参考。
 
 const STORAGE_KEY = "ai_phone_listen_session_v1";
+const LAST_KEY = "ai_phone_listen_last_v1";
 const EVENT = "float:listen-session";
 
 export type ListenTrackMark = {
@@ -84,9 +85,31 @@ export function recordListenTrack(track: ListenTrackMark): void {
 /** 结束一起听，返回刚落幕的那一场（不含写归档）。 */
 export function endListenSession(): ListenSession | null {
     const session = getListenSession();
+    try {
+        if (session) {
+            // 2026-11-12：存档改到这里——只留「最近结束的一场」给归档取歌单，不写记忆库、不进提示词
+            localStorage.setItem(LAST_KEY, JSON.stringify({ ...session, endedAt: new Date().toISOString() }));
+        }
+    } catch { /* ignore */ }
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     emit();
     return session;
+}
+
+/** 最近结束的一场一起听（48 小时内有效），供聊天归档取本轮歌单用。 */
+export function getLastListenSession(): (ListenSession & { endedAt: string }) | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = localStorage.getItem(LAST_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as ListenSession & { endedAt?: string };
+        if (!parsed?.endedAt || !Array.isArray(parsed.tracks)) return null;
+        const endedMs = new Date(parsed.endedAt).getTime();
+        if (!Number.isFinite(endedMs) || Date.now() - endedMs > 48 * 3600 * 1000) return null;
+        return { ...parsed, endedAt: parsed.endedAt };
+    } catch {
+        return null;
+    }
 }
 
 /** 当前是否正在和这个角色一起听（同一时刻只跟一个人一起听）。 */
