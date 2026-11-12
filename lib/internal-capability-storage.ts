@@ -575,7 +575,10 @@ const MUSIC_CONTROL_SUBTOOLS: InternalToolDefinition[] = [
     },
     {
         name: "加入播放列表",
-        description: "把搜索结果、指定歌曲或一个歌单加入当前播放列表。",
+        description:
+            "把搜索结果、指定歌曲或一个歌单加入当前播放列表。"
+            + "**只要对方要求把歌放进播放列表（「加到我的播放列表」「下一首放这个」「帮我加上」），就必须调用这个工具**，"
+            + "调用成功后才可以说「加好了」；没有调用工具就不许在回复里声称已经加进去——那只是在嘴上说，播放列表里不会有歌。",
         parameterSchema: MUSIC_QUEUE_PARAMETER_SCHEMA,
     },
     {

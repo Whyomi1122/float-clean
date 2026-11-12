@@ -20,6 +20,7 @@ const LIMITS = {
     persona: 2000,
     worldBook: 4000,
     memories: 1500,
+    scene: 800,
 };
 
 function clip(text: string, max: number): string {
@@ -78,12 +79,36 @@ function buildWorldBookSection(characterId: string): string {
 }
 
 /**
+ * 当前场景段（2026-11-12 加）：取最近一条群像归档里的「当前锚点」，让归档知道两人此刻在不在同一个空间。
+ * 起因：实机里两人明明同处一室，归档却写成「她隔着手机问」——因为模型手上没有场景事实，只能按「手机聊天」想当然。
+ * 空间永远以剧情进度为准，模型不许自己假设。
+ */
+async function buildSceneSection(characterId: string): Promise<string> {
+    try {
+        const { loadMemoryEntriesByType } = await import("./memory-storage");
+        const entries = await loadMemoryEntriesByType(characterId, "archive");
+        const latest = entries
+            .filter(entry => entry.sourceApp === "ensemble")
+            .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")))[0];
+        if (!latest) return "";
+        const content = String(latest.content || "");
+        const match = content.match(/═+\s*当前锚点[^\n]*═+([\s\S]*)$/);
+        const body = clip(match ? match[1] : "", LIMITS.scene);
+        if (!body) return "";
+        return `【当前场景（群像剧情的最新进度，空间与在场人物以此为准，不许自己假设）】\n${body}`;
+    } catch {
+        return "";
+    }
+}
+
+/**
  * 归档用的完整背景包。
  * - settings：人设 + 时区 + 世界书（够判断双方各自在哪、是什么关系）
  * - memories：长期记忆（知道更早发生过什么，避免重复叙述；上一版归档由归档面板单独喂）
+ * - scene：最近一条群像归档的「当前锚点」（空间、在场人物、正在发生的事）
  */
-export async function buildArchiveContextPack(characterId: string): Promise<{ settings: string; memories: string }> {
-    if (typeof window === "undefined") return { settings: "", memories: "" };
+export async function buildArchiveContextPack(characterId: string): Promise<{ settings: string; memories: string; scene: string }> {
+    if (typeof window === "undefined") return { settings: "", memories: "", scene: "" };
     const settings = [buildSettingsSection(characterId), buildWorldBookSection(characterId)]
         .filter(Boolean)
         .join("\n\n");
@@ -96,5 +121,7 @@ export async function buildArchiveContextPack(characterId: string): Promise<{ se
         if (memResults) memories = clip(formatLongTermMemories(memResults), LIMITS.memories);
     } catch { /* 记忆读不到就算了 */ }
 
-    return { settings, memories };
+    const scene = await buildSceneSection(characterId);
+
+    return { settings, memories, scene };
 }

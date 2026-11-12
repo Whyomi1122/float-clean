@@ -368,7 +368,7 @@ export function ChatArchivePanel({
                     `· 一起听（刚结束/进行中）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)} 起，` +
                     `两人隔着手机一起听歌 ${minute} 分钟，放了 ${songs.length} 首：\n` +
                     songs.map(s => `  - ${s}`).join("\n") +
-                    `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的），并在新增段落之后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(new Date())}，${songs.length} 首】`,
+                    `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的）；**不要**自己写【一起听：…】这一行，系统会在末尾自动加。`,
                 );
             } else {
                 // 已结束：读「最近结束的一场」（48 小时内的本地存档，不再走记忆库歌单记录）
@@ -387,7 +387,7 @@ export function ChatArchivePanel({
                             `· 一起听（本场已结束）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)}–${fmtClock(end)}，` +
                             `两人隔着手机一起听歌 ${minute} 分钟，放了 ${songs.length} 首：\n` +
                             songs.map(s => `  - ${s}`).join("\n") +
-                            `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的），并在新增段落之后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${songs.length} 首】`,
+                            `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的）；**不要**自己写【一起听：…】这一行，系统会在末尾自动加。`,
                         );
                     }
                 }
@@ -447,6 +447,11 @@ export function ChatArchivePanel({
             const memoriesText = pack.memories
                 ? "【长期记忆（只当已知背景，不要复述，也不要当成这一轮发生的事）】\n" +
                 pack.memories + "\n\n"
+                : "";
+            const sceneText = pack.scene
+                ? "【当前场景（空间以此为准：若两人同处一室，就写「在旁边」「同一间屋里」，"
+                + "绝不许想当然写成「隔着手机」「隔着屏幕」；只有场景确实是异地才写隔着手机）】\n" +
+                pack.scene + "\n\n"
                 : "";
             // 上一版归档：归档是「单条滚动」的——老正文原样保留，只往后追加新段落
             const existingArchives = (await loadMemoryEntriesByType(characterId, "archive"))
@@ -520,6 +525,7 @@ export function ChatArchivePanel({
                             "11. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
                             "12. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
                             settingsText +
+                            sceneText +
                             "【输出前的自检】每写一段，回查本轮记录：这条信息是哪句话/哪个媒体给的？" +
                             "找不到依据的句子直接删掉；每段开头若还是「HH:MM 名字：」，整段重写成叙述。",
                     },
@@ -575,6 +581,7 @@ export function ChatArchivePanel({
                             content:
                                 factsText +
                                 settingsText +
+                                sceneText +
                                 "【本轮聊天记录】\n" + transcript +
                                 "\n\n【待审校的新增部分】\n【新增段落】\n" + added.body +
                                 "\n\n" + (added.anchors || "【关键锚点】\n· 物品与状态：无变化\n· 认知与事实澄清：无变化\n· 违规隐患：无变化\n· 关系变化：无变化\n· 待兑现：无变化"),
@@ -614,7 +621,7 @@ export function ChatArchivePanel({
                             {
                                 role: "user",
                                 content:
-                                    factsText + settingsText +
+                                    factsText + settingsText + sceneText +
                                     "【本轮聊天记录】\n" + transcript +
                                     "\n\n【待修订的新增部分】\n【新增段落】\n" + added.body +
                                     "\n\n" + (added.anchors || ANCHOR_DEFAULT),
@@ -643,8 +650,12 @@ export function ChatArchivePanel({
                 onNotice(`归档还有 ${issues.length} 处要你看一眼：${issues[0].detail}`);
             }
 
-            // 一起听 footer 由代码兜底：模型漏写也补上（只按本轮系统事实拼，不去重模型写过的）
+            // 一起听 footer 由代码统一生成：先把模型自己写的那些【…一起听：…】行清掉（格式乱七八糟、还会重复），再在末尾补一行标准的
             const factsFootnote = await collectListenFootnote();
+            added = {
+                body: added.body.replace(/^[ \t]*【[^】]*一起听：[^】]*】[ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim(),
+                anchors: added.anchors,
+            };
             const bodyParts = [previousParts.body, added.body].filter(Boolean).join("\n\n");
             const anchorPart = added.anchors || previousParts.anchors;
             setDraft([header, bodyParts, factsFootnote, anchorPart].filter(Boolean).join("\n\n"));
