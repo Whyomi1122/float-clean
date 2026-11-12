@@ -195,6 +195,7 @@ export function ChatArchivePanel({
             }
         } catch { /* 读不到就算了 */ }
         try {
+            // 一起听事实：优先取「进行中」的会话；已结束的从记忆库里最近那条歌单记录读（带日期门槛）
             const { getListenSession } = await import("@/lib/listen-together-session");
             const session = getListenSession();
             if (session && (session.tracks?.length || 0) > 0) {
@@ -204,29 +205,56 @@ export function ChatArchivePanel({
                     .filter(Boolean);
                 const minute = Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000));
                 facts.push(
-                    `· 一起听（进行中/刚结束）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)} 起，` +
+                    `· 一起听（刚结束/进行中）：${start.getMonth() + 1}-${pad2(start.getDate())} ${fmtClock(start)} 起，` +
                     `两人隔着手机一起听歌 ${minute} 分钟，放了 ${songs.length} 首：\n` +
                     songs.map(s => `  - ${s}`).join("\n") +
-                    `\n  这件事要写进正文，并在正文最后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(new Date())}，${songs.length} 首】`,
+                    `\n  这件事要写成叙述进正文（谁放了什么、对方怎么接的），并在新增段落之后单独一行写：【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(new Date())}，${songs.length} 首】`,
                 );
+            } else {
+                // 已结束：从记忆库最近一条歌单记录（metadata.listenRecord）读，48 小时内才算「本轮」
+                const archives = await loadMemoryEntriesByType(characterId, "archive");
+                const listenEntry = archives
+                    .filter(entry => entry.metadata?.listenRecord && entry.metadata?.listenEndedAt)
+                    .sort((a, b) => String(b.metadata?.listenEndedAt || "").localeCompare(String(a.metadata?.listenEndedAt || "")))[0];
+                if (listenEntry) {
+                    const endedAtMs = new Date(String(listenEntry.metadata?.listenEndedAt)).getTime();
+                    if (Number.isFinite(endedAtMs) && Date.now() - endedAtMs < 48 * 3600 * 1000) {
+                        const inner = String(listenEntry.content || "")
+                            .replace(/^─────[^\n]*\n/, "")
+                            .replace(/^【普通模式 · [^\n]*】一起听\s*/, "")
+                            .replace(/【一起听：[^\n]*】\s*$/, "")
+                            .trim();
+                        if (inner) facts.push(`· 一起听（本场已结束，记录如下，要写成叙述进正文）：\n${inner}`);
+                    }
+                }
             }
         } catch { /* 一起听状态读不到就算了 */ }
         return facts.length > 0 ? "【本轮系统事实（代码生成，直接可信，以此为准）】\n" + facts.join("\n") + "\n\n" : "";
     }, [sessionId, characterId]);
 
-    /** 一起听 footer（代码兜底，模型漏了也补）：`【一起听：11月11日 20:35–21:10，8 首】` */
+    /** 一起听 footer（代码兜底，模型漏了也补）：进行中取会话，已结束取最近那条歌单记录。 */
     const collectListenFootnote = useCallback(async (): Promise<string> => {
         try {
             const { getListenSession } = await import("@/lib/listen-together-session");
             const session = getListenSession();
-            if (!session || (session.tracks?.length || 0) <= 0) return "";
-            const start = new Date(session.startedAt);
-            const end = new Date();
-            return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
+            if (session && (session.tracks?.length || 0) > 0) {
+                const start = new Date(session.startedAt);
+                const end = new Date();
+                return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
+            }
+            const archives = await loadMemoryEntriesByType(characterId, "archive");
+            const listenEntry = archives
+                .filter(entry => entry.metadata?.listenRecord && entry.metadata?.listenEndedAt)
+                .sort((a, b) => String(b.metadata?.listenEndedAt || "").localeCompare(String(a.metadata?.listenEndedAt || "")))[0];
+            if (!listenEntry) return "";
+            const endedAtMs = new Date(String(listenEntry.metadata?.listenEndedAt)).getTime();
+            if (!Number.isFinite(endedAtMs) || Date.now() - endedAtMs >= 48 * 3600 * 1000) return "";
+            const foot = String(listenEntry.content || "").match(/【一起听：[^\n]*】/);
+            return foot ? foot[0] : "";
         } catch {
             return "";
         }
-    }, []);
+    }, [characterId]);
 
     const handleSummarize = useCallback(async () => {
         const transcript = collectTranscript();
@@ -286,6 +314,14 @@ export function ChatArchivePanel({
                             "· 违规隐患：…\n" +
                             "· 关系变化：…\n" +
                             "· 待兑现：…\n\n" +
+                            "【最重要的规矩：正文是叙述，不是抄记录】\n" +
+                            "禁止把「HH:MM 名字：内容」这种记录行原样搬进正文。记录是给你看的素材，正文要把它" +
+                            "化成第三人称叙述：合并同一话题的来回、只保留关键台词、写清楚谁放了歌谁接了话。\n" +
+                            "正确示例（基于 5 条记录的写法）：\n" +
+                            "  记录——17:02 金成帝：니가 뭘 알아。/ 17:02 金成帝：我不懂，你最懂。/ 17:02 岳霖玉：切跟你说你也不懂\n" +
+                            "  正文——聊到泰版流星花园，她说他看不懂，他回了句韩语「니가 뭘 알아」（你懂什么），又补了句「我不懂，你最懂」，语气不像真生气。\n" +
+                            "错误示例（这就是照抄，禁止）：\n" +
+                            "  17:02 金成帝：니가 뭘 알아。\n  17:02 金成帝：我不懂，你最懂。\n  17:02 岳霖玉：切跟你说你也不懂\n\n" +
                             "【写法要求】\n" +
                             "1. 只写这一轮记录里真实发生的内容。这一轮是「隔着手机聊天」：双方各自在各自所在地，" +
                             "记录里只有打字、发语音、发图片这些动作——除此之外的一切肢体动作" +
@@ -295,10 +331,10 @@ export function ChatArchivePanel({
                             "不许凭空补对白、不许补结尾、不许加记录里没有的环境细节（雨声、霓虹灯、床头柜）。\n" +
                             "3. 一律第三人称，用记录里的名字称呼双方（角色名 / 用户的名字），全篇不得出现「我」。" +
                             "一句只写一个主语，分不清谁做、谁说的，宁可不写这句。\n" +
-                            "3. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
+                            "4. 空间按设定来：除非记录里明确写到两人见面、同处一室，否则一律写成各自在各自所在地、" +
                             "隔着手机——不写任何需要共享物理空间的动作（「歪头看向手机屏幕」「把手机推过来」「递过去」之类），" +
                             "也不要把任何一方搬到对方的城市；设定里没写的地方就写「那边」「国内」「首尔」。\n" +
-                            "4. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
+                            "5. 段落标题用真实日期与时刻「【11-11 周二 16:57 - 17:18】」：" +
                             "日期与星期从记录的日期分隔行和【本轮系统事实】里取，时刻取每行前面的 HH:MM。" +
                             "标题里不要写人名。跨天、跨时段就分段。\n" +
                             "5. 「[语音]」是角色说出口的话，可原话引用；「[图片]/[红包]/[位置]/[音乐分享]/[通话]」" +
@@ -307,13 +343,15 @@ export function ChatArchivePanel({
                             "记录里是韩语（角色偶尔用韩语回）才引韩语。绝对禁止把中文台词自行翻成韩语再写进归档，" +
                             "也禁止给没说过的话配外语版本。\n" +
                             "7. 【关键锚点】整块重写：在上一版锚点的基础上更新，五类都写，" +
-                            "某一类确实没有变化就写「无变化」，不要留空。锚点里禁止出现记录中不存在的概念" +
-                            "（如「权限」「授权」「邀约」这类记录里没提过的词）。\n" +
+                            "某一类确实没有变化就写「无变化」。每条锚点要写成一句带状态的话" +
+                            "（例：「他嗓子哑着，两天没好」「约了周三视频，钟点没定」），" +
+                            "不许是名词罗列（例：「耳机、手机、手腕酸」这种直接打回重写）。" +
+                            "锚点里禁止出现记录中不存在的概念（如「权限」「授权」「邀约」这类记录里没提过的词）。\n" +
                             "8. 上一版归档只用来判断双方状态、避免重复叙述，不要把旧内容再写一遍。\n" +
                             "9. 篇幅：每段 200–900 字，把事情写透；不设总字数上限。\n\n" +
                             settingsText +
                             "【输出前的自检】每写一段，回查本轮记录：这条信息是哪句话/哪个媒体给的？" +
-                            "找不到依据的句子直接删掉，宁短不凑。",
+                            "找不到依据的句子直接删掉；每段开头若还是「HH:MM 名字：」，整段重写成叙述。",
                     },
                     {
                         role: "user",
@@ -344,16 +382,19 @@ export function ChatArchivePanel({
                         {
                             role: "system",
                             content:
-                                "你是归档审校员。给你本轮聊天记录和一段新增归档，逐句核对：" +
-                                "每一句都必须能在这轮记录里找到依据（出现过的对白、媒体事件、双方明确说过的状态）。\n" +
+                                "你是归档审校员。给你本轮聊天记录和一段新增归档，逐句核对：\n" +
+                                "【第一优先：是不是照抄】正文里出现「HH:MM 名字：内容」格式的行，就是照抄记录，" +
+                                "必须改写成第三人称叙述（合并来回、只留关键台词），一段都不许留这种行。\n" +
+                                "【第二优先：编造】每一句都必须能在这轮记录里找到依据。\n" +
                                 "1. 这一轮是隔着手机聊天：记录里没有的肢体动作（放下手机、贴在耳边、倒扣在床头柜、" +
                                 "指着窗外、抬头、转身），编造的韩语/外语台词，编造的对白与结尾，全部删掉。\n" +
                                 "2. 台词保持原语言：中文台词不许被翻成韩语。\n" +
                                 "3. 把写成同一空间、共享物理空间的句子，改写成各自在各自所在地、隔着手机。\n" +
                                 "4. 段落标题必须是「【MM-DD 周X HH:MM - HH:MM】」格式，不带人名；" +
                                 "日期星期以【本轮系统事实】为准。\n" +
-                                "5. 锚点里出现记录中不存在的概念（「权限」「授权」等）就删掉。\n" +
-                                "6. 不要新增内容，不要改格式，不要写解释或修订说明。\n" +
+                                "5. 锚点必须是带状态的一句话；名词罗列（「耳机、手机、手腕酸」）改写成句子；" +
+                                "记录里不存在的概念（「权限」「授权」等）删掉。\n" +
+                                "6. 除上述修改外不要新增内容，不要改格式，不要写解释或修订说明。\n" +
                                 "7. 原样输出这两块：【新增段落】…【关键锚点】…（五类都保留）。",
                         },
                         {
