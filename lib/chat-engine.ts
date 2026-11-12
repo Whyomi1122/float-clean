@@ -2670,6 +2670,8 @@ async function generateChatCompletionCore(
 ): Promise<ChatCompletionResult> {
     const { llmMessages, character, config, preset, regexes, userIdentity, toolsEnabled } = await buildChatPromptMessages(session, history, options);
     const requestAppTags = mergeAppTags(options?.appTags, options?.promptProfile?.appTags, options?.appId ?? "chat");
+    // 2026-11-12：本轮有没有真的调用过「加入播放列表」——用于抓「嘴上说加了、实际没调工具」
+    let queuedMusicForReal = false;
 
     // 追问有自己的排期时兜底（followup:key），这里只为普通回复生成挂单。
     // 不 await：挂单失败或慢都不拖累本地生成；生成先结束则通过 closed 标记补撤销。
@@ -2928,6 +2930,7 @@ async function generateChatCompletionCore(
                 throwIfAborted(options?.signal);
                 const resultNotices = results.map(r => r.userNotice || (r.success ? `✓ ${r.name} 执行成功` : `✗ ${r.name}: ${r.error}`)).join("；");
                 callbacks?.onToolNotice?.(resultNotices);
+                if (results.some(r => r.name === "加入播放列表" && r.success)) queuedMusicForReal = true;
             } catch (err) {
                 throwIfAborted(options?.signal);
                 const errMsg = `⚠️ 动作执行失败: ${err instanceof Error ? err.message : String(err)}`;
@@ -3040,6 +3043,16 @@ async function generateChatCompletionCore(
             console.warn("[ChatEngine] Memory counter/summarization failed:", err);
         }
     })();
+
+    // 口头加歌兜底（2026-11-12）：模型说「加好了/弄好了」但本轮根本没调用「加入播放列表」工具，
+    // 播放列表里不会有歌。这里给一条提示，免得用户以为加上了（弱模型的常见毛病：只说不做）。
+    if (!queuedMusicForReal) {
+        const spoken = parts.map(part => part.text || "").join("\n");
+        const claimsQueue = /(加|放)(进|到|入)?了?(我的|你的)?(播放列表|歌单|列表)|已加入播放列表|넣어\s*줬|넣었|다\s*됐어/.test(spoken);
+        if (claimsQueue) {
+            callbacks?.onToolNotice?.("⚠️ TA 只是说把歌加进去了，这次没有真的调用加歌动作——播放列表里不会有这首");
+        }
+    }
 
     return { parts };
 }

@@ -16,8 +16,7 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
-import { getSongInfoStatus, getSongInfoStatusLabel } from "@/lib/song-info-service";
-import { getListenSession } from "@/lib/listen-together-session";
+import { getSongInfoStatus, getSongInfoStatusLabel, ensureSongInfo } from "@/lib/song-info-service";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -255,20 +254,43 @@ export default function MusicPlayer() {
         parsedLyrics.current = lines;
     }, [player.currentTrack?.lyrics]);
 
-    // ── 一起听时才显示「资料：已获取 / 未配 Key / 未搜到」这行小字（直接排版面自查） ──
+    // ── 播放页显示「资料：已获取 / 获取中 / 未配 Key / 未搜到」（直接排版面自查） ──
+    // 2026-11-12：不再只在「一起听」里显示——普通播放也显示；没搜过的会在这里主动抓一次，
+    // 抓取完成自动刷新成「已获取」，用户能看到进度，不用等角色回话才触发。
     const [songInfoLabel, setSongInfoLabel] = useState("");
+    const songInfoFetchingRef = useRef("");
     useEffect(() => {
+        let cancelled = false;
+        const keyOf = (t: { title?: string; artist?: string }) => `${(t.title || "").trim().toLowerCase()}|${(t.artist || "").trim().toLowerCase()}`;
+
         const refresh = () => {
             const current = player.currentTrack;
-            if (!current || !getListenSession()) {
-                setSongInfoLabel("");
+            if (!current?.title) {
+                if (!cancelled) setSongInfoLabel("");
                 return;
             }
-            setSongInfoLabel(getSongInfoStatusLabel(getSongInfoStatus(current.title, current.artist)));
+            const status = getSongInfoStatus(current.title, current.artist);
+            if (!cancelled) setSongInfoLabel(getSongInfoStatusLabel(status));
+
+            const key = keyOf(current);
+            if (status === "pending" && songInfoFetchingRef.current !== key) {
+                songInfoFetchingRef.current = key;
+                // 后台抓一次，不阻塞播放；失败会静默记成 failed，1 小时内不再重试
+                void ensureSongInfo(current.title, current.artist || "")
+                    .catch(() => "")
+                    .then(() => {
+                        songInfoFetchingRef.current = "";
+                        if (cancelled) return;
+                        const now = player.currentTrack;
+                        if (now && keyOf(now) === key) {
+                            setSongInfoLabel(getSongInfoStatusLabel(getSongInfoStatus(now.title, now.artist)));
+                        }
+                    });
+            }
         };
         refresh();
         const timer = setInterval(refresh, 4000);
-        return () => clearInterval(timer);
+        return () => { cancelled = true; clearInterval(timer); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [player.currentTrack?.id, player.currentTrack?.title]);
 

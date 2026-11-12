@@ -83,9 +83,9 @@ export function getSongInfoStatus(title: string, artist: string): SongInfoStatus
 export function getSongInfoStatusLabel(status: SongInfoStatus): string {
     switch (status) {
         case "ready": return "资料：已获取";
-        case "nokey": return "资料：未配 Key";
+        case "nokey": return "资料：未配 Key（工具箱→搜索）";
         case "failed": return "资料：未搜到";
-        case "pending": return "资料：未获取";
+        case "pending": return "资料：获取中…";
         default: return "";
     }
 }
