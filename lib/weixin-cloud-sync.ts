@@ -1993,6 +1993,7 @@ function importCloudAssistantMessage(
       content: part.content,
       mediaType: part.mediaType,
       mediaData: part.mediaData,
+      emotion: part.emotion,
       statusPanel: index === 0 && parsed.statusPanel ? parsed.statusPanel : undefined,
       statusRegionMode: index === 0 && parsed.statusPanel ? statusRegionMode : undefined,
       innerMonologue: index === 0 && parsed.innerMonologue ? parsed.innerMonologue : undefined,

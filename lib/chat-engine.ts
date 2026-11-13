@@ -24,7 +24,9 @@ import {
     createResponseBatchId,
     createToolExecutionId,
     isSessionStreamingEnabled,
+    isVoiceEmotionEnabled,
 } from "./chat-storage";
+import { CHAT_EMOTION_INSTRUCTION } from "./emotion";
 import { extractTextToolDirectiveText, stripTextToolDirectives } from "./text-tool-protocol";
 import type { ApiConfig, PresetConfig, Prompt, PromptOrderEntry, RegexConfig } from "./settings-types";
 import type { CustomAppPromptProfile } from "./custom-app-types";
@@ -2095,6 +2097,11 @@ export async function buildChatPromptMessages(
     const performanceHint = buildChatVoicePerformanceHint(options, session);
     if (performanceHint) {
         llmMessages.push({ role: "system", content: performanceHint });
+    }
+    // 语音情绪（默认关）：开了才让模型每轮标一个情绪，朗读语音条时映射成 TTS 情绪。
+    // 标记由 rich-message-parser 整段摘掉，不会漏进正文，也不会被念出来。
+    if (isVoiceEmotionEnabled()) {
+        llmMessages.push({ role: "system", content: CHAT_EMOTION_INSTRUCTION });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
 

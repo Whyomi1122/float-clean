@@ -913,11 +913,12 @@ export function handleFollowUpMediaAction(
 
 function buildGeneratedFollowUpImageMessage(
     part: ParsedMessagePart,
-): Pick<ChatMessage, "content" | "mediaType" | "mediaUrl" | "mediaData"> {
+): Pick<ChatMessage, "content" | "mediaType" | "mediaUrl" | "mediaData" | "emotion"> {
     const base = {
         content: part.content,
         mediaType: part.mediaType,
         mediaData: part.mediaData,
+        emotion: part.emotion,
     };
     if (part.mediaType !== "image") return base;
 

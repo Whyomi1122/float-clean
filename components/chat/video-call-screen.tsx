@@ -402,6 +402,7 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
                     sessionId: session.id, role: "assistant", content: part.content,
                     mediaType: part.mediaType,
                     mediaData: part.mediaData,
+                    emotion: part.emotion,
                     statusPanel: idx === 0 && statusPanel ? statusPanel : undefined,
                     statusRegionMode: idx === 0 && statusPanel ? statusRegionMode : undefined,
                     innerMonologue: idx === 0 && innerMonologue ? innerMonologue : undefined,

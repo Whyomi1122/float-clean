@@ -314,6 +314,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const profileAvatarInputRef = useRef<HTMLInputElement>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
     const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
+    const [voiceEmotionEnabled, setVoiceEmotionEnabled] = useState(false);
 
     useEffect(() => {
         const syncIdentity = () => setIdentity(resolveUserIdentity());
@@ -355,6 +356,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         setNotifEnabled(settings.browserNotificationsEnabled === true && browserGranted);
         setEnterToSendEnabled(settings.enterToSendEnabled === true);
         setCallVibrationEnabled(settings.callVibrationEnabled !== false);
+    setVoiceEmotionEnabled(settings.voiceEmotionEnabled === true);
         if (settings.browserNotificationsEnabled === true && !browserGranted) {
             setNotifHint(readBrowserNotificationPermissionHint());
         }
@@ -425,6 +427,11 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const handleCallVibrationToggle = (enabled: boolean) => {
         setCallVibrationEnabled(enabled);
         saveChatAppSettings({ ...loadChatAppSettings(), callVibrationEnabled: enabled });
+    };
+
+    const handleVoiceEmotionToggle = (enabled: boolean) => {
+        setVoiceEmotionEnabled(enabled);
+        saveChatAppSettings({ ...loadChatAppSettings(), voiceEmotionEnabled: enabled });
     };
 
     if (showFollowUpEditor) {
@@ -603,6 +610,13 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">开启后 Enter 发送，Shift+Enter 换行</span>
                             </div>
                             <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} />
+                        </div>
+                        <div className="prefs-row">
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">朗读情绪</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">语音条按角色的情绪朗读（默认关；只对支持的语音引擎生效，已经生成过的语音不会重合成）</span>
+                            </div>
+                            <Toggle checked={voiceEmotionEnabled} onChange={handleVoiceEmotionToggle} />
                         </div>
                         <div className="prefs-row">
                             <div className="flex flex-col flex-1 text-left gap-0.5">

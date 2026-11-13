@@ -14,6 +14,7 @@ import type { StateValue } from "./chat-storage";
 import { parseStateValues, mergeStateValues } from "./state-value-parser";
 import { stripActionShells } from "./action-parser";
 import { stripTextToolDirectives } from "./text-tool-protocol";
+import { extractChatEmotion, type ChatEmotion } from "./emotion";
 import {
     formatCustomAppDirectiveSummary,
     getCustomAppDirectiveSyntaxHead,
@@ -28,6 +29,8 @@ export interface ParsedMessagePart {
     content: string;
     mediaType?: ChatMessage["mediaType"];
     mediaData?: ChatMessage["mediaData"];
+    /** 本轮情绪（整轮共用），朗读语音条时映射成 TTS 情绪 */
+    emotion?: ChatEmotion;
 }
 
 export interface ParsedAIResponse {
@@ -667,6 +670,11 @@ export function parseAIResponse(rawText: string, previousState: StateValue[]): P
         return r;
     };
 
+    // 0.5. 情绪标记 [情绪:happy]：先摘掉再分段，否则它会变成一个空气泡或漏进正文
+    const emotionHit = extractChatEmotion(protected_);
+    const turnEmotion = emotionHit.emotion;
+    if (turnEmotion) protected_ = emotionHit.text;
+
     // 1. Parse state values
     const parsedSV = parseStateValues(protected_);
     const stateValues = mergeStateValues(previousState, parsedSV.stateValues);
@@ -719,7 +727,9 @@ export function parseAIResponse(rawText: string, previousState: StateValue[]): P
         if (p.mediaType) return p;
         const display = stripTextToolDirectives(restore(p.content));
         return { ...p, content: display };
-    }).filter(p => p.mediaType || !isInvisibleOrWhitespaceOnly(p.content));
+    }).filter(p => p.mediaType || !isInvisibleOrWhitespaceOnly(p.content))
+        // 情绪是整轮共用一个（模型一轮一个语气），贴到这一轮的每条消息上，朗读语音条时用
+        .map(p => (turnEmotion ? { ...p, emotion: turnEmotion } : p));
 
     return {
         parts: cleaned,

@@ -5,6 +5,7 @@ import { findCustomStickerByName, resolveCustomStickerUrl } from "@/lib/custom-s
 import { isMediaStoreRef, loadMediaObjectUrl } from "@/lib/media-cache-storage";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import { ChatMessage, createOrGetSession, updateMessageMediaStatus, updateMessageMediaData } from "@/lib/chat-storage";
+import type { ChatEmotion } from "@/lib/emotion";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
 import { CHAT_OPEN_SESSION_EVENT, dispatchOpenAddContact } from "@/lib/chat-notification-events";
@@ -2321,7 +2322,7 @@ function XiaohongshuShareBubble({ msg }: { msg: ChatMessage }) {
 // 计费还留下点不动的死气泡（用户实报），点击触发 + 全局去重从根上断掉。
 const _voiceSynthInFlight = new Map<string, Promise<string>>();
 
-function synthesizeVoiceForMessage(msgId: string, characterId: string, speechText: string): Promise<string> {
+function synthesizeVoiceForMessage(msgId: string, characterId: string, speechText: string, emotion?: ChatEmotion): Promise<string> {
     const existing = _voiceSynthInFlight.get(msgId);
     if (existing) return existing;
     const task = (async () => {
@@ -2336,7 +2337,22 @@ function synthesizeVoiceForMessage(msgId: string, characterId: string, speechTex
                 spokenText = (await toKoreanSpeechText(speechText)) ?? speechText;
             }
         }
-        const blob = await synthesizeSpeech(spokenText, vc);
+        // 情绪只在设置里开了开关、且这条消息真的标了情绪时才传；
+        // 引擎拒了就去掉情绪重试一次（别让整条语音因为情绪参数挂掉）
+        const { isVoiceEmotionEnabled } = await import("@/lib/chat-storage");
+        const { toTtsEmotion } = await import("@/lib/emotion");
+        const ttsEmotion = isVoiceEmotionEnabled() ? toTtsEmotion(emotion) : undefined;
+        let blob: Blob | null = null;
+        if (ttsEmotion) {
+            try {
+                blob = await synthesizeSpeech(spokenText, vc, { emotion: ttsEmotion });
+            } catch {
+                blob = null;
+            }
+            if (!blob) blob = await synthesizeSpeech(spokenText, vc);
+        } else {
+            blob = await synthesizeSpeech(spokenText, vc);
+        }
         if (!blob) throw new Error("合成失败");
         const dataUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -2443,7 +2459,7 @@ function VoiceMessageBubble({ msg, characterId, onUpdate, defaultTranslationExpa
         }
         setSynthesizing(true);
         setSynthFailed(false);
-        synthesizeVoiceForMessage(msg.id, characterId, speechText)
+        synthesizeVoiceForMessage(msg.id, characterId, speechText, msg.emotion)
             .then((dataUrl) => {
                 if (onUpdate) onUpdate({ ...msg, mediaUrl: dataUrl, mediaData: { ...msg.mediaData, synthesizedFromText: speechText } });
                 if (!mountedRef.current) return;

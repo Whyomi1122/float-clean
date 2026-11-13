@@ -134,6 +134,8 @@ export function stripSpokenScript(raw: string, options?: SpeechCleanOptions): st
 export function cleanSpeechFragment(raw: string, options?: SpeechCleanOptions): string {
     if (!raw) return "";
     let text = stripVoiceNoteWrapper(raw);
+    // 语气标记 [情绪:happy] 是给朗读参数用的，任何情况下都不能被念出来（含没写完的半截）
+    text = text.replace(/[[【]\s*情绪\s*[:：][^\]】\n]*[\]】]?/g, "");
     text = stripBilingualTranslation(text);
     text = stripSpokenScript(text, options);
     text = text.replace(DECORATION_CHARS, " ");

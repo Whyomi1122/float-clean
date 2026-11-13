@@ -12,6 +12,7 @@ import { loadCharacters } from "./character-storage";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { emitChatPluginEvent, runChatPluginTransformSync } from "./chat-plugin-hooks";
 import { parseAIResponse } from "./rich-message-parser";
+import type { ChatEmotion } from "./emotion";
 import { extractTextToolDirectiveText } from "./text-tool-protocol";
 
 export const DEFAULT_VISION_IMAGE_PROMPT_LIMIT = 1;
@@ -101,6 +102,8 @@ export type ChatMessage = {
     responseRoundId?: string; // Group-chat whole-round id shared across all bubbles in one assistant turn
     toolExecutionId?: string; // Links visible tool attachments to their persisted tool result
     editableResponseText?: string; // Processed text shown in the reply editor
+    /** 本轮情绪（模型用 [情绪:happy] 标注，整轮共用）；旧数据没有这个字段，不迁移 */
+    emotion?: ChatEmotion;
     isRetracted?: boolean;
     mediaType?: "image" | "audio" | "video"
         | "red_packet" | "transfer" | "location"
@@ -277,6 +280,7 @@ export type ChatAppSettings = {
     browserNotificationsEnabled?: boolean; // When true, send browser Notification API alerts when page is hidden
     enterToSendEnabled?: boolean; // When true, Enter sends chat input and Shift+Enter inserts a newline
     callVibrationEnabled?: boolean; // 语音/视频来电等待接听时循环振动（默认开；iOS 网页不支持振动则无效果）
+    voiceEmotionEnabled?: boolean; // 朗读语音条时带情绪（默认关；只影响 MiniMax 支持的那几个值）
     maxToolRounds?: number; // 单条消息的工具循环轮数上限（默认 5；每轮=一次模型请求，轮内调用条数不限）
     floatingDockEnabled?: boolean; // 悬浮球贴边半隐藏收拢模式（默认关）
 };
@@ -286,6 +290,11 @@ export function getMaxToolRounds(): number {
     const raw = loadChatAppSettings().maxToolRounds;
     if (typeof raw !== "number" || !Number.isFinite(raw)) return 5;
     return Math.max(1, Math.min(20, Math.round(raw)));
+}
+
+/** 朗读语音条是否带情绪（默认关） */
+export function isVoiceEmotionEnabled(): boolean {
+    return loadChatAppSettings().voiceEmotionEnabled === true;
 }
 
 /** 会话是否开启线上流式生成（默认关；按会话独立控制，单聊/群聊都生效） */
@@ -561,6 +570,7 @@ const DEFAULT_CHAT_APP_SETTINGS: ChatAppSettings = {
     quickActionEnabled: false,
     enterToSendEnabled: false,
     floatingDockEnabled: false,
+    voiceEmotionEnabled: false,
 };
 
 // ── In-Memory Caches (hydrated from IndexedDB on startup) ──────────

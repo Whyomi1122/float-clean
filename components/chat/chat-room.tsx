@@ -2682,6 +2682,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     content: part.content,
                     mediaType: part.mediaType,
                     mediaData: part.mediaData,
+                    emotion: part.emotion,
                     responseBatchId,
                     rawResponseText: r.responseText,
                     responseRoundId,
@@ -3768,6 +3769,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                 content: part.content,
                                 mediaType: part.mediaType,
                                 mediaData: part.mediaData,
+                                emotion: part.emotion,
                                 responseBatchId,
                                 rawResponseText,
                                 responseRoundId,
@@ -4696,6 +4698,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 content: string;
                 mediaType?: ChatMessage["mediaType"];
                 mediaData?: ChatMessage["mediaData"];
+                emotion?: ChatMessage["emotion"];
                 rawResponseText?: string;
                 responseBatchId?: string;
                 statusPanel?: string;
@@ -4731,6 +4734,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         content: part.content,
                         mediaType: part.mediaType,
                         mediaData: part.mediaData,
+                        emotion: part.emotion,
                         rawResponseText: segment.responseText,
                         responseBatchId,
                         statusPanel: attachHere && statusPanel ? statusPanel : undefined,
@@ -5293,6 +5297,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     content: part.content,
                     mediaType: part.mediaType,
                     mediaData,
+                    emotion: part.emotion ?? base.emotion,
                     statusPanel: statusPanelHere,
                     statusRegionMode: statusRegionModeHere,
                     innerMonologue: innerMonologueHere,

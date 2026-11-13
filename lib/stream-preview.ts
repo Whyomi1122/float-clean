@@ -69,6 +69,8 @@ export function cleanStreamText(raw: string, options?: { stripXmlTags?: readonly
     text = text.replace(/\[引用\s*[:：][^\]\r\n]*$/g, "");
     // 动作标签（朋友圈/发帖/静默等）与拍一拍通知不进入正文预览。
     text = text.replace(/\[(?:发朋友圈|发微博|发帖|静默|骰子|领取红包|拒收红包|接受转账|领取转账|拒收转账|接受代付|拒绝代付)[^\]\r\n]*\]/g, "");
+    // 语气标记 [情绪:happy] 只在朗读时用，预览里不该出现（含还没写完的半截）
+    text = text.replace(/[[【]\s*情绪\s*[:：][^\]】\r\n]*[\]】]?/g, "");
     text = text.replace(/\[[^\]\r\n]{0,32}拍了拍[^\]\r\n]*\]/g, "");
     // 行内状态值支持中文字段名，同时保留群聊的 [角色名]: 前缀。
     text = text.replace(/\[[^\]\r\n：:]{1,24}\s*[:：]\s*-?\d+(?:\.\d+)?\s*\]/g, "");
