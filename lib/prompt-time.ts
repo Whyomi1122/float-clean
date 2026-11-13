@@ -1,5 +1,6 @@
 import { loadChatAppSettings } from "./chat-storage";
 import { formatZonedPromptTimestamp, getSystemTimeZone } from "./character-time";
+import { toStoryDate } from "./story-clock";
 
 const PROMPT_TIMESTAMP_PATTERN = "\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}";
 const PROMPT_TIMESTAMP_WITH_ZONE_PATTERN = `${PROMPT_TIMESTAMP_PATTERN}(?:\\s+[^)）\\]]+)?`;
@@ -42,7 +43,8 @@ export function resolvePromptTimeAware(value?: boolean): boolean {
 }
 
 export function formatPromptTimestamp(isoStr: string, options?: PromptTimestampOptions): string {
-  const date = new Date(isoStr);
+  // 剧情时钟（2026-11-12）：历史消息的时间戳换算成剧情时间显示，偏移为 0 时与以前完全一致
+  const date = toStoryDate(new Date(isoStr));
   if (isNaN(date.getTime())) return "";
   if (options?.timeZone || options?.includeTimeZone) {
     const timeZone = options.timeZone || getSystemTimeZone();

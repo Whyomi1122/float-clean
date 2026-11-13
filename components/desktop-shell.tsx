@@ -7,6 +7,7 @@ import { startDiaryEntryTimerService, stopDiaryEntryTimerService } from "@/lib/d
 import { startFollowUpService, stopFollowUpService } from "@/lib/follow-up-service";
 import { startMomentsService, stopMomentsService } from "@/lib/moments-engine";
 import { bgTimerCleanup } from "@/lib/bg-timer";
+import { getStoryNow, subscribeStoryClock } from "@/lib/story-clock";
 import { PhoneThemeApp } from "@/components/phone-theme-app";
 import { PhoneCharacterApp } from "@/components/phone-character-app";
 import { PhoneSettingsApp } from "@/components/phone-settings-app";
@@ -607,13 +608,18 @@ function StatusClock() {
 
   useEffect(() => {
     const update = () => {
+      // 剧情时钟（2026-11-12）：状态栏时间也走剧情时间，没设置偏移时就是现实时间
       setLabel(
-        new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
+        getStoryNow().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
       );
     };
     update();
+    const unsubscribe = subscribeStoryClock(update);
     const timer = window.setInterval(update, 10000);
-    return () => window.clearInterval(timer);
+    return () => {
+      unsubscribe();
+      window.clearInterval(timer);
+    };
   }, []);
 
   return <span className="status-time">{label}</span>;

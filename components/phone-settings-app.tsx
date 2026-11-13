@@ -21,6 +21,8 @@ import { CloudServicesPage } from "./settings/cloud-services-setup";
 import { ToolboxSettings } from "./settings/toolbox-settings";
 import { ModerationCenter } from "./settings/moderation-center";
 import { AgentComputerSettings } from "./settings/agent-computer-settings";
+import { StoryClockSettings } from "./settings/story-clock-settings";
+import { getStoryNow, isStoryClockActive, subscribeStoryClock } from "@/lib/story-clock";
 import { fetchIsAdmin } from "@/lib/moderation-client";
 import { PageShell } from "./ui/page-shell";
 import { CardGrid, FeaturedCard, type CardItem, type FeaturedCardItem } from "./ui/card-grid";
@@ -57,6 +59,7 @@ type SubPage =
     | "toolbox"
     | "agentComputer"
     | "moderation"
+    | "storyClock"
     | "about";
 
 const SETTINGS_MENU = [
@@ -72,6 +75,7 @@ const SETTINGS_MENU = [
     { id: "weixin", icon: MessageSquare, label: "微信接入", desc: "iLink Bot", iconColor: CONTENT_APP_ACCENTS.chat , glass: "weixin" },
     { id: "toolbox", icon: Wrench, label: "聊天工具箱", desc: "外部工具调用", iconColor: BINDING_ACCENTS.voice , glass: "toolbox" },
     { id: "agentComputer", icon: Laptop, label: "角色电脑", desc: "云端小电脑（自部署）", iconColor: BINDING_ACCENTS.memory , glass: "agent-computer" },
+    { id: "storyClock", icon: Clock, label: "剧情时间", desc: "和群像目前的剧情对齐", iconColor: BINDING_ACCENTS.api , glass: "" },
     { id: "identity", icon: UserCircle, label: "用户身份", desc: "个人信息", iconColor: BINDING_ACCENTS.identity , glass: "identity" },
     { id: "about", icon: Info, label: "关于与声明", desc: "版本与协议", iconColor: BINDING_ACCENTS.memory , glass: "about" },
 ] as const;
@@ -103,6 +107,43 @@ const passwordIconStyle = {
 const logoutIconStyle = {
     "--icon-color": "var(--c-danger)",
 } as CSSProperties;
+
+// 剧情时间入口卡片（2026-11-12）：显示当前剧情时间，点进去对齐 / 校准
+function StoryClockQuickCard({ onOpen }: { onOpen: () => void }) {
+    const [label, setLabel] = useState("未启用，和现实时间一致");
+
+    useEffect(() => {
+        const sync = () => {
+            if (!isStoryClockActive()) {
+                setLabel("未启用，和现实时间一致");
+                return;
+            }
+            const now = getStoryNow();
+            const pad = (value: number) => String(value).padStart(2, "0");
+            setLabel(`剧情里现在是 ${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`);
+        };
+        sync();
+        const unsubscribe = subscribeStoryClock(sync);
+        const timer = window.setInterval(sync, 60000);
+        return () => {
+            unsubscribe();
+            window.clearInterval(timer);
+        };
+    }, []);
+
+    return (
+        <div className="app-card card-featured settings-toggle-card" role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={onOpen}>
+            <span className="card-icon card-icon-glass">
+                <GlassIcon name="time-aware" />
+            </span>
+            <div className="card-featured-body">
+                <div className="card-featured-label">剧情时间</div>
+                <div className="card-featured-desc">{label}</div>
+            </div>
+            <ChevronRight size={18} className="settings-account-chevron" />
+        </div>
+    );
+}
 
 export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
     const [currentPage, setCurrentPage] = useState<SubPage>("main");
@@ -326,6 +367,8 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                 return <ModerationCenter onNotice={onNotice} />;
             case "identity":
                 return <UserIdentitySettings />;
+            case "storyClock":
+                return <StoryClockSettings />;
             case "about":
                 return <AboutDeclaration />;
             default:
@@ -450,6 +493,7 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                                 </div>
                                 <Toggle checked={keepAlive} onChange={handleKeepAliveChange} className="settings-toggle-control" />
                             </div>
+                            <StoryClockQuickCard onOpen={() => setCurrentPage("storyClock")} />
                         </div>
                         {isAdmin ? (
                             <div className="settings-moderation-section">

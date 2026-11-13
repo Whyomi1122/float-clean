@@ -114,6 +114,38 @@ async function buildEnsembleSection(characterId: string): Promise<string> {
 }
 
 /**
+ * 设置页「对齐剧情时间」用（2026-11-12）：
+ * 在所有角色里找**最新一条群像归档**的「当前锚点」原文，交给剧情时钟解析。
+ */
+export async function findLatestEnsembleAnchor(): Promise<{ characterId: string; characterName: string; anchor: string; updatedAt: string } | null> {
+    if (typeof window === "undefined") return null;
+    try {
+        const { loadMemoryEntriesByType } = await import("./memory-storage");
+        const characters = loadCharacters();
+        let best: { characterId: string; characterName: string; anchor: string; updatedAt: string } | null = null;
+        for (const character of characters) {
+            const entries = await loadMemoryEntriesByType(character.id, "archive").catch(() => []);
+            for (const entry of entries) {
+                if (entry.sourceApp !== "ensemble") continue;
+                const content = String(entry.content || "");
+                const anchorMatch = content.match(/═+\s*当前锚点([^\n]*)═+([\s\S]*)$/);
+                if (!anchorMatch) continue;
+                const body = anchorMatch[2].trim();
+                if (!body) continue;
+                const anchor = `当前锚点${anchorMatch[1] || ""}\n${body}`.trim();
+                const updatedAt = String(entry.updatedAt || entry.createdAt || "");
+                if (!best || updatedAt.localeCompare(best.updatedAt) > 0) {
+                    best = { characterId: character.id, characterName: character.name || "角色", anchor, updatedAt };
+                }
+            }
+        }
+        return best;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * 归档用的完整背景包。
  * - settings：人设 + 时区 + 世界书（够判断双方各自在哪、是什么关系）
  * - memories：长期记忆（知道更早发生过什么，避免重复叙述；上一版归档由归档面板单独喂）

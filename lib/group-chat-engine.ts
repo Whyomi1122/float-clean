@@ -86,6 +86,7 @@ import type { DebugPromptSnapshot } from "./debug-store";
 import { throwIfAborted } from "./abort-utils";
 import { buildCharacterTimeContext, buildGroupTimeContext } from "./character-time";
 import { getPromptTimestampOptionsForTimeContext } from "./prompt-time";
+import { getStoryNow } from "./story-clock";
 
 function stripGroupFinancialActionsForMetadataRepair(text: string): string {
     return stripStateAndInnerForPrompt(text)
@@ -338,7 +339,8 @@ async function buildGroupChatPromptMessages(
     const memConfig = loadMemoryConfig();
     const allWorldBooks = loadWorldBooks();
 
-    const now = new Date();
+    // 剧情时钟（2026-11-12）：群聊和私聊用同一条剧情时间线
+    const now = getStoryNow();
     const memberTimeContexts: Record<string, ReturnType<typeof buildCharacterTimeContext>> = {};
     const memberDataPromises = participantIds.map(async (charId): Promise<GroupMemberData | null> => {
         const character = charMap.get(charId);
