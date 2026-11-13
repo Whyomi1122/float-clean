@@ -3271,18 +3271,51 @@
     opacity: 0.7;
 }
 
-/* 一起听时的歌曲资料状态小字（资料：已获取 / 未配 Key / 未搜到） */
+/* 歌曲资料状态小字（资料：已获取 / 获取中 / 未配 Key / 未搜到） */
+/* 2026-11-13：上一版 9.5px + 0.45 透明度实机几乎看不见（用户反馈「啥也没写」），放大提亮 */
 .mp-info-status {
-    font-size: calc(9.5px*var(--app-text-scale,1));
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: calc(11px*var(--app-text-scale,1));
     line-height: 1.3;
     color: var(--c-music-text);
-    opacity: 0.45;
+    opacity: 0.72;
     letter-spacing: 0.02em;
-    margin-top: 1px;
+    margin-top: 2px;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.mp-info-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.mp-info-status[data-status="ready"] {
+    opacity: 0.8;
+}
+
+.mp-info-status[data-status="pending"] .mp-info-dot {
+    animation: mp-info-pulse 1.2s ease-in-out infinite;
+}
+
+.mp-info-status[data-status="nokey"],
+.mp-info-status[data-status="failed"] {
+    opacity: 0.55;
+}
+
+@keyframes mp-info-pulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
+}
+
 
 .mp-top-actions {
     display: flex;

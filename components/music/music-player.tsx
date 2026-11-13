@@ -257,36 +257,37 @@ export default function MusicPlayer() {
     // ── 播放页显示「资料：已获取 / 获取中 / 未配 Key / 未搜到」（直接排版面自查） ──
     // 2026-11-12：不再只在「一起听」里显示——普通播放也显示；没搜过的会在这里主动抓一次，
     // 抓取完成自动刷新成「已获取」，用户能看到进度，不用等角色回话才触发。
-    const [songInfoLabel, setSongInfoLabel] = useState("");
+    // 2026-11-13：改成「渲染时直接算」，不再靠 effect 塞 state ——
+    // 上一版实机反馈「啥也没写」，怀疑是 state 被首帧/切歌时序吃掉，这里彻底去掉这层不确定性。
+    const [songInfoRevision, setSongInfoRevision] = useState(0);
     const songInfoFetchingRef = useRef("");
+    const songInfoStatus = useMemo(
+        () => (player.currentTrack?.title ? getSongInfoStatus(player.currentTrack.title, player.currentTrack.artist) : "none"),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [player.currentTrack?.title, player.currentTrack?.artist, songInfoRevision]
+    );
+    const songInfoLabel = getSongInfoStatusLabel(songInfoStatus);
     useEffect(() => {
         let cancelled = false;
         const keyOf = (t: { title?: string; artist?: string }) => `${(t.title || "").trim().toLowerCase()}|${(t.artist || "").trim().toLowerCase()}`;
 
         const refresh = () => {
+            if (cancelled) return;
+            setSongInfoRevision(value => value + 1);
             const current = player.currentTrack;
-            if (!current?.title) {
-                if (!cancelled) setSongInfoLabel("");
-                return;
-            }
-            const status = getSongInfoStatus(current.title, current.artist);
-            if (!cancelled) setSongInfoLabel(getSongInfoStatusLabel(status));
+            if (!current?.title) return;
+            if (getSongInfoStatus(current.title, current.artist) !== "pending") return;
 
             const key = keyOf(current);
-            if (status === "pending" && songInfoFetchingRef.current !== key) {
-                songInfoFetchingRef.current = key;
-                // 后台抓一次，不阻塞播放；失败会静默记成 failed，1 小时内不再重试
-                void ensureSongInfo(current.title, current.artist || "")
-                    .catch(() => "")
-                    .then(() => {
-                        songInfoFetchingRef.current = "";
-                        if (cancelled) return;
-                        const now = player.currentTrack;
-                        if (now && keyOf(now) === key) {
-                            setSongInfoLabel(getSongInfoStatusLabel(getSongInfoStatus(now.title, now.artist)));
-                        }
-                    });
-            }
+            if (songInfoFetchingRef.current === key) return;
+            songInfoFetchingRef.current = key;
+            // 后台抓一次，不阻塞播放；失败会静默记成 failed，1 小时内不再重试
+            void ensureSongInfo(current.title, current.artist || "")
+                .catch(() => "")
+                .then(() => {
+                    songInfoFetchingRef.current = "";
+                    if (!cancelled) setSongInfoRevision(value => value + 1);
+                });
         };
         refresh();
         const timer = setInterval(refresh, 4000);
@@ -504,7 +505,12 @@ export default function MusicPlayer() {
                         {track.artist || "未知歌手"}
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 5 7 7-7 7" /></svg>
                     </button>
-                    {songInfoLabel && <div className="mp-info-status">{songInfoLabel}</div>}
+                    {songInfoLabel && (
+                        <div className="mp-info-status" data-status={songInfoStatus}>
+                            <i className="mp-info-dot" />
+                            {songInfoLabel}
+                        </div>
+                    )}
                 </div>
                 <div className="mp-top-actions">
                     <button className="music-player-ctrl-btn mp-top-btn" onClick={togglePlayerStyle} title={playerStyle === "vinyl" ? "切换现代样式" : "切换黑胶样式"}>
