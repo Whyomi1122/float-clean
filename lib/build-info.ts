@@ -18,9 +18,19 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.13-4",
+    version: "2026.11.13-5",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.13-5",
+            title: "歌曲卡片写法兜底：带书名号/歌手也能找对歌",
+            items: [
+                "卡片字段统一解析：[音乐分享:《Ditto》- NewJeans]、[音乐: Ditto — NewJeans]、[音乐分享:「Hype Boy」｜NewJeans] 都能拆出歌名与歌手",
+                "去掉歌名里的《》「」引号；带连字符的歌名（Bling-Bang-Bang-Born）不会再被切碎",
+                "卡片上的歌手参与匹配：同名歌先挑歌手对得上的那首，少放错版本",
+                "记忆/上下文回写卡片时带上歌手，模型以后按「歌名-歌手」的写法发卡片更稳",
+            ],
+        },
         {
             version: "2026.11.13-4",
             title: "群像分镜锁脸了：图能点开放大保存，正脸不再现编",

@@ -65,6 +65,50 @@ function parseMuteMinutes(num?: string, unit?: string): number {
     return n;
 }
 
+/**
+ * 音乐卡片字段兜底：模型写卡片的写法五花八门 ——
+ *   [音乐分享:《Ditto》- NewJeans] / [音乐: Ditto — NewJeans] / [音乐分享:「Hype Boy」｜NewJeans]
+ * 老的写法只按第一个半角 "-" 切，书名号/引号也没去掉，歌名带着《》和歌手名丢进搜索 →「没有找到该音乐哦~」。
+ * 这里统一：去包裹符号 → 按 - — – ｜ | / 切歌名与歌手 → 长度兜底。
+ */
+export function splitMusicFields(raw: string): { title: string; artist: string } {
+    const strip = (s: string) => s
+        .replace(/^[\s《「『“"'（(【\[]+/, "")
+        .replace(/[\s》」』”"'）)】\]]+$/, "")
+        .trim();
+    let text = (raw || "").replace(/\s+/g, " ").trim();
+    // 整串被书名号包住的情况：《歌名》- 歌手
+    text = text.replace(/^《([^》]+)》\s*/, "$1 - ");
+    // 分隔符：空格+任意横线/竖线、破折号/竖线（无空格也认）、以及「- 」这种半角带空格写法。
+    // 注意不能见到 "-" 就切 —— Bling-Bang-Bang-Born 这种歌名会被切碎。
+    const sepRegexes = [
+        /\s+(?:-|—|–|－|\||｜|\/|、)\s*/,
+        /\s*(?:—|–|－|\||｜|\/|、)\s*/,
+        /\s*-\s+/,
+    ];
+    let title = text;
+    let artist = "";
+    for (const re of sepRegexes) {
+        const m = text.match(re);
+        if (m && m.index !== undefined && m.index > 0) {
+            title = text.slice(0, m.index);
+            artist = text.slice(m.index + m[0].length);
+            break;
+        }
+    }
+    // 兜底：整串只有一个半角 "-"（Ditto-NewJeans）才敢切；Bling-Bang-Bang-Born 这种保持原样
+    if (!artist) {
+        const pieces = text.split("-");
+        if (pieces.length === 2 && pieces[0].trim() && pieces[1].trim().length <= 24) {
+            title = pieces[0];
+            artist = pieces[1];
+        }
+    }
+    title = strip(title).slice(0, 60);
+    artist = strip(artist).slice(0, 40);
+    return { title: title || strip(raw).slice(0, 60), artist };
+}
+
 const RICH_PATTERNS: {
     regex: RegExp;
     build: (m: RegExpMatchArray) => ParsedMessagePart;
@@ -227,9 +271,7 @@ const RICH_PATTERNS: {
         regex: new RegExp(`\\[音乐${C}([^\\]]+)\\]`),
         build: (m) => {
             const raw = m[1].trim();
-            const sep = raw.indexOf("-");
-            const title = sep > 0 ? raw.slice(0, sep).trim() : raw;
-            const artist = sep > 0 ? raw.slice(sep + 1).trim() : "";
+            const { title, artist } = splitMusicFields(raw);
             return {
                 content: "",
                 mediaType: "music" as const,
@@ -238,14 +280,15 @@ const RICH_PATTERNS: {
         },
     },
     {
-        // [音乐分享:歌名] — AI shares a song as a card
+        // [音乐分享:歌名] / [音乐分享:歌名-歌手] — AI shares a song as a card
         regex: new RegExp(`\\[音乐分享${C}([^\\]]+)\\]`),
         build: (m) => {
-            const title = m[1].trim();
+            const raw = m[1].trim();
+            const { title, artist } = splitMusicFields(raw);
             return {
                 content: "",
                 mediaType: "music_share" as const,
-                mediaData: { musicTitle: title, label: title },
+                mediaData: { musicTitle: title, musicArtist: artist, label: raw },
             };
         },
     },

@@ -1203,8 +1203,9 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             return `[音乐:${d?.musicTitle ?? d?.label ?? "未知歌曲"}${artist}]`;
         }
         case "music_share": {
-            const mTitle = d?.musicTitle || "未知歌曲";
-            return `[音乐分享:${mTitle}]`;
+            const mTitle = d?.musicTitle || d?.label || "未知歌曲";
+            const mArtist = d?.musicArtist ? `-${d.musicArtist}` : "";
+            return `[音乐分享:${mTitle}${mArtist}]`;
         }
         case "xiaohongshu_note_share":
             return formatXiaohongshuShareForPrompt({

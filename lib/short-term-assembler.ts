@@ -250,7 +250,7 @@ export function loadNativeTimeline(
                     items: msg.mediaData?.paymentRequestItems,
                     itemsText: msg.mediaData?.paymentRequestItemsText,
                 });
-                else if (msg.mediaType === "music_share") content = `[音乐分享:${msg.mediaData?.musicTitle || ""}]`;
+                else if (msg.mediaType === "music_share") content = `[音乐分享:${msg.mediaData?.musicTitle || ""}${msg.mediaData?.musicArtist ? `-${msg.mediaData.musicArtist}` : ""}]`;
                 else if (msg.mediaType === "xiaohongshu_note_share") content = formatXiaohongshuShareForPrompt({
                     author: msg.mediaData?.xiaohongshuAuthor,
                     title: msg.mediaData?.xiaohongshuTitle,
@@ -362,7 +362,7 @@ export function loadNativeTimeline(
                 }
                 else if (msg.mediaType === "voice_call" || msg.mediaType === "video_call") content = `[我发起了${msg.mediaType === "voice_call" ? "语音" : "视频"}通话]`;
                 else if (msg.mediaType === "location") content = `[位置:${msg.mediaData?.label || ""}]`;
-                else if (msg.mediaType === "music_share") content = `[音乐分享:${msg.mediaData?.musicTitle || ""}]`;
+                else if (msg.mediaType === "music_share") content = `[音乐分享:${msg.mediaData?.musicTitle || ""}${msg.mediaData?.musicArtist ? `-${msg.mediaData.musicArtist}` : ""}]`;
                 else if (msg.mediaType === "xiaohongshu_note_share") content = formatXiaohongshuShareForPrompt({
                     author: msg.mediaData?.xiaohongshuAuthor,
                     title: msg.mediaData?.xiaohongshuTitle,

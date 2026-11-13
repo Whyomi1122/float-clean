@@ -993,20 +993,30 @@ export async function findBestMatch(title: string, artist?: string): Promise<Uni
  * Find best PLAYABLE match — tries each result until one has a valid play URL.
  * Falls back to findBestMatch if all fail.
  */
-export async function findPlayableMatch(title: string, _artist?: string): Promise<{ result: UnifiedSearchResult; playUrl?: string } | null> {
+export async function findPlayableMatch(title: string, artist?: string): Promise<{ result: UnifiedSearchResult; playUrl?: string } | null> {
     const results = await unifiedSearch(title);
     if (results.length === 0) return null;
 
+    // 卡片上写了歌手就用它挑一下：同名不同歌的歌太多，别放错
+    const artistLower = (artist || "").trim().toLowerCase();
+    const matchArtist = (r: UnifiedSearchResult) => !artistLower || (r.artist || "").toLowerCase().includes(artistLower);
+
     // Local tracks are always playable
     const titleLower = title.toLowerCase();
-    const localExact = results.find(r => r.source === "local" && r.title.toLowerCase() === titleLower);
+    const localAll = results.filter(r => r.source === "local");
+    const localExact = localAll.find(r => r.title.toLowerCase() === titleLower && matchArtist(r))
+        || localAll.find(r => r.title.toLowerCase() === titleLower);
     if (localExact) return { result: localExact };
-    const localAny = results.find(r => r.source === "local");
+    const localAny = localAll.find(matchArtist) || localAll[0];
     if (localAny) return { result: localAny };
 
     // Try netease results one by one until we find a playable URL
     const neteaseResults = results.filter(r => r.source === "netease" && r.neteaseResult);
-    for (const r of neteaseResults.slice(0, 5)) {
+    const ordered = [
+        ...neteaseResults.filter(matchArtist),
+        ...neteaseResults.filter(r => !matchArtist(r)),
+    ];
+    for (const r of ordered.slice(0, 5)) {
         const url = await getNeteasePlayUrl(r.neteaseResult!.id);
         if (url) return { result: r, playUrl: url };
     }
