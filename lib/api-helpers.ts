@@ -191,6 +191,7 @@ export async function simpleLLMCall(
         return { content: null, error: "API 地址或密钥无效" };
     }
     const sentMaxTokens: number | null = options?.max_tokens ?? null;
+    const startedAt = Date.now();
 
     try {
         const fetchUrl = request.url;
@@ -212,6 +213,7 @@ export async function simpleLLMCall(
                 model: config.defaultModel,
                 messages: messages.map(m => ({ role: m.role, content: m.content })),
                 rawResponse: `[API 错误 ${res.status}] ${errText.slice(0, 2000)}`,
+                durationMs: Date.now() - startedAt,
             });
             return { content: null, error: `API 错误 ${res.status}: ${errText.slice(0, 200)}` };
         }
@@ -230,6 +232,7 @@ export async function simpleLLMCall(
             messages: messages.map(m => ({ role: m.role, content: m.content })),
             rawResponse: content ?? describeEmptyLLMResponse(data, finishReason, wasTruncated, config),
             usage,
+            durationMs: Date.now() - startedAt,
         });
         if (!content) {
             console.warn("[simpleLLMCall] Empty response. Keys:", JSON.stringify(Object.keys(data || {})),
@@ -255,6 +258,7 @@ export async function simpleLLMCall(
             model: config.defaultModel,
             messages: messages.map(m => ({ role: m.role, content: m.content })),
             rawResponse: `[请求失败] ${err instanceof Error ? err.message : String(err)}`,
+            durationMs: Date.now() - startedAt,
         });
         return { content: null, error: `请求失败: ${err instanceof Error ? err.message : String(err)}` };
     }

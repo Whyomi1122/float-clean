@@ -192,6 +192,7 @@ import {
     Sticker,
     ThumbsUp,
     Trash2,
+    Download,
     User,
     type LucideIcon,
 } from "lucide-react";
@@ -860,6 +861,28 @@ function ApiLogViewer({ onBack }: { onBack: () => void }) {
         setLogs([]);
     };
 
+    /** 导出当前筛选下的调用记录（2026-11-12 加）：排查模型/归档问题时直接发文件 */
+    const handleExport = () => {
+        try {
+            const payload = {
+                exportedAt: new Date().toISOString(),
+                sourceFilter: hiddenSources.size > 0 ? `已隐藏 ${hiddenSources.size} 个来源` : "全部来源",
+                count: visibleLogs.length,
+                logs: visibleLogs,
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const d = new Date();
+            a.href = url;
+            a.download = `float-api-logs-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch { /* 导出失败就算了，不影响别的 */ }
+    };
+
     const formatTime = (ts: string) => {
         const d = new Date(ts);
         return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
@@ -957,6 +980,9 @@ function ApiLogViewer({ onBack }: { onBack: () => void }) {
                                                     {log.usage && (
                                                         <span>Tokens: {log.usage.prompt_tokens ?? "—"} / {log.usage.completion_tokens ?? "—"} / {log.usage.total_tokens ?? "—"}</span>
                                                     )}
+                                                    {typeof log.durationMs === "number" && (
+                                                        <span>耗时: {(log.durationMs / 1000).toFixed(1)}s</span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="menu-right">
@@ -1014,6 +1040,13 @@ function ApiLogViewer({ onBack }: { onBack: () => void }) {
 
                         {/* Clear button */}
                         <div className="menu-group mt-4">
+                            <button className="menu-item" onClick={handleExport}>
+                                <div className="menu-icon"><Download size={18} color="var(--c-icon)" /></div>
+                                <div className="menu-label-group">
+                                    <span className="menu-label">导出记录</span>
+                                    <span className="menu-desc">存成 JSON 文件（含 prompt / 回复 / tokens / 耗时），方便发给别人排查</span>
+                                </div>
+                            </button>
                             <button className="menu-item" onClick={handleClear}>
                                 <div className="menu-icon"><Trash2 size={18} color="var(--c-icon)" /></div>
                                 <div className="menu-label-group"><span className="menu-label menu-label-danger">清空记录</span></div>
