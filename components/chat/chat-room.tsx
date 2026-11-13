@@ -62,6 +62,8 @@ import { findPlayableMatch, getNeteaseLyrics, getNeteaseSongDetail } from "@/lib
 import { approveMemoryWriteRequest } from "@/lib/tool-executor";
 import type { MemoryWriteRequest, ToolResult } from "@/lib/tool-executor";
 import { formatChatUiTime } from "@/lib/chat-time";
+import { setActiveStoryScope } from "@/lib/story-clock";
+import { getStoryScopeForCharacter } from "@/lib/story-scope";
 import { parseActionTags } from "@/lib/action-parser";
 import { kvGet, kvSet, kvRemove } from "@/lib/kv-db";
 import { creditWalletBalance, payWithWalletBalance } from "@/lib/wallet-storage";
@@ -1120,6 +1122,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         return chars.find(c => c.id === session.contactId) || null;
     });
     const [isGenerating, setIsGenerating] = useState(false);
+    // 剧情时钟（2026-11-13 按剧本分线）：进哪个角色的聊天，界面时间与状态栏就跟随 TA 所属剧本
+    useEffect(() => {
+        if (!session.contactId) return;
+        setActiveStoryScope(getStoryScopeForCharacter(session.contactId));
+    }, [session.contactId]);
     const [offlineMode, setOfflineMode] = useState(false);
     const [theaterMode, setTheaterMode] = useState(() => kvGet(CHAT_THEATER_MODE_PREFIX + session.id) === "1");
     const [offlineTurns, setOfflineTurns] = useState<ChatOfflineTurn[]>([]);

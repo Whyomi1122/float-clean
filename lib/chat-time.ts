@@ -1,4 +1,4 @@
-import { getStoryNow, toStoryDate } from "./story-clock";
+import { getStoryNow, toStoryDate, type StoryScope } from "./story-clock";
 
 const WEEKDAY_NAMES = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
@@ -6,12 +6,16 @@ function padTwo(n: number): string {
     return n < 10 ? `0${n}` : `${n}`;
 }
 
-export function formatChatUiTime(dateStr: string): string {
+/**
+ * 聊天界面时间文案。
+ * scope = 该聊天所属剧本（2026-11-13 起按剧本分线；不传则用当前生效的时间线）
+ */
+export function formatChatUiTime(dateStr: string, scope?: StoryScope): string {
     // 剧情时钟（2026-11-12）：界面时间一律按剧情时间显示；没设置过偏移时与以前完全一致
-    const date = toStoryDate(new Date(dateStr));
+    const date = toStoryDate(new Date(dateStr), scope);
     if (Number.isNaN(date.getTime())) return "";
 
-    const now = getStoryNow();
+    const now = getStoryNow(scope);
     const hhmm = `${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`;
 
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());

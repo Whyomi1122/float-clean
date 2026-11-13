@@ -8,7 +8,8 @@ import { commitArchive, deleteArchive, updateArchiveEntry } from "@/lib/memory-s
 import { simpleLLMCall } from "@/lib/api-helpers";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import { buildArchiveContextPack } from "@/lib/archive-context-pack";
-import { getStoryNow, toStoryDate } from "@/lib/story-clock";
+import { getStoryNow, setActiveStoryScope, toStoryDate } from "@/lib/story-clock";
+import { getStoryScopeForCharacter } from "@/lib/story-scope";
 import type { MemoryEntry } from "@/lib/memory-types";
 
 const DRAFT_STORE_PREFIX = "ai_phone_chat_archive_draft_";
@@ -432,8 +433,10 @@ export function ChatArchivePanel({
                 onNotice("未配置记忆总结模型（设置 → 辅助模型）");
                 return;
             }
-            // 剧情时钟（2026-11-12）：归档的日期与时刻按剧情时间走，和群像当前锚点对齐
-            const now = getStoryNow();
+            // 剧情时钟（2026-11-12；2026-11-13 按剧本分线）：归档的日期与时刻按该角色所属剧本的剧情时间走
+            const storyScope = getStoryScopeForCharacter(characterId);
+            setActiveStoryScope(storyScope);
+            const now = getStoryNow(storyScope);
             const header = buildArchiveHeader(now);
             const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
                 Promise.race([

@@ -1,21 +1,27 @@
 "use client";
 
-// 剧情时间设置（2026-11-12，用户拍板「全局都是剧情时间」）
-// 群像剧情停在 07-19 晚，普通聊天/归档/界面时间都要跟着这条线走。
-// 做法：只存一个偏移量，剧情时间 = 现实时间 + 偏移；没设置过 = 与以前完全一致。
+// 剧情时间设置（2026-11-12 起；2026-11-13 升级为「按剧本分组」）
+//
+// 为什么按剧本而不是按角色：同一剧本的角色共享一条时间线（实机锚点里金成帝在首尔、
+// 岳霖玉在别庄，是同一天同一刻），按角色分会自相矛盾。不同剧本各玩各的才需要分开。
+//
+// 做法：只存偏移量，剧情时间 = 现实时间 + 偏移；没设置过 = 与以前完全一致。
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, RotateCcw, Sparkles } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
-import { findLatestEnsembleAnchor } from "@/lib/archive-context-pack";
+import { listEnsembleAnchors, type EnsembleAnchorHit } from "@/lib/archive-context-pack";
 import {
     clearStoryClock,
     getStoryNow,
     getStoryOffset,
+    listStoryClockScopes,
     parseAnchorStoryTime,
     setStoryNow,
     subscribeStoryClock,
+    type StoryScope,
 } from "@/lib/story-clock";
+import { refreshStoryScopes } from "@/lib/story-scope";
 
 function pad(value: number): string {
     return String(value).padStart(2, "0");
@@ -42,7 +48,7 @@ function describeOffset(offsetMs: number): string {
     return `比现实时间${offsetMs < 0 ? "早" : "晚"} ${parts.join("") || "1 分钟"}`;
 }
 
-type AnchorHit = { characterName: string; anchor: string; updatedAt: string };
+type TimelineOption = { scope: StoryScope; label: string; anchor: EnsembleAnchorHit | null };
 
 type StoryClockSettingsProps = {
     /** 原「真实时间感知」开关（2026-11-13 并进本页，主页不再单列一张卡） */
@@ -51,21 +57,18 @@ type StoryClockSettingsProps = {
 };
 
 export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockSettingsProps) {
-    const [offsetMs, setOffsetMs] = useState(0);
     const [tick, setTick] = useState(0);
-    const [anchor, setAnchor] = useState<AnchorHit | null>(null);
+    const [anchors, setAnchors] = useState<EnsembleAnchorHit[]>([]);
     const [anchorLoading, setAnchorLoading] = useState(true);
+    const [selectedScope, setSelectedScope] = useState<StoryScope>(null);
     const [manualValue, setManualValue] = useState("");
 
-    const sync = useCallback(() => {
-        setOffsetMs(getStoryOffset());
-        setTick(t => t + 1);
-    }, []);
+    const sync = useCallback(() => setTick(value => value + 1), []);
 
     useEffect(() => {
         sync();
         const unsubscribe = subscribeStoryClock(sync);
-        const timer = window.setInterval(() => setTick(t => t + 1), 30000);
+        const timer = window.setInterval(() => setTick(value => value + 1), 30000);
         return () => {
             unsubscribe();
             window.clearInterval(timer);
@@ -74,45 +77,69 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
 
     useEffect(() => {
         let alive = true;
-        findLatestEnsembleAnchor()
-            .then(found => {
-                if (!alive) return;
-                setAnchor(found);
-                setAnchorLoading(false);
-            })
-            .catch(() => {
-                if (alive) setAnchorLoading(false);
-            });
+        (async () => {
+            // 先把「角色 → 剧本」映射同步一遍，再按剧本取锚点
+            await refreshStoryScopes().catch(() => undefined);
+            const found = await listEnsembleAnchors().catch(() => []);
+            if (!alive) return;
+            setAnchors(found);
+            setAnchorLoading(false);
+        })();
         return () => {
             alive = false;
         };
     }, []);
 
-    // tick/offsetMs 变化时重算「现在」
+    const timelines = useMemo<TimelineOption[]>(() => {
+        const options: TimelineOption[] = [{ scope: null, label: "默认时间线", anchor: null }];
+        const seen = new Set<string>();
+        anchors.forEach(hit => {
+            if (!hit.scriptId || seen.has(hit.scriptId)) return;
+            seen.add(hit.scriptId);
+            options.push({ scope: hit.scriptId, label: hit.scriptTitle, anchor: hit });
+        });
+        // 已经设过偏移但当前没有锚点的剧本也列出来，避免「设过却找不到了」
+        listStoryClockScopes().forEach(entry => {
+            if (!entry.scope || seen.has(entry.scope)) return;
+            seen.add(entry.scope);
+            options.push({ scope: entry.scope, label: "群像剧情", anchor: null });
+        });
+        return options;
+    }, [anchors, tick]);
+
+    const activeOption = useMemo(
+        () => timelines.find(option => option.scope === selectedScope) || timelines[0],
+        [timelines, selectedScope]
+    );
+    const currentScope = activeOption?.scope ?? null;
+
     const storyNow = useMemo(() => {
         void tick;
-        void offsetMs;
-        return getStoryNow();
-    }, [tick, offsetMs]);
+        return getStoryNow(currentScope);
+    }, [tick, currentScope]);
     const realNow = useMemo(() => {
         void tick;
         return new Date();
     }, [tick]);
+    const offsetMs = useMemo(() => {
+        void tick;
+        return getStoryOffset(currentScope);
+    }, [tick, currentScope]);
 
     useEffect(() => {
-        if (!manualValue) setManualValue(toInputValue(getStoryNow()));
-    }, [manualValue]);
+        setManualValue(toInputValue(getStoryNow(currentScope)));
+    }, [currentScope]);
 
     const anchorTime = useMemo(() => {
-        if (!anchor) return null;
-        return parseAnchorStoryTime(anchor.anchor, getStoryNow());
-    }, [anchor, offsetMs]);
+        if (!activeOption?.anchor) return null;
+        return parseAnchorStoryTime(activeOption.anchor.anchor, getStoryNow(currentScope));
+    }, [activeOption, currentScope, tick]);
 
     const applyTime = useCallback((target: Date) => {
-        setStoryNow(target);
+        setStoryNow(target, currentScope);
         setManualValue(toInputValue(target));
         sync();
-    }, [sync]);
+    }, [currentScope, sync]);
 
     const handleApplyManual = useCallback(() => {
         if (!manualValue) return;
@@ -122,16 +149,46 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
     }, [applyTime, manualValue]);
 
     const handleClear = useCallback(() => {
-        clearStoryClock();
+        clearStoryClock(currentScope);
         setManualValue(toInputValue(new Date()));
         sync();
-    }, [sync]);
+    }, [currentScope, sync]);
 
     return (
         <div className="flex flex-col gap-6">
             <div className="flex items-center gap-2">
                 <Clock size={20} strokeWidth={1.8} className="mx-2 text-black/60" />
                 <h2 className="m-0 ts-24 font-bold italic leading-none text-black">Story Clock</h2>
+            </div>
+
+            {/* 时间线选择：默认 + 每个剧本各一条 */}
+            <div className="flex flex-col gap-2">
+                <h3 className="mx-2 text-[13px] font-bold text-black/50">选一条时间线</h3>
+                <div className="flex flex-wrap gap-2 px-2">
+                    {timelines.map(option => {
+                        const active = (option.scope ?? null) === currentScope;
+                        const offset = getStoryOffset(option.scope ?? null);
+                        return (
+                            <button
+                                key={option.scope ?? "__default__"}
+                                type="button"
+                                onClick={() => setSelectedScope(option.scope ?? null)}
+                                className="rounded-full border px-3 py-1.5 text-[12px] font-semibold transition"
+                                style={{
+                                    borderColor: active ? "var(--c-accent, #111)" : "rgba(0,0,0,0.12)",
+                                    background: active ? "rgba(0,0,0,0.06)" : "transparent",
+                                    color: active ? "#111" : "rgba(0,0,0,0.55)",
+                                }}
+                            >
+                                {option.label}
+                                <span className="ml-1.5 opacity-50">{offset ? "已偏移" : "现实"}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="mx-2 m-0 text-[12px] leading-relaxed text-black/40">
+                    同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「默认时间线」。
+                </p>
             </div>
 
             <div className="ui-config-card" style={{ gap: 10 }}>
@@ -157,14 +214,18 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 <div className="ui-config-card" style={{ gap: 10 }}>
                     {anchorLoading ? (
                         <span className="text-[13px] text-black/45">读取群像归档…</span>
-                    ) : anchor ? (
+                    ) : currentScope === null ? (
+                        <span className="text-[13px] leading-relaxed text-black/45">
+                            默认时间线没有对应的群像锚点。上面选一个剧本，就能读到那个剧本最新的「当前锚点」并一键对齐。
+                        </span>
+                    ) : activeOption?.anchor ? (
                         <>
                             <div className="flex items-center gap-1.5 text-[13px] font-semibold text-black">
                                 <Sparkles size={14} strokeWidth={1.8} className="text-black/45" />
-                                <span>{anchor.characterName} 的最新群像归档</span>
+                                <span>{activeOption.anchor.scriptTitle} · {activeOption.anchor.characterName} 的最新群像归档</span>
                             </div>
                             <div className="max-h-[92px] overflow-auto whitespace-pre-wrap rounded-[12px] bg-black/[0.03] p-2 text-[12px] leading-relaxed text-black/55">
-                                {anchor.anchor}
+                                {activeOption.anchor.anchor}
                             </div>
                             <div className="flex items-center justify-between gap-3">
                                 <span className="text-[12px] text-black/45">
@@ -181,18 +242,18 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                             </div>
                         </>
                     ) : (
-                        <span className="text-[13px] text-black/45">
-                            还没找到带「当前锚点」的群像归档。先把群像跑完一轮并归档，或者用下面的手动校准。
+                        <span className="text-[13px] leading-relaxed text-black/45">
+                            这个剧本暂时没找到带「当前锚点」的群像归档，用下面的手动校准。
                         </span>
                     )}
                 </div>
             </div>
 
             <div className="flex flex-col gap-3">
-                <h3 className="mx-2 text-[13px] font-bold text-black/50">手动校准</h3>
+                <h3 className="mx-2 text-[13px] font-bold text-black/50">手动校准（{activeOption?.label || "默认时间线"}）</h3>
                 <div className="ui-config-card" style={{ gap: 10 }}>
                     <span className="text-[12px] leading-relaxed text-black/45">
-                        告诉 App「剧情里现在是几点」，之后所有时间都从这里继续走。
+                        告诉 App「这条时间线里现在是几点」，之后都从这里继续走。
                     </span>
                     <input
                         type="datetime-local"

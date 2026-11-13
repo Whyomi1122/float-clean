@@ -117,12 +117,26 @@ async function buildEnsembleSection(characterId: string): Promise<string> {
  * 设置页「对齐剧情时间」用（2026-11-12）：
  * 在所有角色里找**最新一条群像归档**的「当前锚点」原文，交给剧情时钟解析。
  */
-export async function findLatestEnsembleAnchor(): Promise<{ characterId: string; characterName: string; anchor: string; updatedAt: string } | null> {
-    if (typeof window === "undefined") return null;
+export type EnsembleAnchorHit = {
+    /** null = 没挂到剧本（老归档没写 metadata） */
+    scriptId: string | null;
+    scriptTitle: string;
+    characterId: string;
+    characterName: string;
+    anchor: string;
+    updatedAt: string;
+};
+
+/**
+ * 按**剧本**列出「当前锚点」（2026-11-13 剧情时间分组用）。
+ * 同一剧本只在多个角色的归档里留最新的一条；没挂剧本的归档单独一条（scriptId = null）。
+ */
+export async function listEnsembleAnchors(): Promise<EnsembleAnchorHit[]> {
+    if (typeof window === "undefined") return [];
     try {
         const { loadMemoryEntriesByType } = await import("./memory-storage");
         const characters = loadCharacters();
-        let best: { characterId: string; characterName: string; anchor: string; updatedAt: string } | null = null;
+        const byScript = new Map<string, EnsembleAnchorHit>();
         for (const character of characters) {
             const entries = await loadMemoryEntriesByType(character.id, "archive").catch(() => []);
             for (const entry of entries) {
@@ -134,15 +148,40 @@ export async function findLatestEnsembleAnchor(): Promise<{ characterId: string;
                 if (!body) continue;
                 const anchor = `当前锚点${anchorMatch[1] || ""}\n${body}`.trim();
                 const updatedAt = String(entry.updatedAt || entry.createdAt || "");
-                if (!best || updatedAt.localeCompare(best.updatedAt) > 0) {
-                    best = { characterId: character.id, characterName: character.name || "角色", anchor, updatedAt };
-                }
+                const scriptIdRaw = typeof entry.metadata?.ensembleScriptId === "string" ? entry.metadata.ensembleScriptId.trim() : "";
+                const scriptTitleRaw = typeof entry.metadata?.ensembleScriptTitle === "string" ? entry.metadata.ensembleScriptTitle.trim() : "";
+                const key = scriptIdRaw || `__character__${character.id}`;
+                const hit: EnsembleAnchorHit = {
+                    scriptId: scriptIdRaw || null,
+                    scriptTitle: scriptTitleRaw || (scriptIdRaw ? "群像剧情" : `${character.name || "角色"}的群像`),
+                    characterId: character.id,
+                    characterName: character.name || "角色",
+                    anchor,
+                    updatedAt,
+                };
+                const previous = byScript.get(key);
+                if (!previous || updatedAt.localeCompare(previous.updatedAt) > 0) byScript.set(key, hit);
             }
         }
-        return best;
+        return Array.from(byScript.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     } catch {
-        return null;
+        return [];
     }
+}
+
+/**
+ * 设置页「对齐剧情时间」用（2026-11-12）：
+ * 在所有角色里找**最新一条群像归档**的「当前锚点」原文，交给剧情时钟解析。
+ */
+export async function findLatestEnsembleAnchor(): Promise<{ characterId: string; characterName: string; anchor: string; updatedAt: string } | null> {
+    const [latest] = await listEnsembleAnchors();
+    if (!latest) return null;
+    return {
+        characterId: latest.characterId,
+        characterName: latest.characterName,
+        anchor: latest.anchor,
+        updatedAt: latest.updatedAt,
+    };
 }
 
 /**

@@ -1,7 +1,8 @@
 // lib/chat-engine.ts
 
 import { createSseJsonParser } from "./sse-json";
-import { getStoryNow } from "./story-clock";
+import { getStoryNow, setActiveStoryScope } from "./story-clock";
+import { getStoryScopeForCharacter } from "./story-scope";
 import { isKoreanTextCharacter } from "./speech-language";
 import { maybeAppendShortcutCapability } from "./offline-shortcut-capability";
 import { loadCharacters } from "./character-storage";
@@ -1927,8 +1928,11 @@ export async function buildChatPromptMessages(
         ]
         : history;
 
-    // 剧情时钟（2026-11-12）：模型眼中的「现在」按剧情时间走，不是现实时间
-    const now = getStoryNow();
+    // 剧情时钟（2026-11-12；2026-11-13 按剧本分线）：模型眼中的「现在」按这个角色所属剧本走。
+    // 同时把 scope 设为「当前生效」，好让下面的历史时间戳换算（prompt-time）跟同一条线。
+    const storyScope = getStoryScopeForCharacter(character.id);
+    setActiveStoryScope(storyScope);
+    const now = getStoryNow(storyScope);
     const promptTimeContext = buildCharacterTimeContext(character.timeZone, now);
     const promptTimestampOptions = getPromptTimestampOptionsForTimeContext(promptTimeContext);
     const memConfig = loadMemoryConfig();

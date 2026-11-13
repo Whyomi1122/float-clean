@@ -8,6 +8,7 @@ import { startFollowUpService, stopFollowUpService } from "@/lib/follow-up-servi
 import { startMomentsService, stopMomentsService } from "@/lib/moments-engine";
 import { bgTimerCleanup } from "@/lib/bg-timer";
 import { getStoryNow, subscribeStoryClock } from "@/lib/story-clock";
+import { refreshStoryScopes } from "@/lib/story-scope";
 import { PhoneThemeApp } from "@/components/phone-theme-app";
 import { PhoneCharacterApp } from "@/components/phone-character-app";
 import { PhoneSettingsApp } from "@/components/phone-settings-app";
@@ -1032,6 +1033,8 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     musicOverlayControllerRef.current = controller;
   }, []);
   useAndroidCaretKeyboardLift();
+  // 剧情时钟（2026-11-13 按剧本分线）：启动时同步一次「角色 → 剧本」映射，之后按剧本换算时间
+  useEffect(() => { void refreshStoryScopes(); }, []);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [layout, setLayout] = useState<DesktopLayout>(DEFAULT_LAYOUT);
   // Dock is an ordered icon-id list (max DOCK_MAX), kept disjoint from `layout`.

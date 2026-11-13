@@ -86,7 +86,8 @@ import type { DebugPromptSnapshot } from "./debug-store";
 import { throwIfAborted } from "./abort-utils";
 import { buildCharacterTimeContext, buildGroupTimeContext } from "./character-time";
 import { getPromptTimestampOptionsForTimeContext } from "./prompt-time";
-import { getStoryNow } from "./story-clock";
+import { getStoryNow, setActiveStoryScope } from "./story-clock";
+import { getStoryScopeForCharacter } from "./story-scope";
 
 function stripGroupFinancialActionsForMetadataRepair(text: string): string {
     return stripStateAndInnerForPrompt(text)
@@ -339,8 +340,12 @@ async function buildGroupChatPromptMessages(
     const memConfig = loadMemoryConfig();
     const allWorldBooks = loadWorldBooks();
 
-    // 剧情时钟（2026-11-12）：群聊和私聊用同一条剧情时间线
-    const now = getStoryNow();
+    // 剧情时钟（2026-11-12；2026-11-13 按剧本分线）：群聊取参与者所属剧本，
+    // 参与者来自不同剧本（或都没剧本）时退回默认时间线，避免同一场戏里两个人时间打架。
+    const memberScopes = participantIds.map(id => getStoryScopeForCharacter(id));
+    const storyScope = memberScopes.length > 0 && memberScopes.every(scope => scope === memberScopes[0]) ? memberScopes[0] : null;
+    setActiveStoryScope(storyScope);
+    const now = getStoryNow(storyScope);
     const memberTimeContexts: Record<string, ReturnType<typeof buildCharacterTimeContext>> = {};
     const memberDataPromises = participantIds.map(async (charId): Promise<GroupMemberData | null> => {
         const character = charMap.get(charId);
