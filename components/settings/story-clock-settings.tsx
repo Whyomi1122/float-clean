@@ -21,7 +21,7 @@ import {
     subscribeStoryClock,
     type StoryScope,
 } from "@/lib/story-clock";
-import { refreshStoryScopes } from "@/lib/story-scope";
+import { getStoryScriptTitle, listStoryScripts, refreshStoryScopes } from "@/lib/story-scope";
 
 function pad(value: number): string {
     return String(value).padStart(2, "0");
@@ -59,6 +59,7 @@ type StoryClockSettingsProps = {
 export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockSettingsProps) {
     const [tick, setTick] = useState(0);
     const [anchors, setAnchors] = useState<EnsembleAnchorHit[]>([]);
+    const [scripts, setScripts] = useState<{ scriptId: string; scriptTitle: string }[]>([]);
     const [anchorLoading, setAnchorLoading] = useState(true);
     const [selectedScope, setSelectedScope] = useState<StoryScope>(null);
     const [manualValue, setManualValue] = useState("");
@@ -82,6 +83,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
             await refreshStoryScopes().catch(() => undefined);
             const found = await listEnsembleAnchors().catch(() => []);
             if (!alive) return;
+            setScripts(listStoryScripts());
             setAnchors(found);
             setAnchorLoading(false);
         })();
@@ -99,13 +101,19 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
             options.push({ scope: hit.scriptId, label: hit.scriptTitle, anchor: hit });
         });
         // 已经设过偏移但当前没有锚点的剧本也列出来，避免「设过却找不到了」
+        // 有剧本映射但归档里没锚点（或锚点格式变了）也要列出来，否则用户根本选不到那条线
+        scripts.forEach(entry => {
+            if (!entry.scriptId || seen.has(entry.scriptId)) return;
+            seen.add(entry.scriptId);
+            options.push({ scope: entry.scriptId, label: entry.scriptTitle, anchor: null });
+        });
         listStoryClockScopes().forEach(entry => {
             if (!entry.scope || seen.has(entry.scope)) return;
             seen.add(entry.scope);
-            options.push({ scope: entry.scope, label: "群像剧情", anchor: null });
+            options.push({ scope: entry.scope, label: getStoryScriptTitle(entry.scope), anchor: null });
         });
         return options;
-    }, [anchors, tick]);
+    }, [anchors, scripts, tick]);
 
     const activeOption = useMemo(
         () => timelines.find(option => option.scope === selectedScope) || timelines[0],
@@ -189,6 +197,11 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 <p className="mx-2 m-0 text-[12px] leading-relaxed text-black/40">
                     同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「默认时间线」。
                 </p>
+                {timelines.length <= 1 && (
+                    <p className="mx-2 m-0 text-[12px] leading-relaxed text-amber-600/80">
+                        还没读到剧本分组：群像里走完一段并归档（杀青）之后，这里会按剧本列出各自的线。
+                    </p>
+                )}
             </div>
 
             <div className="ui-config-card" style={{ gap: 10 }}>

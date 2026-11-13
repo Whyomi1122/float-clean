@@ -111,3 +111,19 @@ export async function refreshStoryScopes(): Promise<ScopeMap> {
 export function hasStoryScopeMap(): boolean {
     return Object.keys(getMap()).length > 0;
 }
+
+/**
+ * 列出已知的所有剧本（去重，按标题排序）。
+ * 设置页的「选一条时间线」用它列 chip —— 只靠锚点列会漏：
+ * 归档里没写「当前锚点」或者格式变了，剧本就不该从选项里消失。
+ */
+export function listStoryScripts(): { scriptId: string; scriptTitle: string }[] {
+    const seen = new Set<string>();
+    const list: { scriptId: string; scriptTitle: string }[] = [];
+    for (const entry of Object.values(getMap())) {
+        if (!entry?.scriptId || seen.has(entry.scriptId)) continue;
+        seen.add(entry.scriptId);
+        list.push({ scriptId: entry.scriptId, scriptTitle: entry.scriptTitle || "群像剧情" });
+    }
+    return list.sort((a, b) => a.scriptTitle.localeCompare(b.scriptTitle, "zh"));
+}

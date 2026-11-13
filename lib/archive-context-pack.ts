@@ -128,6 +128,29 @@ export type EnsembleAnchorHit = {
 };
 
 /**
+ * 从归档正文里抠「当前锚点」块（2026-11-14 放宽格式）。
+ * 以前只认 ═══ 包边的写法，群像归档换了写法（【当前锚点】/ ─── / ##）就读不到，
+ * 设置页那排「选一条时间线」就会空掉 —— 所以这里只要求「标题行里以当前锚点开头」。
+ */
+function extractAnchorBlock(content: string): string | null {
+    const lines = String(content || "").split("\n");
+    for (let i = 0; i < lines.length; i += 1) {
+        const raw = lines[i];
+        if (!raw.includes("当前锚点")) continue;
+        const cleaned = raw.replace(/[═─—\-=*#【】\[\]\s]/g, "");
+        if (!cleaned.startsWith("当前锚点")) continue;
+        const body = lines.slice(i + 1).join("\n").trim();
+        if (!body) continue;
+        const label = raw
+            .slice(raw.indexOf("当前锚点") + "当前锚点".length)
+            .replace(/[═─—\-=*#【】\[\]\s]+$/g, "")
+            .trim();
+        return `${label ? `当前锚点${label}` : "当前锚点"}\n${body}`.trim();
+    }
+    return null;
+}
+
+/**
  * 按**剧本**列出「当前锚点」（2026-11-13 剧情时间分组用）。
  * 同一剧本只在多个角色的归档里留最新的一条；没挂剧本的归档单独一条（scriptId = null）。
  */
@@ -142,11 +165,8 @@ export async function listEnsembleAnchors(): Promise<EnsembleAnchorHit[]> {
             for (const entry of entries) {
                 if (entry.sourceApp !== "ensemble") continue;
                 const content = String(entry.content || "");
-                const anchorMatch = content.match(/═+\s*当前锚点([^\n]*)═+([\s\S]*)$/);
-                if (!anchorMatch) continue;
-                const body = anchorMatch[2].trim();
-                if (!body) continue;
-                const anchor = `当前锚点${anchorMatch[1] || ""}\n${body}`.trim();
+                const anchor = extractAnchorBlock(content);
+                if (!anchor) continue;
                 const updatedAt = String(entry.updatedAt || entry.createdAt || "");
                 const scriptIdRaw = typeof entry.metadata?.ensembleScriptId === "string" ? entry.metadata.ensembleScriptId.trim() : "";
                 const scriptTitleRaw = typeof entry.metadata?.ensembleScriptTitle === "string" ? entry.metadata.ensembleScriptTitle.trim() : "";

@@ -83,6 +83,17 @@ export function markChatArchived(characterId: string, throughIso?: string): void
 
 let running = false;
 
+/** 这个角色是不是已经有聊天归档（群像归档、一起听记录不算） */
+async function hasAnyChatArchive(characterId: string): Promise<boolean> {
+    try {
+        const { loadMemoryEntriesByType } = await import("./memory-storage");
+        const entries = await loadMemoryEntriesByType(characterId, "archive");
+        return entries.some(entry => entry.sourceApp !== "ensemble" && !entry.metadata?.listenRecord);
+    } catch {
+        return false;
+    }
+}
+
 export type ChatAutoArchiveResult =
     | { ran: true; characterId: string; characterName: string; updated: boolean }
     | { ran: false; reason: string };
@@ -126,6 +137,17 @@ export async function runChatAutoArchive(): Promise<ChatAutoArchiveResult> {
         const through = charState?.through || "";
         const fresh = through ? msgs.filter(m => (m.createdAt || "") > through) : msgs;
         if (fresh.length < AUTO_ARCHIVE_MIN_NEW_MESSAGES) continue;
+
+        // 第一次跑（还没有进度标记）且这个角色**已经有归档**：先把标记对齐到最新一条，不自动跑。
+        // 否则会拿整段历史去「新增」，容易和已有归档重复。
+        if (!charState) {
+            const archived = await hasAnyChatArchive(characterId);
+            if (archived) {
+                state[characterId] = { through: last.createdAt || "", at: new Date().toISOString() };
+                writeState(state);
+                continue;
+            }
+        }
 
         // 取「攒得最多」的那个角色，一轮只跑一个
         if (!candidate || fresh.length > candidate.fresh) {
