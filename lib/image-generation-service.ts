@@ -284,12 +284,17 @@ function extractModels(data: unknown): string[] {
   return Array.from(new Set(results));
 }
 
-async function fetchImageUrlAsBase64(url: string, signal?: AbortSignal): Promise<{ b64: string; mimeType: string }> {
-  throwIfAborted(signal);
-  const res = await fetch(url, { signal });
+/** 直连 CDN 被跨域/防盗链挡住时，走我们自己的只读下载通道（不触发生图、不重复计费）。 */
+async function fetchImageUrlViaServer(url: string, signal?: AbortSignal): Promise<{ b64: string; mimeType: string }> {
+  const res = await fetch("/api/image-generation/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    signal,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`图片 URL 下载失败 ${res.status}: ${text.slice(0, 160)}`);
+    throw new Error(`原图下载失败 ${res.status}: ${text.slice(0, 160)}`);
   }
   const blob = await res.blob();
   const dataUrl = await blobToDataUrl(blob);
@@ -297,11 +302,41 @@ async function fetchImageUrlAsBase64(url: string, signal?: AbortSignal): Promise
   return { b64: cleaned.b64, mimeType: cleaned.mimeType || blob.type || "image/png" };
 }
 
+async function fetchImageUrlAsBase64(url: string, signal?: AbortSignal): Promise<{ b64: string; mimeType: string }> {
+  throwIfAborted(signal);
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`图片 URL 下载失败 ${res.status}: ${text.slice(0, 160)}`);
+    }
+    const blob = await res.blob();
+    const dataUrl = await blobToDataUrl(blob);
+    const cleaned = cleanBase64(dataUrl);
+    return { b64: cleaned.b64, mimeType: cleaned.mimeType || blob.type || "image/png" };
+  } catch (error) {
+    // 用户主动取消 → 原样抛出，不要兜底再发请求
+    throwIfAborted(signal);
+    return fetchImageUrlViaServer(url, signal);
+  }
+}
+
 async function parseImageGenerationResponse(res: Response, signal?: AbortSignal): Promise<ImageGenerationApiResponse> {
   throwIfAborted(signal);
   const contentType = (res.headers.get("content-type") || "").toLowerCase();
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    // 图其实已经生成成功，只是服务端回传下载失败 → 拿地址自己取。
+    // 绝不能直接报错让用户重试，重试 = 重新生成 = 重复计费。
+    try {
+      const parsed = JSON.parse(text) as { generationCompleted?: boolean; imageUrl?: string } | null;
+      if (parsed?.generationCompleted && typeof parsed.imageUrl === "string" && parsed.imageUrl) {
+        const downloaded = await fetchImageUrlAsBase64(parsed.imageUrl, signal);
+        return { ...downloaded };
+      }
+    } catch {
+      // 不是可解析的 JSON，保持原报错
+    }
     throw new Error(`生图 API 错误 ${res.status}: ${text.slice(0, 600)}`);
   }
 

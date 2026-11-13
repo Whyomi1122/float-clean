@@ -359,8 +359,21 @@ async function runImageGeneration(input: ImageGenerationRequest): Promise<{ stat
     }
 
     if (extracted.kind === "url") {
-      const downloaded = await fetchImageUrl(extracted.url);
-      return { status: 200, body: { ...downloaded, revisedPrompt: extracted.revisedPrompt } };
+      // 图已经生成出来了，只是回传下载失败。此时**不能**报错让客户端重试——
+      // 重试会重新生成、重复计费。把地址交回去，客户端走 /api/image-generation/download 自己取。
+      try {
+        const downloaded = await fetchImageUrl(extracted.url);
+        return { status: 200, body: { ...downloaded, revisedPrompt: extracted.revisedPrompt } };
+      } catch (error) {
+        return {
+          status: 502,
+          body: {
+            error: `原图回传失败：${error instanceof Error ? error.message : "未知错误"}`,
+            generationCompleted: true,
+            imageUrl: extracted.url,
+          },
+        };
+      }
     }
 
     return {
