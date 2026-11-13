@@ -795,6 +795,10 @@ export async function generateImageFromConfiguredApi(params: {
   app?: string;
   /** 用户面具外观提示词（「我」的形象），与角色外观词叠加。 */
   userMask?: { positive?: string; negative?: string };
+  /** 额外角色的外观词（群像多人同框时，除 characterId 之外在场其他人的外观档案）。 */
+  extraFeaturePrompts?: string[];
+  /** 已就绪的参考图 dataURL（群像多人拼图用）；给了就直接用它，替代 characterId 查表。 */
+  referenceImageDataUrlOverride?: string;
 }): Promise<ImageGenerationResult | null> {
   const settings = params.settings ?? loadImageGenerationSettings();
   if (!settings.enabled) return null;
@@ -811,7 +815,11 @@ export async function generateImageFromConfiguredApi(params: {
   // 用户面具外观：与角色外观词叠加（画「我」的形象时传 userMask）
   const maskPositive = params.userMask?.positive?.trim() ?? "";
   const maskNegative = params.userMask?.negative?.trim() ?? "";
-  const combinedFeaturePositive = [featurePositive, maskPositive].filter(Boolean).join("\n\n");
+  const extraFeaturePositive = (params.extraFeaturePrompts ?? [])
+    .map(item => (item ?? "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const combinedFeaturePositive = [featurePositive, extraFeaturePositive, maskPositive].filter(Boolean).join("\n\n");
   const combinedFeatureNegative = [featureNegative, maskNegative].filter(Boolean).join(", ");
 
   // NovelAI 模式
@@ -876,9 +884,11 @@ export async function generateImageFromConfiguredApi(params: {
     ? await getChatImageFromIndexedDB(reference.assetId)
     : null;
   throwIfAborted(params.signal);
-  const referenceImageDataUrl = rawReferenceImageDataUrl
-    ? await normalizeReferenceImageForEdit(rawReferenceImageDataUrl, reference?.faceCrop)
-    : null;
+  const referenceImageDataUrl = params.referenceImageDataUrlOverride?.trim()
+    ? params.referenceImageDataUrlOverride.trim()
+    : rawReferenceImageDataUrl
+      ? await normalizeReferenceImageForEdit(rawReferenceImageDataUrl, reference?.faceCrop)
+      : null;
   throwIfAborted(params.signal);
 
   // 专属外观提示词已在上方解析；负向以 Avoid 句拼在末尾（OpenAI 兼容接口无原生 negative）

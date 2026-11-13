@@ -91,6 +91,7 @@ import {
 import { generateStoryboardImage } from "@/lib/ensemble-storyboard";
 import { buildPlotText } from "@/lib/ensemble-mood-music";
 import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sheet";
+import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { hydrateKvDb } from "@/lib/kv-db";
 import { ensureSettingsStorageHydrated } from "@/lib/settings-storage";
 import {
@@ -1417,6 +1418,8 @@ export function EnsembleApp({
   /** 世界书绑定子弹窗（2026-10-09 M2-b） */
   const [showWorldBookSheet, setShowWorldBookSheet] = useState(false);
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
+  /** 分镜大图预览（2026-11-13）：点一下图 → 全屏看 + 保存 */
+  const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string } | null>(null);
   /** 他的心情音乐（2026-11-08）：只在剧情室开，弹窗写指令 → 后台生成 */
   const [showMoodMusicSheet, setShowMoodMusicSheet] = useState(false);
   /** 投递：先选「用哪一句台词作为起点」，再选落点（单聊 / 群聊）。 */
@@ -4366,14 +4369,26 @@ ${lastSpeakerNote}
                   )}
 
                   {turn.storyboardUrl && (
-                    <div className="mt-2">
-                      <img
-                        src={turn.storyboardUrl}
-                        alt=""
-                        className="w-full rounded-xl object-cover"
-                        style={{ aspectRatio: "16 / 9" }}
-                        loading="lazy"
-                      />
+                    <div className="mt-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setStoryboardPreview({
+                            url: turn.storyboardUrl!,
+                            name: `分镜-${turn.senderName || turn.id}`,
+                          })
+                        }
+                        className="block w-[88%] overflow-hidden rounded-xl transition-opacity active:opacity-90"
+                        aria-label="查看分镜大图"
+                      >
+                        <img
+                          src={turn.storyboardUrl}
+                          alt=""
+                          className="block w-full max-h-[220px] object-cover"
+                          style={{ aspectRatio: "16 / 9" }}
+                          loading="lazy"
+                        />
+                      </button>
                     </div>
                   )}
 
@@ -5463,6 +5478,38 @@ ${lastSpeakerNote}
                       saveOrUpdateEnsembleScript(nextScript);
                     }}
                   />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 px-3 pb-3">
+                  <div className="flex flex-col">
+                    <span className="text-[13px] font-medium text-black/80">多角色参考图（拼图）</span>
+                    <span className="text-[11px] leading-snug text-black/40">
+                      在场两人都有锁脸参考图时，把它们拼成一张送进生图，提示词按左右顺序标注；
+                      只有一人有参考图时自动回退单图。
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextScript = {
+                        ...currentScript,
+                        storyboardMultiReference: !currentScript.storyboardMultiReference,
+                      };
+                      saveOrUpdateEnsembleScript(nextScript);
+                      setCurrentScript(nextScript);
+                      setScripts(loadEnsembleScripts());
+                    }}
+                    className={`w-[46px] h-[27px] rounded-full shrink-0 transition-colors relative ${
+                      currentScript.storyboardMultiReference ? "bg-[#BDD4E3]" : "bg-black/15"
+                    }`}
+                    aria-pressed={!!currentScript.storyboardMultiReference}
+                  >
+                    <span
+                      className={`absolute top-[3px] w-[21px] h-[21px] rounded-full bg-white shadow transition-all ${
+                        currentScript.storyboardMultiReference ? "left-[22px]" : "left-[3px]"
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
             </MiniSheet>
@@ -6815,6 +6862,15 @@ ${lastSpeakerNote}
             />
           )}
         </>
+      )}
+
+      {/* 分镜大图预览：点图放大 + 保存（复用聊天的全屏预览层） */}
+      {storyboardPreview && (
+        <MediaPreviewOverlay
+          imageUrl={storyboardPreview.url}
+          saveFilename={storyboardPreview.name}
+          onClose={() => setStoryboardPreview(null)}
+        />
       )}
     </div>
   );
