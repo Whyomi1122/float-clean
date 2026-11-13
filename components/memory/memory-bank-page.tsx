@@ -376,6 +376,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
     const [editShortTermText, setEditShortTermText] = useState("");
     /** 待确认删除的短期条目 id */
     const [confirmDeleteShortTermId, setConfirmDeleteShortTermId] = useState<string | null>(null);
+    const [confirmDeleteClusterIds, setConfirmDeleteClusterIds] = useState<string[] | null>(null);
 
     // ── 导出/导入 ──
     const importFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -571,6 +572,15 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
         setConfirmDeleteShortTermId(null);
         loadDetailData(selectedCharId);
         showNotice("已删除");
+    };
+
+    /** 整条删除：把这一段（一张卡片）的全部记录一起移出短期记忆（2026-11-13 新增） */
+    const handleDeleteShortTermCluster = () => {
+        if (!selectedCharId || !confirmDeleteClusterIds?.length) return;
+        confirmDeleteClusterIds.forEach(id => setShortTermEntryHidden(selectedCharId, id, true));
+        setConfirmDeleteClusterIds(null);
+        loadDetailData(selectedCharId);
+        showNotice("已删除整条记录");
     };
 
     /** 导出当前角色长期记忆为纯文字 txt（按来源分节，供外部 AI 复盘） */
@@ -1009,6 +1019,27 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                                 </div>
                             ) : null}
 
+                            {/* 短期记录「整条删除」确认（2026-11-13） */}
+                            {confirmDeleteClusterIds?.length ? (
+                                <div className="modal-overlay" data-ui="modal" onClick={() => setConfirmDeleteClusterIds(null)}>
+                                    <div className="modal-card" data-ui="modal-card" onClick={event => event.stopPropagation()}>
+                                        <h3 className="modal-title">删掉这一整条？</h3>
+                                        <p className="ts-12 text-secondary mt-2">
+                                            这一段的 {confirmDeleteClusterIds.length} 条记录会一起从短期记忆里移除，后续总结也不再带上它们；原始 App 内容不受影响。
+                                        </p>
+                                        <div className="flex gap-2 mt-4">
+                                            <button type="button" className="flex-1 rounded-xl py-2.5 ts-13" onClick={() => setConfirmDeleteClusterIds(null)}>取消</button>
+                                            <button
+                                                type="button"
+                                                className="flex-1 rounded-xl py-2.5 ts-13 font-medium"
+                                                style={{ background: "#e5484d", color: "#fff" }}
+                                                onClick={handleDeleteShortTermCluster}
+                                            >整条删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
                             {/* 来源筛选：从当前事件里动态取出现过的来源（跨 App 混排，默认「全部」） */}
                             {(() => {
                                 const presentKeys: Array<{ key: string; label: string }> = [];
@@ -1053,6 +1084,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                                 userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
                                 onEditEntry={openEditShortTerm}
                                 onDeleteEntry={id => setConfirmDeleteShortTermId(id)}
+                                onDeleteCluster={ids => setConfirmDeleteClusterIds(ids)}
                             />
                         </>
                     ) : activeTab === "shared" ? (

@@ -8,7 +8,7 @@ import { commitArchive, deleteArchive, updateArchiveEntry } from "@/lib/memory-s
 import { simpleLLMCall } from "@/lib/api-helpers";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
 import { buildArchiveContextPack } from "@/lib/archive-context-pack";
-import { getStoryNow } from "@/lib/story-clock";
+import { getStoryNow, toStoryDate } from "@/lib/story-clock";
 import type { MemoryEntry } from "@/lib/memory-types";
 
 const DRAFT_STORE_PREFIX = "ai_phone_chat_archive_draft_";
@@ -326,7 +326,8 @@ export function ChatArchivePanel({
             const text = messageTranscriptText(m);
             if (!text) continue;
             // 每行带「日期 + 时刻」：模型必须靠这个判断跨天与「隔了多久才回」，不许自己猜
-            const when = m.createdAt ? new Date(m.createdAt) : null;
+            // 2026-11-13：日期与时刻一律换算成剧情时间，否则正文段落写 11-13、标题写 2024-08-11，两边打架
+            const when = m.createdAt ? toStoryDate(new Date(m.createdAt)) : null;
             const dayKey = when ? dayKeyOf(when) : "";
             if (when && dayKey !== lastDayKey) {
                 lines.push(`—— ${when.getMonth() + 1}月${when.getDate()}日 ${WEEKDAY_CN[when.getDay()]} ——`);
@@ -346,8 +347,8 @@ export function ChatArchivePanel({
             const normal = msgs.filter(m => !m.deliverySessionId && !m.isRetracted && (m.role === "user" || m.role === "assistant"));
             const times = normal.map(m => m.createdAt).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
             if (times.length > 0) {
-                const first = new Date(times[0]);
-                const last = new Date(times[times.length - 1]);
+                const first = toStoryDate(new Date(times[0]));
+                const last = toStoryDate(new Date(times[times.length - 1]));
                 facts.push(
                     `· 本轮聊天时间：${first.getMonth() + 1}-${pad2(first.getDate())} ${WEEKDAY_CN[first.getDay()]} ` +
                     `${fmtClock(first)} 至 ${last.getMonth() + 1}-${pad2(last.getDate())} ${WEEKDAY_CN[last.getDay()]} ${fmtClock(last)}` +
@@ -377,8 +378,8 @@ export function ChatArchivePanel({
                 const last = getLastListenSession();
                 const matches = last && (!last.characterId || last.characterId === characterId || last.characterName === characterName);
                 if (last && matches) {
-                    const start = new Date(last.startedAt);
-                    const end = new Date(last.endedAt);
+                    const start = toStoryDate(new Date(last.startedAt));
+                    const end = toStoryDate(new Date(last.endedAt));
                     const songs = last.tracks
                         .map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title))
                         .filter(Boolean);
@@ -403,15 +404,15 @@ export function ChatArchivePanel({
             const { getListenSession, getLastListenSession } = await import("@/lib/listen-together-session");
             const session = getListenSession();
             if (session && (session.tracks?.length || 0) > 0) {
-                const start = new Date(session.startedAt);
-                const end = new Date();
+                const start = toStoryDate(new Date(session.startedAt));
+                const end = getStoryNow();
                 return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
             }
             const last = getLastListenSession();
             if (!last || (last.characterId && last.characterId !== characterId && last.characterName !== characterName)) return "";
             if (!last.tracks?.length) return "";
-            const start = new Date(last.startedAt);
-            const end = new Date(last.endedAt);
+            const start = toStoryDate(new Date(last.startedAt));
+            const end = toStoryDate(new Date(last.endedAt));
             return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${last.tracks.length} 首】`;
         } catch {
             return "";

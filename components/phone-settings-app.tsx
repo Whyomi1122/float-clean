@@ -368,7 +368,7 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
             case "identity":
                 return <UserIdentitySettings />;
             case "storyClock":
-                return <StoryClockSettings />;
+                return <StoryClockSettings timeAware={timeAware} onTimeAwareChange={handleTimeAwareChange} />;
             case "about":
                 return <AboutDeclaration />;
             default:
@@ -473,16 +473,7 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                         </div>
                         <div className="settings-realtime-section">
                             <h3 className="settings-menu-section-title">Runtime</h3>
-                            <div className="app-card card-featured settings-toggle-card">
-                                <span className="card-icon card-icon-glass">
-                                    <GlassIcon name="time-aware" />
-                                </span>
-                                <div className="card-featured-body">
-                                    <div className="card-featured-label">真实时间感知</div>
-                                    <div className="card-featured-desc">控制全局历史事件流中是否注入时间戳</div>
-                                </div>
-                                <Toggle checked={timeAware} onChange={handleTimeAwareChange} className="settings-toggle-control" />
-                            </div>
+                            {/* 2026-11-13：原「真实时间感知」开关并进「剧情时间」页，主页只留一张卡片，避免两个时间入口 */}
                             <div className="app-card card-featured settings-toggle-card">
                                 <span className="card-icon card-icon-glass">
                                     <GlassIcon name="keep-alive" />

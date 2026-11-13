@@ -622,12 +622,14 @@ type Props = {
     onEditEntry?: (id: string) => void;
     /** 提供后每条记录显示删除按钮（短期页用） */
     onDeleteEntry?: (id: string) => void;
+    /** 提供后每张卡片的右上角显示「整条删除」（把这一段的所有记录一起从短期记忆里移除） */
+    onDeleteCluster?: (ids: string[]) => void;
 };
 
 // 每批渲染的簇数：全部一次性渲染会在重数据账号上把 DOM 撑爆
 const CLUSTER_PAGE_SIZE = 30;
 
-export function MemoryTimeline({ events, userName, onEditEntry, onDeleteEntry }: Props) {
+export function MemoryTimeline({ events, userName, onEditEntry, onDeleteEntry, onDeleteCluster }: Props) {
     const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(CLUSTER_PAGE_SIZE);
 
@@ -673,7 +675,22 @@ export function MemoryTimeline({ events, userName, onEditEntry, onDeleteEntry }:
                                         <span key={tag} className="ui-status-tag" data-variant={tagVariant(tag)}>{tag}</span>
                                     ))}
                                 </div>
-                                <span className="mem-tl-card-count">{cluster.entryCount} 条记录</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="mem-tl-card-count">{cluster.entryCount} 条记录</span>
+                                    {onDeleteCluster && (
+                                        <button
+                                            type="button"
+                                            className="mem-tl-card-del"
+                                            title="删掉这一整条（这段的全部记录）"
+                                            onClick={event => {
+                                                event.stopPropagation();
+                                                onDeleteCluster(cluster.entries.map(entry => entry.id));
+                                            }}
+                                        >
+                                            <Trash2 size={13} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             {expanded ? (
                                 <ClusterDetail cluster={cluster} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />

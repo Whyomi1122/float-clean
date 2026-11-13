@@ -5589,6 +5589,28 @@
   white-space: nowrap;
 }
 
+/* 整条删除（2026-11-13）：把这一段的全部记录一起移出短期记忆 */
+.mem-tl-card-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--c-panel-border);
+  background: var(--c-panel-bg, transparent);
+  color: var(--c-text);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.mem-tl-card-del:hover {
+  opacity: 1;
+  color: var(--c-danger);
+  border-color: var(--c-danger);
+}
+
 /* ── Expanded card detail ── */
 
 .mem-tl-card-detail {

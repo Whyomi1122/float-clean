@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, RotateCcw, Sparkles } from "lucide-react";
+import { Toggle } from "@/components/ui/form";
 import { findLatestEnsembleAnchor } from "@/lib/archive-context-pack";
 import {
     clearStoryClock,
@@ -43,7 +44,13 @@ function describeOffset(offsetMs: number): string {
 
 type AnchorHit = { characterName: string; anchor: string; updatedAt: string };
 
-export function StoryClockSettings() {
+type StoryClockSettingsProps = {
+    /** 原「真实时间感知」开关（2026-11-13 并进本页，主页不再单列一张卡） */
+    timeAware?: boolean;
+    onTimeAwareChange?: (next: boolean) => void;
+};
+
+export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockSettingsProps) {
     const [offsetMs, setOffsetMs] = useState(0);
     const [tick, setTick] = useState(0);
     const [anchor, setAnchor] = useState<AnchorHit | null>(null);
@@ -204,6 +211,23 @@ export function StoryClockSettings() {
                     </div>
                 </div>
             </div>
+
+            {typeof timeAware === "boolean" && onTimeAwareChange && (
+                <div className="flex flex-col gap-3">
+                    <h3 className="mx-2 text-[13px] font-bold text-black/50">历史时间标注</h3>
+                    <div className="ui-config-card" style={{ gap: 10 }}>
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[14px] font-semibold text-black">在历史事件流里标注时间</span>
+                                <span className="text-[12px] leading-relaxed text-black/45">
+                                    关掉后喂给 AI 的历史消息不带「几点几分」，TA 就不那么在意时间。原「真实时间感知」开关。
+                                </span>
+                            </div>
+                            <Toggle checked={timeAware} onChange={() => onTimeAwareChange(!timeAware)} className="settings-toggle-control" />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
