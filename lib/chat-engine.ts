@@ -1,6 +1,7 @@
 // lib/chat-engine.ts
 
 import { createSseJsonParser } from "./sse-json";
+import { getStoryNow } from "./story-clock";
 import { isKoreanTextCharacter } from "./speech-language";
 import { maybeAppendShortcutCapability } from "./offline-shortcut-capability";
 import { loadCharacters } from "./character-storage";
@@ -1926,7 +1927,8 @@ export async function buildChatPromptMessages(
         ]
         : history;
 
-    const now = new Date();
+    // 剧情时钟（2026-11-12）：模型眼中的「现在」按剧情时间走，不是现实时间
+    const now = getStoryNow();
     const promptTimeContext = buildCharacterTimeContext(character.timeZone, now);
     const promptTimestampOptions = getPromptTimestampOptionsForTimeContext(promptTimeContext);
     const memConfig = loadMemoryConfig();
