@@ -221,7 +221,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             // now_playing 桥:注册曲目(歌词异步补)
             setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0 });
             getNeteaseLyrics(nid).then(lrc => {
-                if (lrc) setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0, lyrics: lrc });
+                if (!lrc) return;
+                setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0, lyrics: lrc });
+                // 2026-11-13：以前歌词只补给了 now_playing 桥，播放器读的是 currentTrack.lyrics，
+                // 所以走 loadAndPlay（点歌单、一起听同步切歌等）时歌词页永远是「暂无歌词」。
+                setCurrentTrack(prev => {
+                    if (!prev || prev.id !== track.id || prev.lyrics === lrc) return prev;
+                    const next = { ...prev, lyrics: lrc };
+                    currentTrackRef.current = next;
+                    return next;
+                });
             }).catch(() => undefined);
         } else {
             // Local tracks: load blob from IndexedDB

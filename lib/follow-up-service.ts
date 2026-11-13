@@ -223,8 +223,15 @@ export async function requestBackgroundChatReply(
             { appTags: session.isGroup ? undefined : ["chat", "text"], extraSystemInstructions: options?.extraSystemInstructions },
         );
         if (isBackgroundGenerationCancelled(session.id)) return { ok: false, skipped: "cancelled" };
+        // 2026-11-13：追发去重 —— 实机出现过「2 分钟后追问时把上一批回复换个措辞又说一遍」。
+        // 提示词里写了「不要重复之前说过的话」但弱模型不认，这里按字符二元组包含率在代码里再挡一道。
+        const freshRounds = dropRepeatedRounds(rounds, latestMessages);
+        if (!freshRounds.length) {
+            window.dispatchEvent(new CustomEvent("followup-fired", { detail: { sessionId: session.id } }));
+            return { ok: true, skipped: "duplicate" };
+        }
         const { hasVisible, stateValues } = await saveBackgroundCompletionRounds(
-            rounds,
+            freshRounds,
             session.id,
             0,
             undefined,
@@ -353,8 +360,66 @@ async function saveBackgroundCompletionRounds(
     return { hasVisible, newCount, stateValues };
 }
 
-function pollSchedules() {
-    try {
+// ── 追发去重（2026-11-13）──────────────────────────────────
+// 实机：角色回复后 2 分钟，焦虑驱动追发又发了一批，内容是把上一批换个措辞再说一遍。
+// 提示词里「不要重复之前说过的话」弱模型不认，这里在代码层再挡一道：按字符二元组包含率判断。
+const FOLLOWUP_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
+const FOLLOWUP_DUPLICATE_RATIO = 0.7;
+
+function dedupNormalize(text: string): string {
+    return text
+        .replace(/【[^】]*】/g, " ")
+        .replace(/\[[^\]]*\]/g, " ")
+        .replace(/[\s\p{P}\p{S}]/gu, "")
+        .toLowerCase();
+}
+
+function bigramSet(text: string): Set<string> {
+    const set = new Set<string>();
+    for (let i = 0; i < text.length - 1; i += 1) set.add(text.slice(i, i + 2));
+    return set;
+}
+
+/** 新内容里有多大比例的字词组合在上一条回复里已经出现过（包含率）。 */
+function containmentRatio(text: string, previous: string): number {
+    const fresh = bigramSet(text);
+    if (!fresh.size) return 0;
+    const prev = bigramSet(previous);
+    if (!prev.size) return 0;
+    let hit = 0;
+    fresh.forEach(gram => { if (prev.has(gram)) hit += 1; });
+    return hit / fresh.size;
+}
+
+function dropRepeatedRounds(
+    rounds: BackgroundCompletionRound[],
+    contextMessages: ChatMessage[],
+): BackgroundCompletionRound[] {
+    if (!rounds.length) return rounds;
+    const now = Date.now();
+    const recent = contextMessages
+        .filter(message => message.role === "assistant" && typeof message.content === "string" && message.content.trim())
+        .filter(message => {
+            const timestamp = new Date(message.createdAt || 0).getTime();
+            return !Number.isFinite(timestamp) || now - timestamp < FOLLOWUP_DUPLICATE_WINDOW_MS;
+        })
+        .slice(-6)
+        .map(message => dedupNormalize(message.content));
+    if (!recent.length) return rounds;
+
+    return rounds.filter(round => {
+        const normalized = dedupNormalize(round.text);
+        // 太短（「嗯」「好」这类）不参与去重，避免误杀正常的一两个字回应
+        if (normalized.length < 5) return true;
+        const duplicated = recent.some(previous => containmentRatio(normalized, previous) >= FOLLOWUP_DUPLICATE_RATIO);
+        if (duplicated) {
+            console.log("[FollowUp] 追发内容与刚发过的回复重复，丢弃：", round.text.slice(0, 40));
+        }
+        return !duplicated;
+    });
+}
+
+function pollSchedules() {    try {
         const schedules = loadAllFollowUpSchedules();
         const now = Date.now();
         for (const sched of schedules) {
