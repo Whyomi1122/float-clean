@@ -6307,6 +6307,41 @@
 }
 
 
+/* memory settings sliders (2026-11-14)：改成两行栅格，标签独占第一行、滑杆独占第二行，
+   不再被滑杆挤成一字一列；收起态（细轨）与展开态（真滑杆）布局一致，点开不跳位。 */
+.memory-settings-menu .memory-slider-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  cursor: default;
+}
+
+.memory-settings-menu .memory-slider-item .menu-label-group {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.memory-settings-menu .memory-slider-item .menu-label {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.memory-settings-menu .memory-slider-item .profile-slider-current {
+  grid-column: 2;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-settings-menu .memory-slider-item .profile-slider-mini,
+.memory-settings-menu .memory-slider-item input[type="range"],
+.memory-settings-menu .memory-slider-range {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
 /* profile settings sliders (migrated) */
 .profile-settings-menu .profile-slider-item {
   align-items: center;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
-import { Trash2, Zap, Clock, Users, Archive, AlertCircle, Search, FileText, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter, Download, Upload, type LucideIcon } from "lucide-react";
+import { Trash2, Zap, Clock, Users, Archive, AlertCircle, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { MemoryTimeline } from "./memory-timeline";
 import { Toggle } from "@/components/ui/form";
@@ -122,23 +122,11 @@ type MemoryEditorState = {
     content: string;
 };
 
-const memorySettingsIconStyle = (color: string): CSSProperties => ({
-    "--icon-color": color,
-} as CSSProperties);
-
-function MemorySettingsIcon({ icon: Icon, color }: { icon: LucideIcon; color: string }) {
-    return (
-        <span className="card-icon" style={memorySettingsIconStyle(color)}>
-            <Icon size={22} strokeWidth={1.75} />
-        </span>
-    );
-}
-
 /** 收放式行内滑杆（与聊天 App「朋友圈互动设置」同一实现）：
- *  收起态只显示一条细轨，点击才展开可拖动滑杆，避免翻页滚动时误触 */
+ *  收起态只显示一条细轨，点击才展开可拖动滑杆，避免翻页滚动时误触。
+ *  2026-11-14 记忆设置统一风格：去掉行首圆形图标，改成「标签+说明 / 数值」一行、滑杆独占一行，
+ *  标签不再被挤成一字一列。 */
 function MemorySettingsSliderItem({
-    icon,
-    color,
     label,
     desc,
     value,
@@ -147,8 +135,6 @@ function MemorySettingsSliderItem({
     step,
     onChange,
 }: {
-    icon: LucideIcon;
-    color: string;
     label: string;
     desc: string;
     value: number;
@@ -161,12 +147,12 @@ function MemorySettingsSliderItem({
     const pct = Math.max(0, Math.min(100, Math.round(((value - min) / Math.max(1, max - min)) * 100)));
     if (!active) {
         return (
-            <div className="menu-item profile-slider-item">
-                <MemorySettingsIcon icon={icon} color={color} />
+            <div className="menu-item memory-slider-item">
                 <div className="menu-label-group">
                     <span className="menu-label">{label}</span>
                     <span className="menu-desc">{desc}</span>
                 </div>
+                <span className="profile-slider-current">{value}</span>
                 <button
                     type="button"
                     className="profile-slider-mini"
@@ -175,18 +161,18 @@ function MemorySettingsSliderItem({
                 >
                     <span className="profile-slider-mini-fill" style={{ width: `${pct}%` }} />
                 </button>
-                <span className="profile-slider-current">{value}</span>
             </div>
         );
     }
     return (
-        <div className="menu-item profile-slider-item is-active">
-            <MemorySettingsIcon icon={icon} color={color} />
+        <div className="menu-item memory-slider-item is-active">
             <div className="menu-label-group">
                 <span className="menu-label">{label}</span>
                 <span className="menu-desc">{desc}</span>
             </div>
+            <span className="profile-slider-current">{value}</span>
             <input
+                className="ui-slider profile-settings-slider memory-slider-range"
                 type="range"
                 min={min}
                 max={max}
@@ -202,10 +188,8 @@ function MemorySettingsSliderItem({
                     if (next !== value) onChange(next);
                     if (document.activeElement !== el) setActive(false);
                 }}
-                className="ui-slider profile-settings-slider"
                 aria-label={label}
             />
-            <span className="profile-slider-current">{value}</span>
         </div>
     );
 }
@@ -1259,7 +1243,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <div className="menu-group">
                     {/* A1-a：设置页内直接选角色，手动总结不再依赖入口传参 */}
                     <button type="button" className="menu-item" onClick={() => setCharPickerOpen(true)}>
-                        <MemorySettingsIcon icon={Users} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">当前角色</span>
                             <span className="menu-desc">{selectedChar ? selectedChar.name : "未选择，点击选择"}</span>
@@ -1281,7 +1264,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         }}
                         disabled={!selectedCharId}
                     >
-                        <MemorySettingsIcon icon={Zap} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆手动总结</span>
                             <span className="menu-desc">
@@ -1302,8 +1284,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     </button>
                     <div className={config.autoSummarizeEnabled ?? true ? "" : "opacity-50"}>
                         <MemorySettingsSliderItem
-                            icon={Clock}
-                            color={BINDING_ACCENTS.api}
                             label="总结间隔"
                             desc="每 N 条事件自动将新事件整理为长期记忆"
                             value={config.summarizationEventInterval ?? 80}
@@ -1314,7 +1294,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         />
                     </div>
                     <div className="menu-item">
-                        <MemorySettingsIcon icon={Clock} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆自动总结</span>
                             <span className="menu-desc">按上面「总结间隔」的条数自动触发</span>
@@ -1328,7 +1307,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         </div>
                     </div>
                     <div className="menu-item">
-                        <MemorySettingsIcon icon={Search} color={BINDING_ACCENTS.embedding} />
                         <div className="menu-label-group">
                             <span className="menu-label">向量召回</span>
                             <span className="menu-desc">长期记忆超出预算时，通过 embedding 按相关性检索</span>
@@ -1349,7 +1327,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <div className="menu-group">
                     {APP_INJECTION_APPS.map(app => (
                         <div className="menu-item" key={app.id}>
-                            <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
                             <div className="menu-label-group">
                                 <span className="menu-label">{app.name}</span>
                                 <span className="menu-desc">{app.desc}</span>
@@ -1450,7 +1427,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <p className="menu-group-desc mx-2">记忆来源</p>
                 <div className="menu-group">
                     <button type="button" className="menu-item" onClick={() => setSourcePickerOpen(true)}>
-                        <MemorySettingsIcon icon={Filter} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">记忆来源</span>
                             <span className="menu-desc">选择哪些内容参与记忆</span>
@@ -1466,7 +1442,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <p className="menu-group-desc mx-2">数据管理</p>
                 <div className="menu-group">
                     <button type="button" className="menu-item" onClick={() => void handleExportMemories()} disabled={!selectedCharId}>
-                        <MemorySettingsIcon icon={Download} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">导出记忆</span>
                             <span className="menu-desc">下载当前角色的长期记忆为 txt 归档文字，可交给外部 AI 复盘修订</span>
@@ -1474,7 +1449,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         <div className="menu-right"><ChevronRight size={16} /></div>
                     </button>
                     <button type="button" className="menu-item" onClick={() => importFileInputRef.current?.click()} disabled={!selectedCharId || importing}>
-                        <MemorySettingsIcon icon={Upload} color={BINDING_ACCENTS.memory} />
                         <div className="menu-label-group">
                             <span className="menu-label">导入记忆</span>
                             <span className="menu-desc">选择 txt 或 JSON 文件后，再确认「合并」或「替换」方式导入</span>
@@ -1607,8 +1581,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <p className="menu-group-desc mx-2">控制截断量</p>
                 <div className="menu-group">
                     <MemorySettingsSliderItem
-                        icon={Users}
-                        color={BINDING_ACCENTS.voice}
                         label="短期记忆+最近上下文"
                         desc="聊天历史、朋友圈、群聊与跨应用近期事件截断量"
                         value={config.shortTermTokenBudget}
@@ -1618,8 +1590,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         onChange={nextValue => saveBudget("shortTermTokenBudget", nextValue)}
                     />
                     <MemorySettingsSliderItem
-                        icon={Archive}
-                        color={BINDING_ACCENTS.memory}
                         label="长期记忆"
                         desc="总结记忆注入量"
                         value={config.longTermTokenBudget}
@@ -1634,7 +1604,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                 <p className="menu-group-desc mx-2">长期记忆提示词</p>
                 <div className="menu-group">
                     <div className="menu-item">
-                        <MemorySettingsIcon icon={FileText} color={BINDING_ACCENTS.preset} />
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆总结提示词</span>
                             <span className="menu-desc">
