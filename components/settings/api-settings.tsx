@@ -68,6 +68,8 @@ export function ApiSettings() {
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [binding, setBinding] = useState<BindingConfig | null>(null);
+    /** 正在给哪个用途挑 API（null = 选择弹窗关着） */
+    const [purposePicker, setPurposePicker] = useState<ApiPurposeField | null>(null);
 
     // Testing and Fetching states
     const [isFetching, setIsFetching] = useState<Record<string, boolean>>({});
@@ -271,6 +273,42 @@ export function ApiSettings() {
         <div className="flex flex-col gap-6">
             <div className="flex items-center">
                 <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">API Settings</h2>
+            </div>
+
+            {/* 按用途分配：点一行挑这个用途用哪个 API（生图走独立页面，不在这里） */}
+            <div className="flex flex-col gap-1">
+                <span className="menu-label mx-1 font-medium">按用途分配</span>
+                <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
+                    点一行挑这个用途用哪个 API。一个 API 可以同时当多个用途；没单独挑的用途都会跟着「日常对话」。
+                </span>
+                <div className="menu-group mt-1">
+                    {API_PURPOSES.map(purpose => {
+                        const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
+                        const owner = ownerId ? configs.find(item => item.id === ownerId) : undefined;
+                        return (
+                            <button
+                                key={purpose.field}
+                                type="button"
+                                className="menu-item"
+                                onClick={() => setPurposePicker(purpose.field)}
+                            >
+                                <span className="menu-label-group">
+                                    <span className="menu-label">{purpose.label}</span>
+                                    <span className="menu-desc truncate">
+                                        {ownerId
+                                            ? owner
+                                                ? (owner.name || owner.provider)
+                                                : "配置已删除，点一下重选"
+                                            : purpose.field === "main"
+                                                ? "还没设主用配置"
+                                                : "跟随「日常对话」"}
+                                    </span>
+                                </span>
+                                <Check size={16} className={ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {configs.length === 0 ? (
@@ -512,36 +550,6 @@ export function ApiSettings() {
                                             />
                                         </div>
 
-                                        <div className="mt-4 flex flex-col gap-1">
-                                            <span className="menu-label font-medium mx-1">用在哪里</span>
-                                            <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
-                                                同一个 API 可以同时担任多个用途；没勾的用途自动走「日常对话」那个配置。生图有独立页面，不在这里。
-                                            </span>
-                                        </div>
-
-                                        {API_PURPOSES.map(purpose => {
-                                            const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
-                                            const isOwner = ownerId === config.id;
-                                            const ownerName = ownerId && ownerId !== config.id
-                                                ? (configs.find(item => item.id === ownerId)?.name || configs.find(item => item.id === ownerId)?.provider || "其他配置")
-                                                : "";
-                                            return (
-                                                <div key={purpose.field} className="ui-toggle-row mt-2">
-                                                    <span className="flex min-w-0 flex-col">
-                                                        <span className="menu-label font-medium">{purpose.label}</span>
-                                                        <span className="menu-desc whitespace-normal leading-[1.45]">
-                                                            {isOwner ? purpose.desc : ownerName ? `当前：${ownerName}` : purpose.desc}
-                                                        </span>
-                                                    </span>
-                                                    <Toggle
-                                                        checked={isOwner}
-                                                        disabled={purpose.field === "main" && isOwner}
-                                                        onChange={(v) => assignPurpose(purpose.field, config.id, v)}
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-
                                     </>
                                 )
                             })()}
@@ -549,6 +557,58 @@ export function ApiSettings() {
                     </div>
                 </div>
             )}
+
+            {purposePicker && (() => {
+                const purpose = API_PURPOSES.find(item => item.field === purposePicker);
+                const ownerId = binding ? purposeOwnerId(binding, purposePicker) : undefined;
+                const pick = (configId: string | null) => {
+                    if (!configId) {
+                        if (purposePicker !== "main") assignPurpose(purposePicker, "", false);
+                    } else {
+                        assignPurpose(purposePicker, configId, true);
+                    }
+                    setPurposePicker(null);
+                };
+                return (
+                    <div className="modal-overlay modal-overlay-bottom">
+                        <div className="modal-sheet" data-ui="modal-sheet">
+                            <div className="modal-header" data-ui="modal-header">
+                                <button onClick={() => setPurposePicker(null)} className="modal-header-btn modal-header-btn-muted"><X size={18} /></button>
+                                <span className="modal-header-title">{purpose?.label || "用途"}</span>
+                                <button onClick={() => setPurposePicker(null)} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
+                            </div>
+                            <div className="modal-body hide-scrollbar flex flex-col gap-3 pb-10" data-ui="modal-body">
+                                <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
+                                    {purpose?.desc}
+                                </span>
+                                <div className="menu-group">
+                                    {purposePicker !== "main" && (
+                                        <button type="button" className="menu-item" onClick={() => pick(null)}>
+                                            <span className="menu-label-group">
+                                                <span className="menu-label">不单独指定</span>
+                                                <span className="menu-desc">跟「日常对话」用同一个配置</span>
+                                            </span>
+                                            <Check size={16} className={!ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
+                                        </button>
+                                    )}
+                                    {configs.map(config => (
+                                        <button key={config.id} type="button" className="menu-item" onClick={() => pick(config.id)}>
+                                            <span className="menu-label-group">
+                                                <span className="menu-label truncate">{config.name || config.provider}</span>
+                                                <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
+                                            </span>
+                                            <Check size={16} className={ownerId === config.id ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
+                                        </button>
+                                    ))}
+                                </div>
+                                {configs.length === 0 && (
+                                    <span className="menu-desc mx-1">还没有 API 配置，先添加一个。</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {confirmDeleteId && (
                 <ConfirmDialog
