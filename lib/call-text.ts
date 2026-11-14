@@ -50,10 +50,33 @@ export function isNarrationLine(line: string): boolean {
 
 /**
  * 把一段内容拆成「台词」与「旁白」。
- * 只有整段确实用了通话台词格式时才抽旁白，否则原样返回。
+ * ① 先认行首旁白暗号（正向识别，最可靠）；② 剩下的再走旧启发式。
  */
 export function splitNarration(text: string): { dialogue: string; narration?: string } {
     text = stripVoiceNoteWrapper(text);
+    const marked: string[] = [];
+    const kept: string[] = [];
+    for (const line of text.split("\n")) {
+        if (NARRATION_MARKER.test(line)) {
+            const inner = line.replace(NARRATION_MARKER, "").trim();
+            if (inner) marked.push(inner);
+        } else {
+            kept.push(line);
+        }
+    }
+    if (!marked.length) return splitNarrationHeuristic(text);
+    const restText = kept.join("\n").trim();
+    // 整段全是旁白 = 不能掏空正文（会让角色哑掉），按原样整段当台词
+    if (!restText) return { dialogue: text };
+    const rest = splitNarrationHeuristic(restText);
+    const narrationText = [rest.narration, ...marked].filter(Boolean).join("\n").trim();
+    return { dialogue: rest.dialogue, ...(narrationText ? { narration: narrationText } : {}) };
+}
+
+/**
+ * 旧的旁白启发式：只有整段确实用了通话台词格式时才抽旁白，否则原样返回。
+ */
+function splitNarrationHeuristic(text: string): { dialogue: string; narration?: string } {
     if (!usesCallDialogueFormat(text)) return { dialogue: text };
     const dialogue: string[] = [];
     const narration: string[] = [];
@@ -67,6 +90,37 @@ export function splitNarration(text: string): { dialogue: string; narration?: st
     if (!dialogueText) return { dialogue: text };
     return { dialogue: dialogueText, ...(narrationText ? { narration: narrationText } : {}) };
 }
+
+/**
+ * 旁白暗号（2026-11-14，全局启用）：要写动作 / 环境 / 心理时，行首打 `[旁白]`
+ *（和群像同一套口径，另外兼容 `【旁白】` / `[心理]` / `[叙述]` / `[动作]`）。
+ * 带暗号的行**一律**判旁白 —— 正向识别，不再靠「没前缀就算旁白」猜，猜错会把正文掏空。
+ */
+const NARRATION_MARKER = /^[\s>*\-•·]*[[【]\s*(?:旁白|心理|叙述|动作)\s*[\]】][:：]?\s*/;
+
+/** 这段文字里有没有行首旁白暗号 */
+export function hasNarrationMarker(text: string): boolean {
+    return String(text || "").split(/\r?\n/).some(line => NARRATION_MARKER.test(line));
+}
+
+/** 去掉行首旁白暗号，只留正文（展示/TTS 兜底用） */
+export function stripNarrationMarker(text: string): string {
+    return String(text || "")
+        .split("\n")
+        .map(line => line.replace(NARRATION_MARKER, ""))
+        .join("\n");
+}
+
+/**
+ * 旁白标记提示词（2026-11-14 起全局注入，见 `lib/chat-engine.ts`）。
+ * 只要求「标记」，不规定语气和篇幅，尽量不动人设。
+ */
+export const CHAT_NARRATION_INSTRUCTION = [
+    "【旁白标记】",
+    "动作、环境、表情、心理这类「没有说出口」的内容，要单独起一行、行首写 [旁白]，例如：",
+    "[旁白] 他把伞往你那边偏了偏，半边肩膀露在雨里。",
+    "只有真正说出口的台词才不加标记；不要把旁白写进台词里，也不要用括号代替这个标记。",
+].join("\n");
 
 /** 去掉双语译本，只留原文（TTS 用） */
 export function stripBilingualTranslation(text: string): string {

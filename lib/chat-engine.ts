@@ -27,6 +27,7 @@ import {
     isVoiceEmotionEnabled,
 } from "./chat-storage";
 import { CHAT_EMOTION_INSTRUCTION } from "./emotion";
+import { CHAT_NARRATION_INSTRUCTION } from "./call-text";
 import { extractTextToolDirectiveText, stripTextToolDirectives } from "./text-tool-protocol";
 import type { ApiConfig, PresetConfig, Prompt, PromptOrderEntry, RegexConfig } from "./settings-types";
 import type { CustomAppPromptProfile } from "./custom-app-types";
@@ -2103,6 +2104,9 @@ export async function buildChatPromptMessages(
     if (isVoiceEmotionEnabled()) {
         llmMessages.push({ role: "system", content: CHAT_EMOTION_INSTRUCTION });
     }
+    // 旁白正向识别（2026-11-14 全局）：动作 / 环境 / 心理这类「没说出口」的部分要求行首打 [旁白]，
+    // 解析层看到暗号就直接判旁白，不再靠启发式猜（猜错会把正文掏空，角色哑掉）。
+    llmMessages.push({ role: "system", content: CHAT_NARRATION_INSTRUCTION });
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
 
     return { llmMessages, character, config, preset, regexes, userIdentity, toolsEnabled };

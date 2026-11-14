@@ -14,7 +14,7 @@ import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
 import { holdMusicDuck, releaseMusicDuck } from "@/lib/music-duck";
-import { cleanSpeechFragment, splitNarration, stripPerformanceTags } from "@/lib/call-text";
+import { cleanSpeechFragment, splitNarration, stripPerformanceTags, hasNarrationMarker } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -607,7 +607,12 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     /** true 时把旁白行从正文抽出、居中淡字渲染（旁白不上屏在气泡内，而是独立展示） */
     narrationMode?: boolean;
 }) {
-    const bilingual = splitBilingualText(narrationMode ? extractNarration(text).dialogue : text);
+    // 2026-11-14 旁白正向识别：带 [旁白] 暗号时，无论哪个页面都抽成独立旁白行（旧消息走原逻辑）
+    const narrationSplitEnabled = narrationMode || hasNarrationMarker(text);
+    const narrationSplit = narrationSplitEnabled ? extractNarration(text) : null;
+    const displaySource = narrationSplit ? narrationSplit.dialogue : text;
+    const narrationText = narrationSplit ? narrationSplit.narration : undefined;
+    const bilingual = splitBilingualText(displaySource);
     const [expanded, setExpanded] = useState(defaultExpanded);
     useEffect(() => {
         setExpanded(defaultExpanded);
@@ -624,8 +629,8 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     if (!bilingual) {
         return (
             <NarrationAwareText
-                text={narrationMode ? extractNarration(text).dialogue : text}
-                narration={narrationMode ? extractNarration(text).narration : undefined}
+                text={displaySource}
+                narration={narrationText}
                 mode={mode}
                 className={className}
                 onActionSelect={onActionSelect}
@@ -639,7 +644,7 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
         <div className={`chat-bilingual-block ${className ?? ""}`.trim()}>
             <NarrationAwareText
                 text={bilingual.original}
-                narration={narrationMode ? extractNarration(text).narration : undefined}
+                narration={narrationText}
                 mode={mode}
                 className="chat-bilingual-content"
                 onActionSelect={onActionSelect}
