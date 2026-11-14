@@ -3,6 +3,7 @@
 import { Info, ShieldAlert, Heart } from "lucide-react";
 
 import { BUILD_INFO } from "@/lib/build-info";
+import { StartupProbeCard } from "@/components/settings/startup-probe-card";
 
 export function AboutDeclaration() {
     return (
@@ -22,6 +23,10 @@ export function AboutDeclaration() {
                     </span>
                 </div>
             </div>
+
+            <p className="card-section-label m-0 mx-2">性能自检</p>
+
+            <StartupProbeCard />
 
             <p className="card-section-label m-0 mx-2">免责声明</p>
 

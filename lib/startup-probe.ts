@@ -13,8 +13,25 @@
 // 这些数字能分出「慢在 JS 求值」还是「慢在 IndexedDB」。
 
 const FLAG_KEY = "float:startup-probe";
+const RESULT_KEY = "float:startup-probe:last";
 
 type Mark = { label: string; at: number };
+
+export interface StartupProbeRow {
+  label: string;
+  totalMs: number;
+  gapMs: number;
+}
+
+export interface StartupProbeReport {
+  at: number;
+  rows: StartupProbeRow[];
+  nav?: {
+    domContentLoadedMs: number;
+    loadMs: number;
+    scriptMs: number;
+  };
+}
 
 const marks: Mark[] = [];
 let reported = false;
@@ -24,6 +41,44 @@ function probeEnabled(): boolean {
     return typeof window !== "undefined" && window.localStorage.getItem(FLAG_KEY) === "1";
   } catch {
     return false;
+  }
+}
+
+/** 探针是否开启（界面上用来提示「已开启/已关闭」）。 */
+export function isStartupProbeEnabled(): boolean {
+  return probeEnabled();
+}
+
+/** 开启/关闭探针（开启后下一次刷新才会记录）。 */
+export function setStartupProbeEnabled(next: boolean): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (next) window.localStorage.setItem(FLAG_KEY, "1");
+    else window.localStorage.removeItem(FLAG_KEY);
+  } catch {
+    // 隐私模式下写不进去就算了
+  }
+}
+
+/** 读出上一次测得的报告（设置页展示用）；没测过返回 null。 */
+export function readLastStartupReport(): StartupProbeReport | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(RESULT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StartupProbeReport;
+    if (!parsed || !Array.isArray(parsed.rows)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStartupReport(): void {
+  try {
+    window.localStorage.removeItem(RESULT_KEY);
+  } catch {
+    // 忽略
   }
 }
 
@@ -39,26 +94,38 @@ export function startupMark(label: string): void {
   marks.push({ label, at: now() });
 }
 
-/** 打印耗时表（重复调用只打印一次）。 */
+/** 打印耗时表（重复调用只打印一次），并把结果存下来给设置页看。 */
 export function startupReport(): void {
   if (!probeEnabled() || reported || marks.length === 0) return;
   reported = true;
   const base = marks[0].at;
-  const rows = marks.map((mark, index) => ({
-    阶段: mark.label,
-    累计ms: Math.round(mark.at - base),
-    距上一段ms: index === 0 ? 0 : Math.round(mark.at - marks[index - 1].at),
+  const rows: StartupProbeRow[] = marks.map((mark, index) => ({
+    label: mark.label,
+    totalMs: Math.round(mark.at - base),
+    gapMs: index === 0 ? 0 : Math.round(mark.at - marks[index - 1].at),
   }));
   // eslint-disable-next-line no-console
-  console.table(rows);
-  const nav = typeof performance !== "undefined" ? (performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined) : undefined;
+  console.table(rows.map(row => ({ 阶段: row.label, 累计ms: row.totalMs, 距上一段ms: row.gapMs })));
+
+  let navInfo: StartupProbeReport["nav"];
+  const nav = typeof performance !== "undefined"
+    ? (performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined)
+    : undefined;
   if (nav) {
+    navInfo = {
+      domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd),
+      loadMs: Math.round(nav.loadEventEnd || nav.duration),
+      scriptMs: Math.round(nav.domContentLoadedEventEnd - nav.responseEnd),
+    };
     // eslint-disable-next-line no-console
-    console.info("[startup] 页面导航", {
-      "DOMContentLoaded(ms)": Math.round(nav.domContentLoadedEventEnd),
-      "load(ms)": Math.round(nav.loadEventEnd || nav.duration),
-      "JS 求值+首屏(ms)": Math.round(nav.domContentLoadedEventEnd - nav.responseEnd),
-    });
+    console.info("[startup] 页面导航", navInfo);
+  }
+
+  try {
+    const report: StartupProbeReport = { at: Date.now(), rows, nav: navInfo };
+    window.localStorage.setItem(RESULT_KEY, JSON.stringify(report));
+  } catch {
+    // 存不下就算了，控制台那一眼也够用
   }
 }
 
