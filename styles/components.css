@@ -6335,7 +6335,7 @@
   width: auto;
   min-width: 3.2em;
   font-size: calc(12.6px*var(--app-text-scale,1));
-  color: var(--c-text-muted);
+  color: var(--c-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -6472,12 +6472,26 @@
   border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
 }
 
-/* API 配置页「多选模型」（2026-11-14）：一行一个模型，左边方框勾选，右边默认标记 */
+/* API 配置「选择模型（可多选）」（2026-11-14）：已选一个个列出来，待选列表带方框 */
 .api-model-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 9px 12px;
+  text-align: left;
+}
+
+.api-model-pick {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.api-model-pick[data-checked="true"] .api-model-name {
+  font-weight: 600;
 }
 
 .api-model-check {
@@ -6488,16 +6502,17 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  border: 1.5px solid color-mix(in srgb, var(--c-text-muted) 55%, transparent);
+  border: 1.5px solid var(--c-text);
+  opacity: 0.45;
   background: transparent;
   color: #fff;
-  cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
 }
 
 .api-model-check[data-checked="true"] {
   background: var(--c-accent);
   border-color: var(--c-accent);
+  opacity: 1;
 }
 
 .api-model-name {
@@ -6507,17 +6522,21 @@
   color: var(--c-text-title);
 }
 
-.api-model-default {
+.api-model-remove {
   flex: 0 0 auto;
-  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--c-text-muted);
-  font-size: calc(10.8px*var(--app-text-scale,1));
+  opacity: 0.45;
   cursor: pointer;
 }
 
-.api-model-default:active {
-  opacity: 0.6;
+.api-model-remove:active {
+  opacity: 0.8;
 }

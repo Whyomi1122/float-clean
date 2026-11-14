@@ -27,9 +27,13 @@ export function isEmbeddingModelName(model: string | undefined): boolean {
 /** 解析该配置应使用的向量模型：默认模型名看起来像向量模型就直接用
  *  （自定义服务商、以及智谱 embedding-3 等新模型因此可配），否则回退
  *  按服务商的内置映射（老用户绑普通对话配置的行为不变）。 */
-export function resolveEmbeddingModel(apiConfig: Pick<ApiConfig, "provider" | "defaultModel">): string | null {
+export function resolveEmbeddingModel(apiConfig: Pick<ApiConfig, "provider" | "defaultModel" | "models">): string | null {
     const model = apiConfig.defaultModel?.trim();
     if (model && isEmbeddingModelName(model)) return model;
+    // 一个配置里选了多个模型时（2026-11-14），从里面挑一个像向量模型的，
+    // 这样「文本 + 向量」合并成同一张 API 卡也能正常建索引。
+    const fromList = (apiConfig.models ?? []).map(item => item?.trim()).find(item => isEmbeddingModelName(item));
+    if (fromList) return fromList;
     return getEmbeddingModelForProvider(apiConfig.provider);
 }
 
