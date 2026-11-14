@@ -16,6 +16,32 @@ type ScopeMap = Record<string, { scriptId: string; scriptTitle: string }>;
 
 let cached: ScopeMap | null = null;
 
+const CATALOG_KEY = "ai_phone_story_script_catalog_v1";
+let catalogCache: { scriptId: string; scriptTitle: string }[] | null = null;
+
+function writeCatalog(list: { scriptId: string; scriptTitle: string }[]) {
+    catalogCache = list;
+    if (typeof window === "undefined") return;
+    try {
+        localStorage.setItem(CATALOG_KEY, JSON.stringify(list));
+    } catch {
+        /* ignore */
+    }
+}
+
+function getCatalog(): { scriptId: string; scriptTitle: string }[] {
+    if (catalogCache) return catalogCache;
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = localStorage.getItem(CATALOG_KEY);
+        const parsed = raw ? (JSON.parse(raw) as { scriptId: string; scriptTitle: string }[]) : [];
+        catalogCache = Array.isArray(parsed) ? parsed : [];
+    } catch {
+        catalogCache = [];
+    }
+    return catalogCache;
+}
+
 function readMap(): ScopeMap {
     if (typeof window === "undefined") return {};
     try {
@@ -68,14 +94,54 @@ export function activateStoryScopeForCharacter(characterId?: string | null): Sto
  */
 export async function refreshStoryScopes(): Promise<ScopeMap> {
     if (typeof window === "undefined") return {};
+    const next: ScopeMap = {};
+    // ① 剧本库（更硬的来源）：剧本里存着 cast（角色 id 快照）和 archives（杀青归档）。
+    //    记忆库没同步成功 / 归档正文没写「当前锚点」时，只扫记忆库会整排空掉，设置页就只剩默认线
+    //    （实机连着两次踩到）。这一段自己 import、自己兜错，保证一定能列出剧本。
+    try {
+        const [{ loadEnsembleScripts }, { hydrateKvDb, isKvHydrated }] = await Promise.all([
+            import("./ensemble-storage"),
+            import("./kv-db"),
+        ]);
+        // 剧本/角色都存在 IndexedDB 里，没 hydrate 完读出来是空的 —— 设置页刚打开就扫会全空
+        if (!isKvHydrated()) await hydrateKvDb().catch(() => undefined);
+        const catalog: { scriptId: string; scriptTitle: string }[] = [];
+        const byScriptAt = new Map<string, { scriptId: string; scriptTitle: string; at: string; archived: boolean }>();
+        for (const script of loadEnsembleScripts()) {
+            const scriptId = String(script?.id || "");
+            if (!scriptId) continue;
+            const scriptTitle = String(script.title || "").trim() || "群像剧情";
+            catalog.push({ scriptId, scriptTitle });
+            const archived = (script.archives || []).some(entry => String(entry.content || "").trim());
+            const at = String(script.updatedAt || "");
+            for (const member of script.cast || []) {
+                const characterId = String(member?.id || "");
+                if (!characterId) continue;
+                const previous = byScriptAt.get(characterId);
+                // 有杀青归档的剧本优先，其次比更新时间
+                if (
+                    !previous ||
+                    (archived && !previous.archived) ||
+                    (archived === previous.archived && at.localeCompare(previous.at) > 0)
+                ) {
+                    byScriptAt.set(characterId, { scriptId, scriptTitle, at, archived });
+                }
+            }
+        }
+        for (const [characterId, hit] of byScriptAt) {
+            next[characterId] = { scriptId: hit.scriptId, scriptTitle: hit.scriptTitle };
+        }
+        writeCatalog(catalog);
+    } catch {
+        /* 剧本库读不到就只靠记忆库 */
+    }
+    // ② 记忆库归档（更贴近真实历史）：谁有更新的归档信谁，覆盖 ① 的结果
     try {
         const [{ loadCharacters }, { loadMemoryEntriesByType }] = await Promise.all([
             import("./character-storage"),
             import("./memory-storage"),
         ]);
-        const characters = loadCharacters();
-        const next: ScopeMap = {};
-        for (const character of characters) {
+        for (const character of loadCharacters()) {
             let entries: Awaited<ReturnType<typeof loadMemoryEntriesByType>> = [];
             try {
                 entries = await loadMemoryEntriesByType(character.id, "archive");
@@ -100,11 +166,12 @@ export async function refreshStoryScopes(): Promise<ScopeMap> {
                 next[character.id] = { scriptId: latestScriptId, scriptTitle: latestScriptTitle || "群像剧情" };
             }
         }
-        writeMap(next);
-        return next;
     } catch {
-        return getMap();
+        /* 记忆库读不到就用剧本库的结果 */
     }
+    if (Object.keys(next).length === 0) return getMap();
+    writeMap(next);
+    return next;
 }
 
 /** 是否已经扫过一次（设置页用来决定要不要显示「还没同步」提示） */
@@ -121,6 +188,12 @@ export function listStoryScripts(): { scriptId: string; scriptTitle: string }[] 
     const seen = new Set<string>();
     const list: { scriptId: string; scriptTitle: string }[] = [];
     for (const entry of Object.values(getMap())) {
+        if (!entry?.scriptId || seen.has(entry.scriptId)) continue;
+        seen.add(entry.scriptId);
+        list.push({ scriptId: entry.scriptId, scriptTitle: entry.scriptTitle || "群像剧情" });
+    }
+    // 2026-11-14 补：映射扫不出来时（记忆库没同步 / 归档缺锚点），至少按剧本库列出来
+    for (const entry of getCatalog()) {
         if (!entry?.scriptId || seen.has(entry.scriptId)) continue;
         seen.add(entry.scriptId);
         list.push({ scriptId: entry.scriptId, scriptTitle: entry.scriptTitle || "群像剧情" });

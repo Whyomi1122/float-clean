@@ -151,6 +151,22 @@ function extractAnchorBlock(content: string): string | null {
 }
 
 /**
+ * 群像杀青归档里没有「当前锚点」这一节（正文是「───── 归档 · 至 2026.09.30 WED 11:48 ─────」
+ * +【时间戳】+【关键锚点】），所以 extractAnchorBlock 对群像归档一律读不到。
+ * 这里退一步：把头部那行「归档 · 至 …」的时刻抠出来，当这条线的时间锚点。
+ */
+function extractEnsembleArchiveTime(content: string): string | null {
+    const text = String(content || "");
+    const pattern = /(\d{4})\s*[.\-/年]\s*(\d{1,2})\s*[.\-/月]\s*(\d{1,2})\s*日?[^\d]{0,12}?(\d{1,2})\s*[:：]\s*(\d{2})/;
+    const headerLine = text.split("\n").find(line => /归档\s*[·・\-—]?\s*至/.test(line));
+    // 优先认头部那行「归档 · 至 2026.09.30 WED 11:48」；模型没写头部就退一步找正文开头的时间戳
+    const hit = (headerLine ? headerLine.match(pattern) : null) || text.slice(0, 600).match(pattern);
+    if (!hit) return null;
+    const pad = (value: string) => value.padStart(2, "0");
+    return `${hit[1]}-${pad(hit[2])}-${pad(hit[3])} ${pad(hit[4])}:${hit[5]}`;
+}
+
+/**
  * 按**剧本**列出「当前锚点」（2026-11-13 剧情时间分组用）。
  * 同一剧本只在多个角色的归档里留最新的一条；没挂剧本的归档单独一条（scriptId = null）。
  */
@@ -182,6 +198,32 @@ export async function listEnsembleAnchors(): Promise<EnsembleAnchorHit[]> {
                 const previous = byScript.get(key);
                 if (!previous || updatedAt.localeCompare(previous.updatedAt) > 0) byScript.set(key, hit);
             }
+        }
+        // 2026-11-14 补：记忆库里可能压根没有群像归档（没同步过 / 被清理 / 归档正文没写「当前锚点」），
+        // 那就直接读剧本库里的杀青归档，用头部「归档 · 至 …」的时刻当锚点 ——
+        // 否则设置页「选一条时间线」永远只有默认线（实机两次踩到）。
+        try {
+            const { loadEnsembleScripts } = await import("./ensemble-storage");
+            for (const script of loadEnsembleScripts()) {
+                const key = String(script.id || "");
+                if (!key || byScript.has(key)) continue;
+                const archives = (script.archives || []).filter(entry => String(entry.content || "").trim());
+                if (!archives.length) continue;
+                const latest = archives[archives.length - 1];
+                const timeLabel = extractEnsembleArchiveTime(latest.content);
+                if (!timeLabel) continue;
+                const cast = (script.cast || []).find(member => member && member.id);
+                byScript.set(key, {
+                    scriptId: script.id,
+                    scriptTitle: script.title || "群像剧情",
+                    characterId: cast?.id || "",
+                    characterName: cast?.name || "角色",
+                    anchor: `当前锚点 · ${timeLabel}\n时间：${timeLabel}（取自该剧本最后一版杀青归档）`,
+                    updatedAt: String(latest.createdAt || script.updatedAt || ""),
+                });
+            }
+        } catch {
+            /* 剧本库读不到就只靠记忆库 */
         }
         return Array.from(byScript.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     } catch {
