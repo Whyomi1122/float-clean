@@ -1,4 +1,9 @@
-const CACHE_VERSION = "ai-phone-pwa-v12";
+const CACHE_VERSION = "ai-phone-pwa-v13";
+
+// 导航文档最多等网络几毫秒：超时就直接拿缓存里的壳先渲染、后台继续把新文档写回缓存。
+// 原因：手机在国内连 Vercel，文档请求经常十几秒才回第一个字节，干等就是白屏 15 秒
+// （探针实测 DOMContentLoaded 15223ms，其中自有 JS 只占 201ms）。
+const NAV_NETWORK_GRACE_MS = 2500;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -55,6 +60,55 @@ async function networkFirst(request) {
     if (fallback) return fallback;
     throw error;
   }
+}
+
+// 导航专用：网络优先，但最多等 NAV_NETWORK_GRACE_MS。
+// 有缓存时超时就直接返回缓存壳（首屏立刻可交互），网络那个请求继续跑完并把
+// 新文档写回缓存，下次打开就是新版本。
+// 为什么安全：/_next/static/ 走 cache-first 且不主动清理，旧文档引用的旧 chunk
+// 本地都还在，不会被服务器的 404 打穿。
+async function navigateWithGrace(request, event) {
+  let cached = null;
+  try {
+    cached = (await caches.match(request)) || (await caches.match("/")) || null;
+  } catch (error) {
+    cached = null;
+  }
+
+  const networkPromise = fetch(request)
+    .then(async (response) => {
+      if (response && response.ok) {
+        try {
+          const cache = await caches.open(RUNTIME_CACHE);
+          await cache.put(request, response.clone());
+        } catch (error) {
+          // 写缓存失败不影响这次返回
+        }
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (!cached) {
+    const response = await networkPromise;
+    if (response) return response;
+    throw new Error("offline");
+  }
+
+  let timer = null;
+  const graceExpired = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), NAV_NETWORK_GRACE_MS);
+  });
+  const winner = await Promise.race([networkPromise, graceExpired]);
+  if (timer) clearTimeout(timer);
+
+  if (winner) return winner;
+
+  // 先用缓存渲染，别让 SW 提前退出：把网络请求挂到 waitUntil 里跑完
+  if (event && typeof event.waitUntil === "function") {
+    event.waitUntil(networkPromise.then(() => undefined).catch(() => undefined));
+  }
+  return cached;
 }
 
 // 静态资源（字体/图片/脚本/样式/模型）用 cache-first：命中缓存直接返回，
@@ -174,7 +228,7 @@ self.addEventListener("notificationclick", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request));
+    event.respondWith(navigateWithGrace(request, event));
     return;
   }
   if (isCacheableRequest(request)) {

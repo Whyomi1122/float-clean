@@ -87,9 +87,18 @@ export function StartupProbeCard() {
               其中 JS 求值+首屏 {report.nav.scriptMs} ms
             </span>
           )}
+          {report.nav && (
+            <span className="menu-desc !mt-0 ts-13">
+              文档请求：等到开工 {report.nav.requestDelayMs ?? 0} ms ／
+              开始请求到拿到响应头（TTFB） {report.nav.ttfbMs ?? 0} ms ／
+              缓存接管 {report.nav.controlled ? "是" : "否"}
+            </span>
+          )}
           {navHeavy && (
             <span className="menu-desc !mt-0 ts-13">
-              注意：DOMContentLoaded 超过 3 秒，说明时间花在**等页面和资源加载**上，不是数据库或 JS 计算慢。
+              {report.nav && (report.nav.ttfbMs ?? 0) > 1500
+                ? "注意：浏览器开始请求文档后，好几秒才拿到服务器响应头 —— 时间卡在服务器/网络这一段，不是我们自己的代码。（已加缓存兜底：2.5 秒不响应就直接用本地缓存先渲染。）"
+                : "注意：DOMContentLoaded 超过 3 秒，说明时间花在**等页面和资源加载**上，不是数据库或 JS 计算慢。"}
             </span>
           )}
           {slowest && (

@@ -28,6 +28,14 @@ export interface StartupProbeReport {
     domContentLoadedMs: number;
     loadMs: number;
     scriptMs: number;
+    /** 文档请求从发起（含 SW 启动/重定向）到开始收到响应头 */
+    ttfbMs?: number;
+    /** 导航发起 → 真正开始请求文档（SW 启动 + 重定向都算在这里） */
+    requestDelayMs?: number;
+    /** 导航发起 → Service Worker 起来接管（没走 SW 就是 0） */
+    workerStartMs?: number;
+    /** 是否被 Service Worker 接管 */
+    controlled?: boolean;
   };
 }
 
@@ -74,6 +82,10 @@ export function startupReport(): void {
       domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd),
       loadMs: Math.round(nav.loadEventEnd || nav.duration),
       scriptMs: Math.round(nav.domContentLoadedEventEnd - nav.responseEnd),
+      ttfbMs: Math.round(nav.responseStart - nav.requestStart),
+      requestDelayMs: Math.round(nav.requestStart - nav.startTime),
+      workerStartMs: Math.round(nav.workerStart - nav.startTime),
+      controlled: typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller,
     };
   }
 
