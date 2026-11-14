@@ -5,36 +5,47 @@ import { Activity, RotateCw, Trash2 } from "lucide-react";
 
 import {
   clearStartupReport,
-  isStartupProbeEnabled,
   readLastStartupReport,
-  setStartupProbeEnabled,
+  resetStartupProbeState,
   type StartupProbeReport,
 } from "@/lib/startup-probe";
 
 /**
  * 启动耗时（本机实测）
- * 手机上没法开 F12，所以把探针结果直接显示在设置里：
- * 点「开始测量」→ 自动刷新 → 下次进来这里就有数字。
+ * 手机上没法开 F12，所以把探针结果直接显示在设置里。
+ * 探针每次打开都会静默记录一次，所以这里永远显示「最近一次打开」的数字；
+ * 「重新测量」= 刷新一次，回来就是刚才那次的数字。
  */
 export function StartupProbeCard() {
   const [report, setReport] = useState<StartupProbeReport | null>(null);
-  const [armed, setArmed] = useState(false);
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     setReport(readLastStartupReport());
-    setArmed(isStartupProbeEnabled());
   }, []);
 
   const startMeasure = () => {
-    setStartupProbeEnabled(true);
-    if (typeof window !== "undefined") window.location.reload();
+    if (reloading) return;
+    setReloading(true);
+    resetStartupProbeState();
+    try {
+      window.location.reload();
+    } catch {
+      window.location.href = window.location.href;
+    }
+    // 兜底：万一 reload 被拦（PWA / 手势后退缓存），1.2 秒后强制重导航一次
+    window.setTimeout(() => {
+      try {
+        window.location.replace(window.location.pathname + window.location.search);
+      } catch {
+        // 放弃
+      }
+    }, 1200);
   };
 
   const clear = () => {
     clearStartupReport();
-    setStartupProbeEnabled(false);
     setReport(null);
-    setArmed(false);
   };
 
   const measuredAt = report?.at
@@ -47,12 +58,13 @@ export function StartupProbeCard() {
     undefined as (typeof report.rows)[number] | undefined,
   );
 
+  const navHeavy = Boolean(report?.nav && report.nav.domContentLoadedMs > 3000);
+
   return (
     <div className="g-card flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Activity size={18} className="shrink-0 text-[var(--c-icon-active)]" />
         <span className="menu-label flex-1">启动耗时（本机实测）</span>
-        {armed && !report && <span className="menu-desc !mt-0">已开启，刷新后出结果</span>}
       </div>
 
       {report ? (
@@ -75,18 +87,23 @@ export function StartupProbeCard() {
               其中 JS 求值+首屏 {report.nav.scriptMs} ms
             </span>
           )}
+          {navHeavy && (
+            <span className="menu-desc !mt-0 ts-13">
+              注意：DOMContentLoaded 超过 3 秒，说明时间花在**等页面和资源加载**上，不是数据库或 JS 计算慢。
+            </span>
+          )}
           {slowest && (
             <span className="menu-desc !mt-0 ts-13">
               最慢的一段：{slowest.label}（{slowest.gapMs} ms）
             </span>
           )}
           <span className="menu-desc !mt-0 ts-13">
-            说明：`累计` 是从最早那一段算起；`+X` 是这一段自己花掉的。冷启动（浏览器刚被系统回收后）的数字更接近真实手感。
+            说明：`累计` 从最早那一段算起，`+X` 是这一段自己花掉的。冷启动（浏览器把页面回收后再打开）的数字更接近真实手感。
           </span>
         </>
       ) : (
         <span className="menu-desc !mt-0 ts-13">
-          还没测过。点「开始测量」会自动刷新一次，回来这里就能看到每一段花了多少毫秒。
+          还没有记录。点「重新测量」会自动刷新一次，回来这里就能看到每一段花了多少毫秒。
         </span>
       )}
 
@@ -96,8 +113,8 @@ export function StartupProbeCard() {
           onClick={startMeasure}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-black/[0.05] py-2 text-[13px] active:bg-black/[0.09]"
         >
-          <RotateCw size={14} />
-          {report ? "重新测量" : "开始测量"}
+          <RotateCw size={14} className={reloading ? "animate-spin" : ""} />
+          {reloading ? "正在刷新…" : "重新测量"}
         </button>
         {report && (
           <button
