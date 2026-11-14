@@ -16,6 +16,9 @@ import { getThemeAssetMap, readThemeProfile } from "@/lib/theme-storage";
 import { resolveActiveIconSkins, type ThemeProfile } from "@/lib/theme-types";
 import { hasPendingMcpOAuthCallback } from "@/lib/tool-executor";
 import { shouldRequestPwaFullscreen } from "@/lib/pwa-display-mode";
+import { startupMark, startupReportWhenIdle } from "@/lib/startup-probe";
+
+startupMark("main-app 模块加载");
 
 const TEXT = {
   loading: "\u52A0\u8F7D\u4E2D...",
@@ -241,8 +244,10 @@ export function MainApp() {
     void navigator.storage?.persist?.().catch(() => {});
 
     void (async () => {
+      startupMark("main-app 挂载");
       await hydrateKvDb();
       if (cancelled) return;
+      startupMark("kv 水合完成");
       // 水合失败绝不放行：此时所有 KV 数据（设置/绑定/线下记录等）在内存里都是
       // 空的，进入后任何一次保存都会拿空数据整包覆盖 IndexedDB 里的真实历史。
       if (!isKvHydrated()) {
@@ -259,8 +264,11 @@ export function MainApp() {
       }
 
       if (cancelled) return;
+      startupMark("主题首屏资产就绪");
       setPreparedDesktopTheme(nextPreparedTheme);
       setHydrated(true);
+      startupMark("界面可用");
+      startupReportWhenIdle();
       if (hasPendingMcpOAuthCallback()) {
         setSplashDismissed(true);
       }

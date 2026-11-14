@@ -18,9 +18,18 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.14-14",
+    version: "2026.11.14-15",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.14-15",
+            title: "剧情台账底座 + 启动耗时探针",
+            items: [
+                "新增 lib/narrative-ledger.ts：把「还悬着什么」变成结构化台账（线索潜伏/升温/爆发/收束、伏笔、知情范围、待核态），代码只维护推进轮次，永不自动收束",
+                "新增 lib/startup-probe.ts：默认零开销，localStorage 打开 float:startup-probe 后刷新即打印启动分段耗时（模块加载 / 挂载 / kv 水合 / 主题资产 / 界面可用）",
+                "本轮只落数据层，尚未接进正文提示词与界面",
+            ],
+        },
         {
             version: "2026.11.14-14",
             title: "旁白改成「正向识别」（全局）",
