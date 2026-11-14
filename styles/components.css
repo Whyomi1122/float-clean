@@ -6318,7 +6318,8 @@
 }
 
 .memory-settings-menu .memory-slider-item .memory-slider-label {
-  font-size: calc(14px*var(--app-text-scale,1));
+  font-size: calc(12.6px*var(--app-text-scale,1));
+  font-weight: 600;
   color: var(--c-text-title);
   white-space: nowrap;
 }
@@ -6333,7 +6334,7 @@
 .memory-settings-menu .memory-slider-item .memory-slider-value {
   width: auto;
   min-width: 3.2em;
-  font-size: calc(13px*var(--app-text-scale,1));
+  font-size: calc(12.6px*var(--app-text-scale,1));
   color: var(--c-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
