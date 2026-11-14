@@ -3,7 +3,7 @@ const CACHE_VERSION = "ai-phone-pwa-v13";
 // 导航文档最多等网络几毫秒：超时就直接拿缓存里的壳先渲染、后台继续把新文档写回缓存。
 // 原因：手机在国内连 Vercel，文档请求经常十几秒才回第一个字节，干等就是白屏 15 秒
 // （探针实测 DOMContentLoaded 15223ms，其中自有 JS 只占 201ms）。
-const NAV_NETWORK_GRACE_MS = 800;
+const NAV_NETWORK_GRACE_MS = 400;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -62,6 +62,39 @@ async function networkFirst(request) {
   }
 }
 
+// 拿到新文档后，把它引用的 /_next/static 资源提前下好塞进 RUNTIME_CACHE。
+// 不这么做的话：换部署后第一次打开，缓存里的壳是新版、chunk 却一个都没有，
+// 实测要现场下 20 个文件 / 9543 KB / 6 秒（探针「首屏脚本/样式」那行）。
+// 预热放在后台跑，预热完下次冷启动直接命中，用户就不用等这 6 秒。
+async function prewarmDocumentAssets(htmlText) {
+  try {
+    const connection = navigator.connection || {};
+    if (connection.saveData) return;
+
+    const urls = [];
+    const pattern = /["'](\/_next\/static\/[^"']+)["']/g;
+    let match = pattern.exec(htmlText);
+    while (match) {
+      if (urls.indexOf(match[1]) === -1) urls.push(match[1]);
+      match = pattern.exec(htmlText);
+    }
+    if (urls.length === 0 || urls.length > 60) return;
+
+    const cache = await caches.open(RUNTIME_CACHE);
+    await Promise.all(urls.map(async (url) => {
+      try {
+        if (await cache.match(url)) return;
+        const response = await fetch(url);
+        if (response && response.ok) await cache.put(url, response);
+      } catch (error) {
+        // 单个资源失败不影响其它
+      }
+    }));
+  } catch (error) {
+    // 预热属于锦上添花，失败就算了
+  }
+}
+
 // 导航专用：网络优先，但最多等 NAV_NETWORK_GRACE_MS。
 // 有缓存时超时就直接返回缓存壳（首屏立刻可交互），网络那个请求继续跑完并把
 // 新文档写回缓存，下次打开就是新版本。
@@ -75,6 +108,15 @@ async function navigateWithGrace(request, event) {
     cached = null;
   }
 
+  let cachedHtml = "";
+  if (cached) {
+    try {
+      cachedHtml = await cached.clone().text();
+    } catch (error) {
+      cachedHtml = "";
+    }
+  }
+
   const networkPromise = fetch(request)
     .then(async (response) => {
       if (response && response.ok) {
@@ -84,15 +126,27 @@ async function navigateWithGrace(request, event) {
         } catch (error) {
           // 写缓存失败不影响这次返回
         }
+        // 文档变了（换了部署）才预热，文档没变时资源本来就在缓存里
+        try {
+          const freshHtml = await response.clone().text();
+          if (freshHtml && freshHtml !== cachedHtml) {
+            return { response, prewarm: prewarmDocumentAssets(freshHtml) };
+          }
+        } catch (error) {
+          // 读不出来就跳过预热
+        }
       }
-      return response;
+      return { response, prewarm: null };
     })
     .catch(() => null);
 
   if (!cached) {
-    const response = await networkPromise;
-    if (response) return response;
-    throw new Error("offline");
+    const result = await networkPromise;
+    if (!result) throw new Error("offline");
+    if (event && typeof event.waitUntil === "function" && result.prewarm) {
+      event.waitUntil(result.prewarm);
+    }
+    return result.response;
   }
 
   let timer = null;
@@ -102,11 +156,20 @@ async function navigateWithGrace(request, event) {
   const winner = await Promise.race([networkPromise, graceExpired]);
   if (timer) clearTimeout(timer);
 
-  if (winner) return winner;
+  if (winner && winner.response) {
+    if (event && typeof event.waitUntil === "function" && winner.prewarm) {
+      event.waitUntil(winner.prewarm);
+    }
+    return winner.response;
+  }
 
-  // 先用缓存渲染，别让 SW 提前退出：把网络请求挂到 waitUntil 里跑完
+  // 先用缓存渲染，别让 SW 提前退出：网络请求和预热都挂到 waitUntil 里跑完
   if (event && typeof event.waitUntil === "function") {
-    event.waitUntil(networkPromise.then(() => undefined).catch(() => undefined));
+    event.waitUntil(
+      networkPromise
+        .then((result) => (result && result.prewarm ? result.prewarm : undefined))
+        .catch(() => undefined),
+    );
   }
   return cached;
 }
