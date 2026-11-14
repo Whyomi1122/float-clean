@@ -48,6 +48,8 @@ export function ApiSettings() {
     const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
     /** 编辑配置弹窗里「高级设置」这一段是否展开（默认收起，2026-11-14） */
     const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
+    /** 拉取模型列表的提示（只显示失败；成功由「可选模型 · N 个」体现，2026-11-14） */
+    const [modelNotice, setModelNotice] = useState<Record<string, string>>({});
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -133,7 +135,7 @@ export function ApiSettings() {
 
     const fetchModels = async (config: ApiConfig) => {
         setIsFetching(prev => ({ ...prev, [config.id]: true }));
-        setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: "" } }));
+        setModelNotice(prev => ({ ...prev, [config.id]: "" }));
 
         try {
             const baseUrl = determineBaseUrl(config);
@@ -177,10 +179,11 @@ export function ApiSettings() {
             if (config.defaultModel && !(config.models ?? []).includes(config.defaultModel)) {
                 updateConfig(config.id, { models: [...(config.models ?? []), config.defaultModel] });
             }
-            setTestResult(prev => ({ ...prev, [config.id]: { success: true, message: `成功获取 ${modelNames.length} 个模型` } }));
+            // 成功不弹提示：可选模型那一行已经写着「N 个」，再弹一个大绿色横幅只会挤乱版面
+            setModelNotice(prev => ({ ...prev, [config.id]: "" }));
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
-            setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: `拉取失败: ${msg}` } }));
+            setModelNotice(prev => ({ ...prev, [config.id]: `拉取失败：${msg}` }));
             setFetchedModels(prev => ({ ...prev, [config.id]: [] }));
         } finally {
             setIsFetching(prev => ({ ...prev, [config.id]: false }));
@@ -324,7 +327,8 @@ export function ApiSettings() {
                                 if (!config) return null;
                                 return (
                                     <>
-                                        <p className="api-form-section">连接</p>
+                                        <div className="api-form-card">
+                                        <p className="api-form-card-title">CONNECTION · 连接</p>
                                         <div className="flex flex-col gap-1">
                                             <label className="menu-desc ml-1">配置名称 (Name)</label>
                                             <Input
@@ -406,8 +410,10 @@ export function ApiSettings() {
                                                 <span className="break-all leading-[1.5]">{testResult[config.id].message}</span>
                                             </Alert>
                                         )}
+                                        </div>
 
-                                        <p className="api-form-section">模型</p>
+                                        <div className="api-form-card">
+                                        <p className="api-form-card-title">MODELS · 模型</p>
                                         {/* 选择模型（可多选，2026-11-14 用户定稿）：
                                             一个 API 下可以同时选好几个模型，选中的在下面一个个列出来。
                                             调用的那个 = 列表第一个（内部仍存 defaultModel）。 */}
@@ -427,6 +433,10 @@ export function ApiSettings() {
                                                     {isFetching[config.id] ? "拉取中" : "刷新列表"}
                                                 </button>
                                             </div>
+
+                                            {modelNotice[config.id] && (
+                                                <span className="api-model-notice">{modelNotice[config.id]}</span>
+                                            )}
 
                                             {/* 已选：药丸式小标签，横排自动换行 */}
                                             {(selectedModelsOf(config).length > 0) ? (
@@ -471,7 +481,7 @@ export function ApiSettings() {
                                                                 className="ui-input"
                                                             />
                                                         )}
-                                                        <div className="menu-group api-model-scroll">
+                                                        <div className="api-model-list api-model-scroll">
                                                             {shownModels.length === 0 && (
                                                                 <div className="menu-item api-model-row">
                                                                     <span className="api-model-name">没有匹配的模型</span>
@@ -512,15 +522,17 @@ export function ApiSettings() {
                                                 </div>
                                             )}
                                         </div>
+                                        </div>
 
+                                        <div className="api-form-card">
                                         <button
                                             type="button"
-                                            className="api-form-more"
+                                            className="api-form-card-head"
                                             onClick={() => setAdvancedOpen(prev => ({ ...prev, [config.id]: !prev[config.id] }))}
                                         >
-                                            <span>高级设置</span>
+                                            <span className="api-form-card-title">ADVANCED · 高级</span>
                                             <ChevronDown
-                                                size={14}
+                                                size={15}
                                                 className={`transition-transform ${advancedOpen[config.id] ? "rotate-180" : ""}`}
                                             />
                                         </button>
@@ -561,6 +573,7 @@ export function ApiSettings() {
 
                                         </>
                                         )}
+                                        </div>
 
                                     </>
                                 )

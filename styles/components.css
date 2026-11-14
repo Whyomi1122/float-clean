@@ -6518,7 +6518,7 @@
 
 /* 待选模型列表：最多显示 10 行，超出内部滚动（2026-11-14） */
 .api-model-scroll {
-  max-height: 380px;
+  max-height: 330px;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -6568,13 +6568,76 @@
   opacity: 0.8;
 }
 
-/* 编辑配置弹窗分段标题（连接 / 模型，2026-11-14）：把一长条表单切成看得懂的三段 */
-.api-form-section {
-  margin: 4px 0 -4px 2px;
-  font-size: calc(11px*var(--app-text-scale,1));
+/* 编辑配置弹窗的分组卡片（参考「聊天页设置」的分组白卡，2026-11-14）
+   每组一张圆角卡 + 大写字距小标题，卡片之间自然留白，填表不再一长条糊在一起 */
+.api-form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 13px 14px;
+  border-radius: var(--ui-radius-card);
+  background: var(--c-card);
+  backdrop-filter: blur(var(--ui-blur)) saturate(var(--ui-saturate));
+  -webkit-backdrop-filter: blur(var(--ui-blur)) saturate(var(--ui-saturate));
+  border: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.025), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.api-form-card-title {
+  margin: 0 0 0 2px;
+  font-size: calc(10.5px*var(--app-text-scale,1));
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--c-icon);
+}
+
+/* 可折叠分组的标题行（点一下展开/收起） */
+.api-form-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-icon);
+  cursor: pointer;
+}
+
+.api-form-card-head .api-form-card-title {
+  margin: 0;
+}
+
+/* 待选模型列表：贴在卡片里直接排下去，不再套一层白底小盒子（2026-11-14） */
+.api-model-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -4px;
+}
+
+.api-model-list .api-model-row {
+  padding: 10px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.api-model-list .api-model-row:not(:last-child) {
+  border-bottom: 1px solid color-mix(in srgb, var(--c-card-border) 20%, transparent);
+}
+
+.api-model-list .api-model-row::after {
+  content: none;
+}
+
+/* 拉取模型列表失败时的提示（成功不弹横幅，改由「可选模型 · N 个」表达） */
+.api-model-notice {
+  margin-left: 4px;
+  font-size: calc(11.5px*var(--app-text-scale,1));
+  line-height: 1.45;
+  color: #C0554D;
 }
 
 /* 已选模型：药丸小标签横排，点击标签里的 × 移除 */
