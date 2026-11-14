@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues, updateChatMessage, deleteChatMessage } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues, updateChatMessage, deleteChatMessage, isVoiceEmotionEnabled } from "@/lib/chat-storage";
 import { prepareChatVoiceAudio } from "@/lib/chat-asset-storage";
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "@/lib/chat-status-region";
 import type { StateValue } from "@/lib/chat-storage";
@@ -18,6 +18,7 @@ import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
 import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags, cleanSpeechFragment } from "@/lib/call-text";
+import { extractChatEmotion, toTtsEmotion, type ChatEmotion } from "@/lib/emotion";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -500,6 +501,18 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             let liveDrain: Promise<void> | null = null;
             let liveStartedAt = 0;
             let speechGroup: string[] = [];
+            // 本回合情绪（2026-11-14）：模型的 [情绪:x] 写在回复最前面，收到就锁住，整回合朗读都用它。
+            // 开关关着就一律不传，行为和以前完全一样。
+            const voiceEmotionOn = isVoiceEmotionEnabled();
+            let turnEmotion: ChatEmotion | undefined;
+            let emotionProbe = "";
+            const trackTurnEmotion = (delta: string) => {
+                if (!voiceEmotionOn || turnEmotion) return;
+                if (emotionProbe.length < 240) emotionProbe += delta;
+                const hit = extractChatEmotion(emotionProbe);
+                if (hit.emotion) turnEmotion = hit.emotion;
+            };
+            const turnTtsEmotion = () => (voiceEmotionOn ? toTtsEmotion(turnEmotion) : undefined);
             // 韩语主导角色：朗读时丢掉纯中文译文行；强制韩语角色同理
             const koreanDominant = isKoreanDominantVoice(session.contactId)
                 || resolveSpeechLanguageMode(session.contactId) === "korean"
@@ -508,7 +521,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const speakLive = async (sentence: string) => {
                 if (!streamVoiceConfig || stateRef.current === "ENDED" || !speakerOnRef.current) return;
                 const startedAt = Date.now();
-                const blob = await synthesizeSpeech(sentence, streamVoiceConfig);
+                const blob = await synthesizeSpeech(sentence, streamVoiceConfig, { emotion: turnTtsEmotion() });
                 if (!blob) {
                     recordCallDiagnostic(`流式合成返回空音频：${sentence.slice(0, 16)}`);
                     return;
@@ -573,6 +586,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         recordCallDiagnostic("收到首个增量");
                     }
                     livePending += delta;
+                    trackTurnEmotion(delta);
                     setLiveReply(prev => (prev || "") + delta);
                     pullSentences(false);
                 },
@@ -604,6 +618,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             setLiveReply(null);
             recordCallDiagnostic(`模型返回 ${aiResponseText.length} 字 · 解析字幕 ${cleanParts.length} 段 / ${displayText.length} 字`);
             const speechText = stripNarrationForSpeech(displayText, koreanDominant);
+            // 非流式（或流式没抓到标签）时，从整段回复里补一次情绪
+            if (voiceEmotionOn && !turnEmotion) {
+                const emotionHit = extractChatEmotion(aiResponseText);
+                if (emotionHit.emotion) turnEmotion = emotionHit.emotion;
+            }
 
             if (!displayText.trim()) {
                 throw new Error("本次通话回复没有可显示的文字，请重试或检查模型返回内容。");
@@ -653,10 +672,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         for (let i = 0; i < chunks.length; i++) {
                             if (stateRef.current === "ENDED") break;
                             const chunkStartedAt = Date.now();
-                            const audioBlob = pendingChunk ? await pendingChunk : await synthesizeSpeech(chunks[i], voiceConfig);
+                            const audioBlob = pendingChunk ? await pendingChunk : await synthesizeSpeech(chunks[i], voiceConfig, { emotion: turnTtsEmotion() });
                             // 播放这一句的同时，先把下一句送去合成
                             pendingChunk = i + 1 < chunks.length
-                                ? synthesizeSpeech(chunks[i + 1], voiceConfig).catch(() => null)
+                                ? synthesizeSpeech(chunks[i + 1], voiceConfig, { emotion: turnTtsEmotion() }).catch(() => null)
                                 : null;
                             recordCallDiagnostic(`合成第 ${i + 1}/${chunks.length} 段：${Date.now() - chunkStartedAt}ms · ${chunks[i].length} 字`);
                             if (stateRef.current === "ENDED") break;

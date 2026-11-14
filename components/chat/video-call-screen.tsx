@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, loadChatMessages, pushChatMessage, getLatestCharacterStateValues, isVoiceEmotionEnabled } from "@/lib/chat-storage";
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "@/lib/chat-status-region";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
@@ -11,6 +11,7 @@ import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
 import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, playAudioBlobViaMediaElement, setCallAudioSessionActive } from "@/lib/tts-service";
+import { extractChatEmotion, toTtsEmotion } from "@/lib/emotion";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
@@ -442,6 +443,8 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
             const speechText = stripBilingualForSpeech(displayText);
+            // 视频通话整段朗读：情绪从整段回复里取（开关关着就一律不传）
+            const callEmotion = isVoiceEmotionEnabled() ? toTtsEmotion(extractChatEmotion(aiResponseText).emotion) : undefined;
 
             if (!displayText) { setCallState("IDLE"); return; }
 
@@ -458,7 +461,7 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
             const voiceConfig = resolveVoiceConfig(session.contactId);
             if (voiceConfig && !isSpeakerMutedRef.current) {
                 try {
-                    const audioBlob = await synthesizeSpeech(speechText, voiceConfig);
+                    const audioBlob = await synthesizeSpeech(speechText, voiceConfig, { emotion: callEmotion });
                     if (stateRef.current === "ENDED") return;
                     if (audioBlob && !isSpeakerMutedRef.current) {
                         const { promise, abort } = playCallAudio(audioBlob);
