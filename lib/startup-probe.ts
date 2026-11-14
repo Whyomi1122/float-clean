@@ -36,6 +36,12 @@ export interface StartupProbeReport {
     workerStartMs?: number;
     /** 是否被 Service Worker 接管 */
     controlled?: boolean;
+    /** 首屏 JS/CSS 文件数 */
+    assetCount?: number;
+    /** 首屏 JS/CSS 合计下载字节 */
+    assetBytes?: number;
+    /** 首屏 JS/CSS 从第一个开始下载到最后一个下载完的跨度 */
+    assetSpanMs?: number;
   };
 }
 
@@ -87,6 +93,25 @@ export function startupReport(): void {
       workerStartMs: Math.round(nav.workerStart - nav.startTime),
       controlled: typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller,
     };
+    // 首屏脚本/样式：有多少个、多大、下载跨度多长（判断是不是卡在下载 JS）
+    try {
+      const resources = (performance.getEntriesByType?.("resource") ?? []) as PerformanceResourceTiming[];
+      const assets = resources.filter(entry =>
+        typeof entry.name === "string"
+        && entry.name.indexOf("/_next/static/") !== -1
+        && (entry.initiatorType === "script" || entry.initiatorType === "link")
+        && entry.responseEnd > 0,
+      );
+      if (assets.length > 0) {
+        const startAt = Math.min(...assets.map(entry => entry.startTime));
+        const endAt = Math.max(...assets.map(entry => entry.responseEnd));
+        navInfo.assetCount = assets.length;
+        navInfo.assetBytes = assets.reduce((sum, entry) => sum + (entry.transferSize || entry.encodedBodySize || 0), 0);
+        navInfo.assetSpanMs = Math.round(endAt - startAt);
+      }
+    } catch {
+      // 拿不到资源计时就算了
+    }
   }
 
   try {
