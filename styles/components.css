@@ -6471,3 +6471,60 @@
 .prefs-block-label + .prefs-row {
   border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
 }
+
+/* API 设置按用途分组（2026-11-14 用户定稿）：日常聊天 / 工具使用 / 未分类，组名可折叠，条目是单行信息条 */
+.api-group-head {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0 8px 2px;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  color: var(--c-text-muted);
+  font-size: calc(11.7px*var(--app-text-scale,1));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.api-group-caret {
+  flex: 0 0 auto;
+  transition: transform 0.18s ease;
+}
+
+.api-group-caret[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.api-group-count {
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+.api-config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.api-config-row-name {
+  min-width: 0;
+  font-size: calc(12.6px*var(--app-text-scale,1));
+  font-weight: 600;
+  color: var(--c-text-title);
+}
+
+.api-config-row-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: calc(10.8px*var(--app-text-scale,1));
+  color: var(--c-text-muted);
+  text-align: right;
+}

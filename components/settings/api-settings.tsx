@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check } from "lucide-react";
+import { Plus, RefreshCw, Rss, AlertCircle, ChevronRight, X, Check } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import type { ApiConfig, BindingConfig } from "@/lib/settings-types";
 import { loadApiConfigs, loadBindingConfig, removeApiConfigReferences, saveApiConfigs, saveBindingConfig } from "@/lib/settings-storage";
@@ -54,6 +54,16 @@ function purposeOwnerId(binding: BindingConfig, field: ApiPurposeField): string 
     return binding[field];
 }
 
+/** 工具类用途（除「日常对话」以外的全部），页面里归到「工具使用」一组 */
+const TOOL_PURPOSE_FIELDS: ApiPurposeField[] = [
+    "qaApiConfigId",
+    "mascotApiConfigId",
+    "memorySummaryApiConfigId",
+    "embeddingApiConfigId",
+    "reasoningTranslateApiConfigId",
+    "koreanSpeechApiConfigId",
+];
+
 function getNativeToolProtocolLabel(config: ApiConfig): string {
     if (config.provider === "Anthropic" && !config.baseUrl) return "Anthropic";
     if (config.provider === "Google") return "Gemini";
@@ -68,8 +78,8 @@ export function ApiSettings() {
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [binding, setBinding] = useState<BindingConfig | null>(null);
-    /** 正在给哪个用途挑 API（null = 选择弹窗关着） */
-    const [purposePicker, setPurposePicker] = useState<ApiPurposeField | null>(null);
+    /** 分组折叠状态（key 在表里 = 收起），默认全展开 */
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     // Testing and Fetching states
     const [isFetching, setIsFetching] = useState<Record<string, boolean>>({});
@@ -114,6 +124,37 @@ export function ApiSettings() {
         (configId: string) => (binding ? API_PURPOSES.filter(item => purposeOwnerId(binding, item.field) === configId) : []),
         [binding]
     );
+
+    const purposeTextOf = useCallback(
+        (configId: string) => {
+            const list = purposesOf(configId);
+            return list.length > 0 ? list.map(item => item.label).join(" · ") : "未指派用途";
+        },
+        [purposesOf]
+    );
+
+    /**
+     * 页面分组（2026-11-14 用户定稿）：
+     * 日常聊天 / 工具使用（硅基流动这类工具调用用的）/ 未分类。
+     * 一个配置可以同时出现在多组里 —— 用途就是这么认领的。
+     */
+    const apiGroups = [
+        {
+            key: "chat",
+            label: "日常聊天",
+            members: binding ? configs.filter(config => purposeOwnerId(binding, "main") === config.id) : [],
+        },
+        {
+            key: "tool",
+            label: "工具使用",
+            members: binding ? configs.filter(config => TOOL_PURPOSE_FIELDS.some(field => purposeOwnerId(binding, field) === config.id)) : [],
+        },
+        {
+            key: "none",
+            label: "未分类",
+            members: binding ? configs.filter(config => API_PURPOSES.every(purpose => purposeOwnerId(binding, purpose.field) !== config.id)) : configs,
+        },
+    ];
 
     const persist = useCallback((newConfigs: ApiConfig[]) => {
         setConfigs(newConfigs);
@@ -275,39 +316,7 @@ export function ApiSettings() {
                 <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">API Settings</h2>
             </div>
 
-            {/* 按用途分配：点一行挑这个用途用哪个 API（生图走独立页面，不在这里） */}
-            <div className="flex flex-col gap-1">
-                <span className="menu-label mx-1 font-medium">按用途分配</span>
-                <div className="menu-group mt-1">
-                    {API_PURPOSES.map(purpose => {
-                        const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
-                        const owner = ownerId ? configs.find(item => item.id === ownerId) : undefined;
-                        return (
-                            <button
-                                key={purpose.field}
-                                type="button"
-                                className="menu-item"
-                                onClick={() => setPurposePicker(purpose.field)}
-                            >
-                                <span className="menu-label-group">
-                                    <span className="menu-label">{purpose.label}</span>
-                                    <span className="menu-desc truncate">
-                                        {ownerId
-                                            ? owner
-                                                ? (owner.name || owner.provider)
-                                                : "配置已删除，点一下重选"
-                                            : purpose.field === "main"
-                                                ? "还没有主用配置"
-                                                : "跟随日常对话"}
-                                    </span>
-                                </span>
-                                <Check size={16} className={ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
+            {/* 按用途分组（2026-11-14 用户定稿）：日常聊天 / 工具使用 / 未分类，组名可折叠 */}
             {configs.length === 0 ? (
                 <div className="ui-empty">
                     <div className="ui-icon-circle">
@@ -322,64 +331,49 @@ export function ApiSettings() {
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-3">
-                    {configs.map(config => (
-                        <div
-                            key={config.id}
-                            className="ui-config-card min-w-0 cursor-pointer"
-                            style={{ aspectRatio: "3 / 2", padding: "12px", justifyContent: "space-between" }}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`编辑 ${config.name || config.provider}`}
-                            onClick={() => setEditingId(config.id)}
-                            onKeyDown={(event) => {
-                                if (event.target !== event.currentTarget) return;
-                                if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    setEditingId(config.id);
-                                }
-                            }}
-                        >
-                            <div className="min-w-0 flex flex-col gap-1">
-                                <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{config.name || config.provider}</span>
-                                <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
-                                <div className="flex min-w-0 flex-wrap gap-1 overflow-hidden" style={{ maxHeight: 20 }}>
-                                    {purposesOf(config.id).slice(0, 2).map(item => (
-                                        <span key={item.field} className="ui-badge" data-variant="action" style={{ whiteSpace: "nowrap" }}>{item.label}</span>
-                                    ))}
-                                    {purposesOf(config.id).length > 2 && (
-                                        <span className="ui-badge" data-variant="muted">+{purposesOf(config.id).length - 2}</span>
-                                    )}
-                                    {purposesOf(config.id).length === 0 && (
-                                        <span className="menu-desc">未指派用途</span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex gap-2 shrink-0 items-center justify-end">
+                <div className="flex flex-col gap-4">
+                    {apiGroups.map(group => {
+                        const collapsed = collapsedGroups[group.key] === true;
+                        return (
+                            <div key={group.key} className="flex flex-col gap-1">
                                 <button
                                     type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        setEditingId(config.id);
-                                    }}
-                                    className="ui-link-btn"
+                                    className="api-group-head"
+                                    aria-expanded={!collapsed}
+                                    onClick={() => setCollapsedGroups(prev => ({ ...prev, [group.key]: !collapsed }))}
                                 >
-                                    <FileEdit size={18} />
+                                    <ChevronRight size={13} className="api-group-caret" data-expanded={!collapsed} />
+                                    <span>{group.label}</span>
+                                    <span className="api-group-count">{group.members.length}</span>
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        setConfirmDeleteId(config.id);
-                                    }}
-                                    className="ui-link-btn"
-                                    data-variant="danger"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
+                                {!collapsed && (
+                                    <div className="menu-group">
+                                        {group.members.length === 0 ? (
+                                            <div className="menu-item api-config-row">
+                                                <span className="api-config-row-meta">还没有配置</span>
+                                            </div>
+                                        ) : (
+                                            group.members.map(config => (
+                                                <button
+                                                    key={config.id}
+                                                    type="button"
+                                                    className="menu-item api-config-row"
+                                                    onClick={() => setEditingId(config.id)}
+                                                >
+                                                    <span className="api-config-row-name truncate">{config.name || config.provider}</span>
+                                                    <span className="api-config-row-meta truncate">
+                                                        {group.key === "none"
+                                                            ? (config.defaultModel || "未设置模型")
+                                                            : purposeTextOf(config.id)}
+                                                    </span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -547,6 +541,31 @@ export function ApiSettings() {
                                             />
                                         </div>
 
+                                        {/* 调用设置：这个 API 认领哪些用途（2026-11-14 用户定稿：从配置页里合并进来） */}
+                                        <span className="menu-label mx-1 mt-4 font-medium">调用设置</span>
+                                        {API_PURPOSES.map(purpose => {
+                                            const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
+                                            const isOwner = ownerId === config.id;
+                                            return (
+                                                <div key={purpose.field} className="ui-toggle-row mt-2">
+                                                    <span className="menu-label font-medium">{purpose.label}</span>
+                                                    <Toggle
+                                                        checked={isOwner}
+                                                        disabled={purpose.field === "main" && isOwner}
+                                                        onChange={(v) => assignPurpose(purpose.field, config.id, v)}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+
+                                        <button
+                                            type="button"
+                                            className="ui-btn ui-btn-danger mt-4 w-full"
+                                            onClick={() => setConfirmDeleteId(config.id)}
+                                        >
+                                            删除这个配置
+                                        </button>
+
                                     </>
                                 )
                             })()}
@@ -554,55 +573,6 @@ export function ApiSettings() {
                     </div>
                 </div>
             )}
-
-            {purposePicker && (() => {
-                const purpose = API_PURPOSES.find(item => item.field === purposePicker);
-                const ownerId = binding ? purposeOwnerId(binding, purposePicker) : undefined;
-                const pick = (configId: string | null) => {
-                    if (!configId) {
-                        if (purposePicker !== "main") assignPurpose(purposePicker, "", false);
-                    } else {
-                        assignPurpose(purposePicker, configId, true);
-                    }
-                    setPurposePicker(null);
-                };
-                return (
-                    <div className="modal-overlay modal-overlay-bottom">
-                        <div className="modal-sheet" data-ui="modal-sheet">
-                            <div className="modal-header" data-ui="modal-header">
-                                <button onClick={() => setPurposePicker(null)} className="modal-header-btn modal-header-btn-muted"><X size={18} /></button>
-                                <span className="modal-header-title">{purpose?.label || "用途"}</span>
-                                <button onClick={() => setPurposePicker(null)} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
-                            </div>
-                            <div className="modal-body hide-scrollbar flex flex-col gap-3 pb-10" data-ui="modal-body">
-                                <div className="menu-group">
-                                    {purposePicker !== "main" && (
-                                        <button type="button" className="menu-item" onClick={() => pick(null)}>
-                                            <span className="menu-label-group">
-                                                <span className="menu-label">不单独指定</span>
-                                                <span className="menu-desc">跟日常对话</span>
-                                            </span>
-                                            <Check size={16} className={!ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
-                                        </button>
-                                    )}
-                                    {configs.map(config => (
-                                        <button key={config.id} type="button" className="menu-item" onClick={() => pick(config.id)}>
-                                            <span className="menu-label-group">
-                                                <span className="menu-label truncate">{config.name || config.provider}</span>
-                                                <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
-                                            </span>
-                                            <Check size={16} className={ownerId === config.id ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
-                                        </button>
-                                    ))}
-                                </div>
-                                {configs.length === 0 && (
-                                    <span className="menu-desc mx-1">还没有 API 配置，先添加一个。</span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
 
             {confirmDeleteId && (
                 <ConfirmDialog
@@ -615,6 +585,8 @@ export function ApiSettings() {
                     onConfirm={() => {
                         removeConfig(confirmDeleteId);
                         setConfirmDeleteId(null);
+                        // 从配置详情页里删的，删完顺手关掉详情
+                        setEditingId(prev => (prev === confirmDeleteId ? null : prev));
                     }}
                     onCancel={() => setConfirmDeleteId(null)}
                 />
