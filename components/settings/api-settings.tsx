@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, Rss, AlertCircle, ChevronRight, X, Check } from "lucide-react";
+import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
-import type { ApiConfig, BindingConfig } from "@/lib/settings-types";
-import { loadApiConfigs, loadBindingConfig, removeApiConfigReferences, saveApiConfigs, saveBindingConfig } from "@/lib/settings-storage";
+import type { ApiConfig } from "@/lib/settings-types";
+import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
 import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
@@ -25,45 +25,6 @@ const DEFAULT_CONFIGS: ApiConfig[] = [
     }
 ];
 
-/**
- * 「按模型用途」分组：一个 API 配置可以同时担任多个用途。
- * main = 全局日常对话（聊天/群像主模型），其余是原有的 auxiliary 槽位。
- * 生图有独立页面，这里不列。
- */
-type ApiPurposeField =
-    | "main"
-    | "memorySummaryApiConfigId"
-    | "embeddingApiConfigId"
-    | "mascotApiConfigId"
-    | "qaApiConfigId"
-    | "reasoningTranslateApiConfigId"
-    | "koreanSpeechApiConfigId";
-
-const API_PURPOSES: { field: ApiPurposeField; label: string; desc: string }[] = [
-    { field: "main", label: "日常对话", desc: "聊天、群像主模型；其他用途没单独指派时都用它" },
-    { field: "qaApiConfigId", label: "心声 / 查手机 / 观测志", desc: "工坊答疑、诊断与内容开发" },
-    { field: "mascotApiConfigId", label: "小卷助手", desc: "桌面助手对话与工具调用" },
-    { field: "memorySummaryApiConfigId", label: "记忆总结", desc: "聊天记忆压缩" },
-    { field: "embeddingApiConfigId", label: "向量召回", desc: "长期记忆语义检索，需要向量模型" },
-    { field: "reasoningTranslateApiConfigId", label: "思维链翻译", desc: "把思考过程翻成中文" },
-    { field: "koreanSpeechApiConfigId", label: "韩语转写", desc: "中文台词转写成韩语再朗读" },
-];
-
-function purposeOwnerId(binding: BindingConfig, field: ApiPurposeField): string | undefined {
-    if (field === "main") return binding.globalDefaults.apiConfigId;
-    return binding[field];
-}
-
-/** 工具类用途（除「日常对话」以外的全部），页面里归到「工具使用」一组 */
-const TOOL_PURPOSE_FIELDS: ApiPurposeField[] = [
-    "qaApiConfigId",
-    "mascotApiConfigId",
-    "memorySummaryApiConfigId",
-    "embeddingApiConfigId",
-    "reasoningTranslateApiConfigId",
-    "koreanSpeechApiConfigId",
-];
-
 function getNativeToolProtocolLabel(config: ApiConfig): string {
     if (config.provider === "Anthropic" && !config.baseUrl) return "Anthropic";
     if (config.provider === "Google") return "Gemini";
@@ -77,9 +38,6 @@ export function ApiSettings() {
     const [isNewConfig, setIsNewConfig] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
-    const [binding, setBinding] = useState<BindingConfig | null>(null);
-    /** 分组折叠状态（key 在表里 = 收起），默认全展开 */
-    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     // Testing and Fetching states
     const [isFetching, setIsFetching] = useState<Record<string, boolean>>({});
@@ -97,64 +55,7 @@ export function ApiSettings() {
             saveApiConfigs(DEFAULT_CONFIGS);
         }
         setIsLoaded(true);
-        setBinding(loadBindingConfig());
     }, []);
-
-    // 用途指派：main = 全局日常对话，其余写 auxiliary 槽位
-    const assignPurpose = useCallback(
-        (field: ApiPurposeField, configId: string, on: boolean) => {
-            const current = binding ?? loadBindingConfig();
-            let next: BindingConfig;
-            if (field === "main") {
-                next = { ...current, globalDefaults: { ...current.globalDefaults, apiConfigId: configId } };
-            } else if (on) {
-                next = { ...current, [field]: configId };
-            } else {
-                const copy: BindingConfig = { ...current };
-                delete copy[field];
-                next = copy;
-            }
-            setBinding(next);
-            saveBindingConfig(next);
-        },
-        [binding]
-    );
-
-    const purposesOf = useCallback(
-        (configId: string) => (binding ? API_PURPOSES.filter(item => purposeOwnerId(binding, item.field) === configId) : []),
-        [binding]
-    );
-
-    const purposeTextOf = useCallback(
-        (configId: string) => {
-            const list = purposesOf(configId);
-            return list.length > 0 ? list.map(item => item.label).join(" · ") : "未指派用途";
-        },
-        [purposesOf]
-    );
-
-    /**
-     * 页面分组（2026-11-14 用户定稿）：
-     * 日常聊天 / 工具使用（硅基流动这类工具调用用的）/ 未分类。
-     * 一个配置可以同时出现在多组里 —— 用途就是这么认领的。
-     */
-    const apiGroups = [
-        {
-            key: "chat",
-            label: "日常聊天",
-            members: binding ? configs.filter(config => purposeOwnerId(binding, "main") === config.id) : [],
-        },
-        {
-            key: "tool",
-            label: "工具使用",
-            members: binding ? configs.filter(config => TOOL_PURPOSE_FIELDS.some(field => purposeOwnerId(binding, field) === config.id)) : [],
-        },
-        {
-            key: "none",
-            label: "未分类",
-            members: binding ? configs.filter(config => API_PURPOSES.every(purpose => purposeOwnerId(binding, purpose.field) !== config.id)) : configs,
-        },
-    ];
 
     const persist = useCallback((newConfigs: ApiConfig[]) => {
         setConfigs(newConfigs);
@@ -316,7 +217,6 @@ export function ApiSettings() {
                 <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">API Settings</h2>
             </div>
 
-            {/* 按用途分组（2026-11-14 用户定稿）：日常聊天 / 工具使用 / 未分类，组名可折叠 */}
             {configs.length === 0 ? (
                 <div className="ui-empty">
                     <div className="ui-icon-circle">
@@ -331,49 +231,53 @@ export function ApiSettings() {
                     </button>
                 </div>
             ) : (
-                <div className="flex flex-col gap-4">
-                    {apiGroups.map(group => {
-                        const collapsed = collapsedGroups[group.key] === true;
-                        return (
-                            <div key={group.key} className="flex flex-col gap-1">
+                <div className="grid grid-cols-2 gap-3">
+                    {configs.map(config => (
+                        <div
+                            key={config.id}
+                            className="ui-config-card min-w-0 cursor-pointer"
+                            style={{ aspectRatio: "3 / 2", padding: "12px", justifyContent: "space-between" }}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`编辑 ${config.name || config.provider}`}
+                            onClick={() => setEditingId(config.id)}
+                            onKeyDown={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setEditingId(config.id);
+                                }
+                            }}
+                        >
+                            <div className="min-w-0 flex flex-col gap-1">
+                                <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{config.name || config.provider}</span>
+                                <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
+                            </div>
+                            <div className="flex gap-2 shrink-0 items-center justify-end">
                                 <button
                                     type="button"
-                                    className="api-group-head"
-                                    aria-expanded={!collapsed}
-                                    onClick={() => setCollapsedGroups(prev => ({ ...prev, [group.key]: !collapsed }))}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        setEditingId(config.id);
+                                    }}
+                                    className="ui-link-btn"
                                 >
-                                    <ChevronRight size={13} className="api-group-caret" data-expanded={!collapsed} />
-                                    <span>{group.label}</span>
-                                    <span className="api-group-count">{group.members.length}</span>
+                                    <FileEdit size={18} />
                                 </button>
-                                {!collapsed && (
-                                    <div className="menu-group">
-                                        {group.members.length === 0 ? (
-                                            <div className="menu-item api-config-row">
-                                                <span className="api-config-row-meta">还没有配置</span>
-                                            </div>
-                                        ) : (
-                                            group.members.map(config => (
-                                                <button
-                                                    key={config.id}
-                                                    type="button"
-                                                    className="menu-item api-config-row"
-                                                    onClick={() => setEditingId(config.id)}
-                                                >
-                                                    <span className="api-config-row-name truncate">{config.name || config.provider}</span>
-                                                    <span className="api-config-row-meta truncate">
-                                                        {group.key === "none"
-                                                            ? (config.defaultModel || "未设置模型")
-                                                            : purposeTextOf(config.id)}
-                                                    </span>
-                                                </button>
-                                            ))
-                                        )}
-                                    </div>
-                                )}
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        setConfirmDeleteId(config.id);
+                                    }}
+                                    className="ui-link-btn"
+                                    data-variant="danger"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
             )}
 
@@ -541,31 +445,6 @@ export function ApiSettings() {
                                             />
                                         </div>
 
-                                        {/* 调用设置：这个 API 认领哪些用途（2026-11-14 用户定稿：从配置页里合并进来） */}
-                                        <span className="menu-label mx-1 mt-4 font-medium">调用设置</span>
-                                        {API_PURPOSES.map(purpose => {
-                                            const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
-                                            const isOwner = ownerId === config.id;
-                                            return (
-                                                <div key={purpose.field} className="ui-toggle-row mt-2">
-                                                    <span className="menu-label font-medium">{purpose.label}</span>
-                                                    <Toggle
-                                                        checked={isOwner}
-                                                        disabled={purpose.field === "main" && isOwner}
-                                                        onChange={(v) => assignPurpose(purpose.field, config.id, v)}
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-
-                                        <button
-                                            type="button"
-                                            className="ui-btn ui-btn-danger mt-4 w-full"
-                                            onClick={() => setConfirmDeleteId(config.id)}
-                                        >
-                                            删除这个配置
-                                        </button>
-
                                     </>
                                 )
                             })()}
@@ -585,8 +464,6 @@ export function ApiSettings() {
                     onConfirm={() => {
                         removeConfig(confirmDeleteId);
                         setConfirmDeleteId(null);
-                        // 从配置详情页里删的，删完顺手关掉详情
-                        setEditingId(prev => (prev === confirmDeleteId ? null : prev));
                     }}
                     onCancel={() => setConfirmDeleteId(null)}
                 />
