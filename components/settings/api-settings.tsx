@@ -278,9 +278,6 @@ export function ApiSettings() {
             {/* 按用途分配：点一行挑这个用途用哪个 API（生图走独立页面，不在这里） */}
             <div className="flex flex-col gap-1">
                 <span className="menu-label mx-1 font-medium">按用途分配</span>
-                <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
-                    点一行挑这个用途用哪个 API。一个 API 可以同时当多个用途；没单独挑的用途都会跟着「日常对话」。
-                </span>
                 <div className="menu-group mt-1">
                     {API_PURPOSES.map(purpose => {
                         const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
@@ -300,8 +297,8 @@ export function ApiSettings() {
                                                 ? (owner.name || owner.provider)
                                                 : "配置已删除，点一下重选"
                                             : purpose.field === "main"
-                                                ? "还没设主用配置"
-                                                : "跟随「日常对话」"}
+                                                ? "还没有主用配置"
+                                                : "跟随日常对话"}
                                     </span>
                                 </span>
                                 <Check size={16} className={ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
@@ -578,15 +575,12 @@ export function ApiSettings() {
                                 <button onClick={() => setPurposePicker(null)} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
                             </div>
                             <div className="modal-body hide-scrollbar flex flex-col gap-3 pb-10" data-ui="modal-body">
-                                <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
-                                    {purpose?.desc}
-                                </span>
                                 <div className="menu-group">
                                     {purposePicker !== "main" && (
                                         <button type="button" className="menu-item" onClick={() => pick(null)}>
                                             <span className="menu-label-group">
                                                 <span className="menu-label">不单独指定</span>
-                                                <span className="menu-desc">跟「日常对话」用同一个配置</span>
+                                                <span className="menu-desc">跟日常对话</span>
                                             </span>
                                             <Check size={16} className={!ownerId ? "shrink-0 text-[var(--c-accent)]" : "shrink-0 opacity-25"} />
                                         </button>

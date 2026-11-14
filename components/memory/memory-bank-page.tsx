@@ -122,13 +122,12 @@ type MemoryEditorState = {
     content: string;
 };
 
-/** 收放式行内滑杆（与聊天 App「朋友圈互动设置」同一实现）：
- *  收起态只显示一条细轨，点击才展开可拖动滑杆，避免翻页滚动时误触。
- *  2026-11-14 记忆设置统一风格：去掉行首圆形图标，改成「标签+说明 / 数值」一行、滑杆独占一行，
- *  标签不再被挤成一字一列。 */
+/** 记忆设置里的滑杆行：跟聊天 App「朋友圈互动设置」同一形态 ——
+ *  标签在左、滑杆居中、数值在右，一行搞定，不写解释小字。
+ *  2026-11-14 用户定稿：说明删掉（必要的并进标签），标签不要再被滑杆挤成竖排。 */
 function MemorySettingsSliderItem({
     label,
-    desc,
+    unit,
     value,
     min,
     max,
@@ -136,60 +135,29 @@ function MemorySettingsSliderItem({
     onChange,
 }: {
     label: string;
-    desc: string;
+    unit?: string;
     value: number;
     min: number;
     max: number;
     step: number;
     onChange: (value: number) => void;
 }) {
-    const [active, setActive] = useState(false);
-    const pct = Math.max(0, Math.min(100, Math.round(((value - min) / Math.max(1, max - min)) * 100)));
-    if (!active) {
-        return (
-            <div className="menu-item memory-slider-item">
-                <div className="menu-label-group">
-                    <span className="menu-label">{label}</span>
-                    <span className="menu-desc">{desc}</span>
-                </div>
-                <span className="profile-slider-current">{value}</span>
-                <button
-                    type="button"
-                    className="profile-slider-mini"
-                    aria-label={`${label}：${value}`}
-                    onClick={() => setActive(true)}
-                >
-                    <span className="profile-slider-mini-fill" style={{ width: `${pct}%` }} />
-                </button>
-            </div>
-        );
-    }
     return (
-        <div className="menu-item memory-slider-item is-active">
-            <div className="menu-label-group">
-                <span className="menu-label">{label}</span>
-                <span className="menu-desc">{desc}</span>
+        <div className="menu-item memory-slider-item">
+            <div className="ui-slider-row w-full">
+                <span className="ui-slider-label memory-slider-label">{label}</span>
+                <input
+                    className="ui-slider memory-slider-range"
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={value}
+                    onChange={event => onChange(Number(event.target.value))}
+                    aria-label={label}
+                />
+                <span className="ui-slider-value memory-slider-value">{unit ? `${value}${unit}` : value}</span>
             </div>
-            <span className="profile-slider-current">{value}</span>
-            <input
-                className="ui-slider profile-settings-slider memory-slider-range"
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                autoFocus
-                onChange={event => onChange(Number(event.target.value))}
-                onBlur={() => setActive(false)}
-                onPointerUp={event => {
-                    // 松手把当前值写到底层，保证拖到极值也生效
-                    const el = event.currentTarget;
-                    const next = Number(el.value);
-                    if (next !== value) onChange(next);
-                    if (document.activeElement !== el) setActive(false);
-                }}
-                aria-label={label}
-            />
         </div>
     );
 }
@@ -1285,7 +1253,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     <div className={config.autoSummarizeEnabled ?? true ? "" : "opacity-50"}>
                         <MemorySettingsSliderItem
                             label="总结间隔"
-                            desc="每 N 条事件自动将新事件整理为长期记忆"
+                            unit="条"
                             value={config.summarizationEventInterval ?? 80}
                             min={10}
                             max={200}
@@ -1296,7 +1264,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     <div className="menu-item">
                         <div className="menu-label-group">
                             <span className="menu-label">长期记忆自动总结</span>
-                            <span className="menu-desc">按上面「总结间隔」的条数自动触发</span>
+                            <span className="menu-desc">到条数自动触发</span>
                         </div>
                         <div className="menu-right">
                             <Toggle checked={config.autoSummarizeEnabled ?? true} onChange={(v) => {
@@ -1309,7 +1277,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     <div className="menu-item">
                         <div className="menu-label-group">
                             <span className="menu-label">向量召回</span>
-                            <span className="menu-desc">长期记忆超出预算时，通过 embedding 按相关性检索</span>
+                            <span className="menu-desc">超出预算时按相关性检索</span>
                         </div>
                         <div className="menu-right">
                             <Toggle checked={config.vectorRecallEnabled ?? true} onChange={(v) => {
@@ -1321,15 +1289,13 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     </div>
                 </div>
 
-                {/* App 注入管理（2026-11-02 定稿：默认关，开了才给） */}
-                <p className="menu-group-desc mx-2 mt-4">App 注入管理</p>
-                <p className="menu-group-desc mx-2" style={{ opacity: 0.7 }}>开启后，对应 App 的 AI 将获得该角色的：长期记忆 + 群像剧情归档 + 剧本绑定世界书。默认全部关闭。</p>
+                {/* App 注入管理（2026-11-02 定稿：默认关，开了才给；11-14 去掉整段解释，必要信息并进标题） */}
+                <p className="menu-group-desc mx-2 mt-4">App 注入 · 长期记忆 + 群像剧档 + 世界书</p>
                 <div className="menu-group">
                     {APP_INJECTION_APPS.map(app => (
                         <div className="menu-item" key={app.id}>
                             <div className="menu-label-group">
                                 <span className="menu-label">{app.name}</span>
-                                <span className="menu-desc">{app.desc}</span>
                             </div>
                             <div className="menu-right">
                                 <Toggle
@@ -1577,12 +1543,11 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     </div>
                 ) : null}
 
-                {/* Token budget——行内收起细轨，点击展开滑杆，防翻页误触 */}
+                {/* Token budget——一行三段：标签 / 滑杆 / 数值（2026-11-14 定稿） */}
                 <p className="menu-group-desc mx-2">控制截断量</p>
                 <div className="menu-group">
                     <MemorySettingsSliderItem
-                        label="短期记忆+最近上下文"
-                        desc="聊天历史、朋友圈、群聊与跨应用近期事件截断量"
+                        label="短期上下文"
                         value={config.shortTermTokenBudget}
                         min={MEMORY_TOKEN_BUDGET_MIN.shortTermTokenBudget}
                         max={MEMORY_TOKEN_BUDGET_MAX}
@@ -1591,7 +1556,6 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     />
                     <MemorySettingsSliderItem
                         label="长期记忆"
-                        desc="总结记忆注入量"
                         value={config.longTermTokenBudget}
                         min={MEMORY_TOKEN_BUDGET_MIN.longTermTokenBudget}
                         max={MEMORY_TOKEN_BUDGET_MAX}

@@ -6307,39 +6307,36 @@
 }
 
 
-/* memory settings sliders (2026-11-14)：改成两行栅格，标签独占第一行、滑杆独占第二行，
-   不再被滑杆挤成一字一列；收起态（细轨）与展开态（真滑杆）布局一致，点开不跳位。 */
+/* memory settings sliders (2026-11-14)：跟聊天 App「朋友圈互动设置」同一形态 ——
+   标签 / 滑杆 / 数值 一行三段，不写解释小字；标签 nowrap 避免被挤成竖排。 */
 .memory-settings-menu .memory-slider-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px 12px;
   cursor: default;
 }
 
-.memory-settings-menu .memory-slider-item .menu-label-group {
-  grid-column: 1;
+.memory-settings-menu .memory-slider-item .ui-slider-row {
   min-width: 0;
 }
 
-.memory-settings-menu .memory-slider-item .menu-label {
-  white-space: normal;
-  word-break: break-word;
+.memory-settings-menu .memory-slider-item .memory-slider-label {
+  font-size: calc(14px*var(--app-text-scale,1));
+  color: var(--c-text-title);
+  white-space: nowrap;
 }
 
-.memory-settings-menu .memory-slider-item .profile-slider-current {
-  grid-column: 2;
-  text-align: right;
+.memory-settings-menu .memory-slider-item .memory-slider-range {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 56px;
+  margin-inline: 0;
+}
+
+.memory-settings-menu .memory-slider-item .memory-slider-value {
+  width: auto;
+  min-width: 3.2em;
+  font-size: calc(13px*var(--app-text-scale,1));
+  color: var(--c-text-muted);
   font-variant-numeric: tabular-nums;
-}
-
-.memory-settings-menu .memory-slider-item .profile-slider-mini,
-.memory-settings-menu .memory-slider-item input[type="range"],
-.memory-settings-menu .memory-slider-range {
-  grid-column: 1 / -1;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
+  white-space: nowrap;
 }
 
 /* profile settings sliders (migrated) */
