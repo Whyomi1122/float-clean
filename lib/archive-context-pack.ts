@@ -174,18 +174,25 @@ export async function listEnsembleAnchors(): Promise<EnsembleAnchorHit[]> {
     if (typeof window === "undefined") return [];
     try {
         const { loadMemoryEntriesByType } = await import("./memory-storage");
+        const { getStoryScopeForCharacter, getStoryScriptTitle } = await import("./story-scope");
         const characters = loadCharacters();
         const byScript = new Map<string, EnsembleAnchorHit>();
         for (const character of characters) {
             const entries = await loadMemoryEntriesByType(character.id, "archive").catch(() => []);
+            const scopeScriptId = getStoryScopeForCharacter(character.id);
             for (const entry of entries) {
-                if (entry.sourceApp !== "ensemble") continue;
+                // 2026-11-14 修：以前只认 entry.sourceApp === "ensemble"，
+                // 但「当前锚点」真正写在**角色私聊归档**里（sourceApp 是 chat / 空），
+                // 结果设置页一直说「没找到带当前锚点的归档」（反80 / 困兽 / 错过 实机反馈）。
+                // 现在所有归档都看，剧本归属优先用 metadata，其次按「角色 → 剧本」映射。
                 const content = String(entry.content || "");
                 const anchor = extractAnchorBlock(content);
                 if (!anchor) continue;
                 const updatedAt = String(entry.updatedAt || entry.createdAt || "");
-                const scriptIdRaw = typeof entry.metadata?.ensembleScriptId === "string" ? entry.metadata.ensembleScriptId.trim() : "";
-                const scriptTitleRaw = typeof entry.metadata?.ensembleScriptTitle === "string" ? entry.metadata.ensembleScriptTitle.trim() : "";
+                const metaScriptId = typeof entry.metadata?.ensembleScriptId === "string" ? entry.metadata.ensembleScriptId.trim() : "";
+                const metaScriptTitle = typeof entry.metadata?.ensembleScriptTitle === "string" ? entry.metadata.ensembleScriptTitle.trim() : "";
+                const scriptIdRaw = metaScriptId || scopeScriptId || "";
+                const scriptTitleRaw = metaScriptTitle || (scriptIdRaw ? getStoryScriptTitle(scriptIdRaw) : "");
                 const key = scriptIdRaw || `__character__${character.id}`;
                 const hit: EnsembleAnchorHit = {
                     scriptId: scriptIdRaw || null,
