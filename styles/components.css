@@ -6502,16 +6502,17 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  border: 1.6px solid var(--c-accent);
-  opacity: 0.55;
+  /* 本项目 tokens 里没有 --c-accent，之前写了它 → 整条 border 失效，方框直接看不见 */
+  border: 1.6px solid #5B8FB9;
+  opacity: 0.7;
   background: transparent;
   color: #fff;
   transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
 }
 
 .api-model-check[data-checked="true"] {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
+  background: #5B8FB9;
+  border-color: #5B8FB9;
   opacity: 1;
 }
 
@@ -6532,7 +6533,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--c-accent);
+  color: #5B8FB9;
   font-size: calc(11px*var(--app-text-scale,1));
   cursor: pointer;
 }
