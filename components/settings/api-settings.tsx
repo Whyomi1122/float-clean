@@ -42,6 +42,8 @@ export function ApiSettings() {
     // Testing and Fetching states
     const [isFetching, setIsFetching] = useState<Record<string, boolean>>({});
     const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
+    /** 模型多选列表的搜索关键字（列表太长时才出现搜索框） */
+    const [modelFilter, setModelFilter] = useState<Record<string, string>>({});
     const [isTesting, setIsTesting] = useState<Record<string, boolean>>({});
     const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
 
@@ -94,6 +96,33 @@ export function ApiSettings() {
 
     const updateConfig = (id: string, updates: Partial<ApiConfig>) => {
         persist(configs.map(c => c.id === id ? { ...c, ...updates } : c));
+    };
+
+    /**
+     * 多选模型（2026-11-14 用户要求）：一个 API 下可以同时存多个模型。
+     * 勾上就存进 config.models；取消勾选时如果它正是默认模型，自动把下一个顶上。
+     * 调用链路仍然只认 defaultModel，这里是「备选池」。
+     */
+    const toggleModel = (config: ApiConfig, model: string) => {
+        const list = config.models ?? [];
+        const selected = list.includes(model);
+        const nextList = selected ? list.filter(item => item !== model) : [...list, model];
+        const updates: Partial<ApiConfig> = { models: nextList };
+        if (config.defaultModel === model) {
+            updates.defaultModel = selected ? (nextList[0] ?? "") : model;
+        } else if (!config.defaultModel && !selected) {
+            updates.defaultModel = model;
+        }
+        updateConfig(config.id, updates);
+    };
+
+    /** 设为默认模型：同时确保它被勾进 models 备选池 */
+    const setDefaultModel = (config: ApiConfig, model: string) => {
+        const list = config.models ?? [];
+        updateConfig(config.id, {
+            defaultModel: model,
+            models: list.includes(model) ? list : [...list, model],
+        });
     };
 
     const removeConfig = (id: string) => {
@@ -152,6 +181,10 @@ export function ApiSettings() {
                 throw new Error("返回数据格式不符合预期");
             }
             setFetchedModels(prev => ({ ...prev, [config.id]: modelNames }));
+            // 拉回来的列表里如果还没有当前默认模型，顺手把它并进备选池，勾选列表才不会漏掉它在用的那个
+            if (config.defaultModel && !(config.models ?? []).includes(config.defaultModel)) {
+                updateConfig(config.id, { models: [...(config.models ?? []), config.defaultModel] });
+            }
             setTestResult(prev => ({ ...prev, [config.id]: { success: true, message: `成功获取 ${modelNames.length} 个模型` } }));
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
@@ -251,7 +284,10 @@ export function ApiSettings() {
                         >
                             <div className="min-w-0 flex flex-col gap-1">
                                 <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{config.name || config.provider}</span>
-                                <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
+                                <span className="menu-desc truncate">
+                                    {config.defaultModel || config.provider || "未设置模型"}
+                                    {(config.models?.length ?? 0) > 1 ? ` +${(config.models?.length ?? 0) - 1}` : ""}
+                                </span>
                             </div>
                             <div className="flex gap-2 shrink-0 items-center justify-end">
                                 <button
@@ -385,6 +421,65 @@ export function ApiSettings() {
                                                 )}
                                             </div>
                                         </div>
+
+                                        {/* 多选模型（2026-11-14）：一个 API 下可以同时存几个模型，勾住的就是备选池 */}
+                                        {fetchedModels[config.id] && fetchedModels[config.id].length > 0 && (() => {
+                                            const allModels = fetchedModels[config.id];
+                                            const keyword = (modelFilter[config.id] ?? "").trim().toLowerCase();
+                                            const shownModels = keyword
+                                                ? allModels.filter(item => item.toLowerCase().includes(keyword))
+                                                : allModels;
+                                            return (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="menu-desc ml-1">这个 API 下要用的模型（可多选）</span>
+                                                    {allModels.length > 12 && (
+                                                        <input
+                                                            type="text"
+                                                            value={modelFilter[config.id] ?? ""}
+                                                            onChange={(e) => setModelFilter(prev => ({ ...prev, [config.id]: e.target.value }))}
+                                                            placeholder="搜模型名..."
+                                                            className="ui-input"
+                                                        />
+                                                    )}
+                                                    <div className="menu-group">
+                                                        {shownModels.length === 0 && (
+                                                            <div className="menu-item api-model-row">
+                                                                <span className="api-model-name">没有匹配的模型</span>
+                                                            </div>
+                                                        )}
+                                                        {shownModels.map(model => {
+                                                            const selected = (config.models ?? []).includes(model);
+                                                            const isDefault = config.defaultModel === model;
+                                                            return (
+                                                                <div key={model} className="menu-item api-model-row">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="api-model-check"
+                                                                        data-checked={selected}
+                                                                        aria-label={selected ? `取消勾选 ${model}` : `勾选 ${model}`}
+                                                                        onClick={() => toggleModel(config, model)}
+                                                                    >
+                                                                        {selected && <Check size={11} strokeWidth={3} />}
+                                                                    </button>
+                                                                    <span className="api-model-name truncate">{model}</span>
+                                                                    {isDefault ? (
+                                                                        <span className="ui-badge" data-variant="action">默认</span>
+                                                                    ) : (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="api-model-default"
+                                                                            onClick={() => setDefaultModel(config, model)}
+                                                                        >
+                                                                            设为默认
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         <div className="flex gap-3 mt-1">
                                             <button

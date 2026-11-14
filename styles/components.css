@@ -6471,3 +6471,53 @@
 .prefs-block-label + .prefs-row {
   border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
 }
+
+/* API 配置页「多选模型」（2026-11-14）：一行一个模型，左边方框勾选，右边默认标记 */
+.api-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+.api-model-check {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--c-text-muted) 55%, transparent);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.api-model-check[data-checked="true"] {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.api-model-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: calc(12px*var(--app-text-scale,1));
+  color: var(--c-text-title);
+}
+
+.api-model-default {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text-muted);
+  font-size: calc(10.8px*var(--app-text-scale,1));
+  cursor: pointer;
+}
+
+.api-model-default:active {
+  opacity: 0.6;
+}

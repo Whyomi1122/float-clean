@@ -151,6 +151,11 @@ export type ApiConfig = {
     apiKey: string;
     baseUrl?: string;
     defaultModel: string;
+    /**
+     * 这个 API 下勾选过的模型（可多选，2026-11-14 用户要求）。
+     * 调用时仍只用 defaultModel，其余是备选：换默认时不用重新拉列表。
+     */
+    models?: string[];
     enableNativeTools?: boolean;
     enableImageRecognition: boolean;
     enableImageGeneration: boolean;
