@@ -93,7 +93,9 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
     }, []);
 
     const timelines = useMemo<TimelineOption[]>(() => {
-        const options: TimelineOption[] = [{ scope: null, label: "默认时间线", anchor: null }];
+        // 2026-11-14：默认线不再排第一（看着像主选项），排到最后，名字改成「通用（现实）时间线」
+        const defaultOption: TimelineOption = { scope: null, label: "通用（现实）时间线", anchor: null };
+        const options: TimelineOption[] = [];
         const seen = new Set<string>();
         anchors.forEach(hit => {
             if (!hit.scriptId || seen.has(hit.scriptId)) return;
@@ -112,11 +114,12 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
             seen.add(entry.scope);
             options.push({ scope: entry.scope, label: getStoryScriptTitle(entry.scope), anchor: null });
         });
+        options.push(defaultOption);
         return options;
     }, [anchors, scripts, tick]);
 
     const activeOption = useMemo(
-        () => timelines.find(option => option.scope === selectedScope) || timelines[0],
+        () => timelines.find(option => option.scope === selectedScope) || timelines.find(option => option.scope === null) || timelines[0],
         [timelines, selectedScope]
     );
     const currentScope = activeOption?.scope ?? null;
@@ -195,7 +198,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                     })}
                 </div>
                 <p className="mx-2 m-0 text-[12px] leading-relaxed text-black/40">
-                    同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「默认时间线」。
+                    同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「通用（现实）时间线」。
                 </p>
                 {timelines.length <= 1 && (
                     <p className="mx-2 m-0 text-[12px] leading-relaxed text-amber-600/80">
@@ -222,48 +225,47 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 </p>
             </div>
 
-            <div className="flex flex-col gap-3">
-                <h3 className="mx-2 text-[13px] font-bold text-black/50">对齐群像当前锚点</h3>
-                <div className="ui-config-card" style={{ gap: 10 }}>
-                    {anchorLoading ? (
-                        <span className="text-[13px] text-black/45">读取群像归档…</span>
-                    ) : currentScope === null ? (
-                        <span className="text-[13px] leading-relaxed text-black/45">
-                            默认时间线没有对应的群像锚点。上面选一个剧本，就能读到那个剧本最新的「当前锚点」并一键对齐。
-                        </span>
-                    ) : activeOption?.anchor ? (
-                        <>
-                            <div className="flex items-center gap-1.5 text-[13px] font-semibold text-black">
-                                <Sparkles size={14} strokeWidth={1.8} className="text-black/45" />
-                                <span>{activeOption.anchor.scriptTitle} · {activeOption.anchor.characterName} 的最新群像归档</span>
-                            </div>
-                            <div className="max-h-[92px] overflow-auto whitespace-pre-wrap rounded-[12px] bg-black/[0.03] p-2 text-[12px] leading-relaxed text-black/55">
-                                {activeOption.anchor.anchor}
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] text-black/45">
-                                    {anchorTime ? `解析到：${formatDateTime(anchorTime)}` : "这段锚点里没找到日期，改用下面的手动校准"}
-                                </span>
-                                <button
-                                    type="button"
-                                    disabled={!anchorTime}
-                                    onClick={() => anchorTime && applyTime(anchorTime)}
-                                    className="ui-btn ui-btn-primary shrink-0 rounded-[20px] disabled:opacity-40"
-                                >
-                                    对齐到这个时间
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <span className="text-[13px] leading-relaxed text-black/45">
-                            这个剧本暂时没找到带「当前锚点」的群像归档，用下面的手动校准。
-                        </span>
-                    )}
+            {/* 锚点卡片只对剧本时间线有意义：通用（现实）线没有群像锚点，整块隐藏（2026-11-14） */}
+            {currentScope !== null && (
+                <div className="flex flex-col gap-3">
+                    <h3 className="mx-2 text-[13px] font-bold text-black/50">对齐群像当前锚点</h3>
+                    <div className="ui-config-card" style={{ gap: 10 }}>
+                        {anchorLoading ? (
+                            <span className="text-[13px] text-black/45">读取群像归档…</span>
+                        ) : activeOption?.anchor ? (
+                            <>
+                                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-black">
+                                    <Sparkles size={14} strokeWidth={1.8} className="text-black/45" />
+                                    <span>{activeOption.anchor.scriptTitle} · {activeOption.anchor.characterName} 的最新群像归档</span>
+                                </div>
+                                <div className="max-h-[92px] overflow-auto whitespace-pre-wrap rounded-[12px] bg-black/[0.03] p-2 text-[12px] leading-relaxed text-black/55">
+                                    {activeOption.anchor.anchor}
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[12px] text-black/45">
+                                        {anchorTime ? `解析到：${formatDateTime(anchorTime)}` : "这段锚点里没找到日期，改用下面的手动校准"}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={!anchorTime}
+                                        onClick={() => anchorTime && applyTime(anchorTime)}
+                                        className="ui-btn ui-btn-primary shrink-0 rounded-[20px] disabled:opacity-40"
+                                    >
+                                        对齐到这个时间
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <span className="text-[13px] leading-relaxed text-black/45">
+                                这个剧本暂时没找到带「当前锚点」的群像归档，用下面的手动校准。
+                            </span>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className="flex flex-col gap-3">
-                <h3 className="mx-2 text-[13px] font-bold text-black/50">手动校准（{activeOption?.label || "默认时间线"}）</h3>
+                <h3 className="mx-2 text-[13px] font-bold text-black/50">手动校准（{activeOption?.label || "通用（现实）时间线"}）</h3>
                 <div className="ui-config-card" style={{ gap: 10 }}>
                     <span className="text-[12px] leading-relaxed text-black/45">
                         告诉 App「这条时间线里现在是几点」，之后都从这里继续走。
