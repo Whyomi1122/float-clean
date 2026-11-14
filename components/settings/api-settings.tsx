@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check } from "lucide-react";
+import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import type { ApiConfig } from "@/lib/settings-types";
 import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
@@ -46,6 +46,8 @@ export function ApiSettings() {
     const [modelFilter, setModelFilter] = useState<Record<string, string>>({});
     const [isTesting, setIsTesting] = useState<Record<string, boolean>>({});
     const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
+    /** 编辑配置弹窗里「高级设置」这一段是否展开（默认收起，2026-11-14） */
+    const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -322,6 +324,7 @@ export function ApiSettings() {
                                 if (!config) return null;
                                 return (
                                     <>
+                                        <p className="api-form-section">连接</p>
                                         <div className="flex flex-col gap-1">
                                             <label className="menu-desc ml-1">配置名称 (Name)</label>
                                             <Input
@@ -386,6 +389,25 @@ export function ApiSettings() {
                                             />
                                         </div>
 
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => testConnection(config)}
+                                                disabled={isTesting[config.id]}
+                                                className="ui-btn ui-btn ui-btn-success flex-1"
+                                            >
+                                                <Rss size={16} className={isTesting[config.id] ? "animate-spin" : ""} />
+                                                {isTesting[config.id] ? "测试中..." : "测试连接"}
+                                            </button>
+                                        </div>
+
+                                        {testResult[config.id] && testResult[config.id].message && (
+                                            <Alert variant={testResult[config.id].success ? "success" : "danger"}>
+                                                <AlertCircle size={16} className="mt-[2px] shrink-0" />
+                                                <span className="break-all leading-[1.5]">{testResult[config.id].message}</span>
+                                            </Alert>
+                                        )}
+
+                                        <p className="api-form-section">模型</p>
                                         {/* 选择模型（可多选，2026-11-14 用户定稿）：
                                             一个 API 下可以同时选好几个模型，选中的在下面一个个列出来。
                                             调用的那个 = 列表第一个（内部仍存 defaultModel）。 */}
@@ -406,21 +428,21 @@ export function ApiSettings() {
                                                 </button>
                                             </div>
 
-                                            {/* 已选：一个模型一行，点 × 移除 */}
+                                            {/* 已选：药丸式小标签，横排自动换行 */}
                                             {(selectedModelsOf(config).length > 0) ? (
-                                                <div className="menu-group">
+                                                <div className="api-model-chips">
                                                     {selectedModelsOf(config).map(model => (
-                                                        <div key={model} className="menu-item api-model-row">
-                                                            <span className="api-model-name truncate">{model}</span>
+                                                        <span key={model} className="api-model-chip" title={model}>
+                                                            <span>{model}</span>
                                                             <button
                                                                 type="button"
-                                                                className="api-model-remove"
+                                                                className="api-model-chip-x"
                                                                 aria-label={`移除 ${model}`}
                                                                 onClick={() => toggleModel(config, model)}
                                                             >
-                                                                <X size={13} />
+                                                                <X size={10} strokeWidth={3} />
                                                             </button>
-                                                        </div>
+                                                        </span>
                                                     ))}
                                                 </div>
                                             ) : (
@@ -436,6 +458,10 @@ export function ApiSettings() {
                                                     : allModels;
                                                 return (
                                                     <div className="flex flex-col gap-1 mt-2">
+                                                        <div className="api-model-subhead">
+                                                            <span>可选模型</span>
+                                                            <span>{keyword ? `${shownModels.length} / ${allModels.length}` : `${allModels.length} 个`}</span>
+                                                        </div>
                                                         {allModels.length > 12 && (
                                                             <input
                                                                 type="text"
@@ -487,24 +513,20 @@ export function ApiSettings() {
                                             )}
                                         </div>
 
-                                        <div className="flex gap-3 mt-1">
-                                            <button
-                                                onClick={() => testConnection(config)}
-                                                disabled={isTesting[config.id]}
-                                                className="ui-btn ui-btn ui-btn-success flex-1"
-                                            >
-                                                <Rss size={16} className={isTesting[config.id] ? "animate-spin" : ""} />
-                                                {isTesting[config.id] ? "测试中..." : "测试连接"}
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            className="api-form-more"
+                                            onClick={() => setAdvancedOpen(prev => ({ ...prev, [config.id]: !prev[config.id] }))}
+                                        >
+                                            <span>高级设置</span>
+                                            <ChevronDown
+                                                size={14}
+                                                className={`transition-transform ${advancedOpen[config.id] ? "rotate-180" : ""}`}
+                                            />
+                                        </button>
 
-                                        {testResult[config.id] && testResult[config.id].message && (
-                                            <Alert variant={testResult[config.id].success ? "success" : "danger"}>
-                                                <AlertCircle size={16} className="mt-[2px] shrink-0" />
-                                                <span className="break-all leading-[1.5]">{testResult[config.id].message}</span>
-                                            </Alert>
-                                        )}
-
+                                        {advancedOpen[config.id] && (
+                                        <>
                                         <div
                                             className="ui-toggle-row mt-2 overflow-visible"
                                             style={{ display: "block", position: "relative", height: "auto", flexShrink: 0, padding: "14px 76px 14px 16px" }}
@@ -536,6 +558,9 @@ export function ApiSettings() {
                                                 onChange={(v) => updateConfig(config.id, { preventEmptyGenerateRambling: v })}
                                             />
                                         </div>
+
+                                        </>
+                                        )}
 
                                     </>
                                 )

@@ -6567,3 +6567,92 @@
 .api-model-remove:active {
   opacity: 0.8;
 }
+
+/* 编辑配置弹窗分段标题（连接 / 模型，2026-11-14）：把一长条表单切成看得懂的三段 */
+.api-form-section {
+  margin: 4px 0 -4px 2px;
+  font-size: calc(11px*var(--app-text-scale,1));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--c-icon);
+}
+
+/* 已选模型：药丸小标签横排，点击标签里的 × 移除 */
+.api-model-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.api-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 4px 5px 4px 9px;
+  border-radius: 999px;
+  background: rgba(91, 143, 185, 0.14);
+  color: var(--c-text-title);
+  font-size: calc(11.8px*var(--app-text-scale,1));
+  line-height: 1.25;
+}
+
+.api-model-chip > span {
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-model-chip-x {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(91, 143, 185, 0.28);
+  color: var(--c-text-title);
+  cursor: pointer;
+}
+
+.api-model-chip-x:active {
+  opacity: 0.6;
+}
+
+/* 可选模型的小标题行（左边标题、右边数量） */
+.api-model-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 2px;
+  font-size: calc(11px*var(--app-text-scale,1));
+  color: var(--c-icon);
+}
+
+/* 「高级设置」折叠按钮 */
+.api-form-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 2px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--c-icon-active);
+  font-family: inherit;
+  font-size: calc(12px*var(--app-text-scale,1));
+  cursor: pointer;
+}
+
+.api-form-more:active {
+  background: rgba(0, 0, 0, 0.04);
+}
