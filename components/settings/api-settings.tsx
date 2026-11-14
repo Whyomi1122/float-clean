@@ -390,7 +390,21 @@ export function ApiSettings() {
                                             一个 API 下可以同时选好几个模型，选中的在下面一个个列出来。
                                             调用的那个 = 列表第一个（内部仍存 defaultModel）。 */}
                                         <div className="flex flex-col gap-1">
-                                            <label className="menu-desc ml-1">选择模型（可多选）</label>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <label className="menu-desc ml-1">
+                                                    选择模型（可多选）
+                                                    {selectedModelsOf(config).length > 0 && ` · 已选 ${selectedModelsOf(config).length}`}
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fetchModels(config)}
+                                                    disabled={isFetching[config.id]}
+                                                    className="api-model-refresh"
+                                                >
+                                                    <RefreshCw size={13} className={isFetching[config.id] ? "animate-spin" : ""} />
+                                                    {isFetching[config.id] ? "拉取中" : "刷新列表"}
+                                                </button>
+                                            </div>
 
                                             {/* 已选：一个模型一行，点 × 移除 */}
                                             {(selectedModelsOf(config).length > 0) ? (
@@ -410,7 +424,7 @@ export function ApiSettings() {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <span className="menu-desc ml-1">还没选模型，点下面「选择模型」</span>
+                                                <span className="menu-desc ml-1">还没选模型，点下面「刷新列表」再勾</span>
                                             )}
 
                                             {/* 待选：勾多少都行，勾中立刻出现在上面的已选列表 */}
@@ -431,7 +445,7 @@ export function ApiSettings() {
                                                                 className="ui-input"
                                                             />
                                                         )}
-                                                        <div className="menu-group">
+                                                        <div className="menu-group api-model-scroll">
                                                             {shownModels.length === 0 && (
                                                                 <div className="menu-item api-model-row">
                                                                     <span className="api-model-name">没有匹配的模型</span>
@@ -474,15 +488,6 @@ export function ApiSettings() {
                                         </div>
 
                                         <div className="flex gap-3 mt-1">
-                                            <button
-                                                onClick={() => fetchModels(config)}
-                                                disabled={isFetching[config.id]}
-                                                className="ui-btn ui-btn ui-btn-soft-action flex-1"
-                                            >
-                                                <RefreshCw size={16} className={isFetching[config.id] ? "animate-spin" : ""} />
-                                                {isFetching[config.id] ? "拉取中..." : "拉取模型列表"}
-                                            </button>
-
                                             <button
                                                 onClick={() => testConnection(config)}
                                                 disabled={isTesting[config.id]}
