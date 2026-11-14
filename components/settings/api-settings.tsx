@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useContext } from "react";
 import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
-import type { ApiConfig } from "@/lib/settings-types";
-import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
+import type { ApiConfig, BindingConfig } from "@/lib/settings-types";
+import { loadApiConfigs, loadBindingConfig, removeApiConfigReferences, saveApiConfigs, saveBindingConfig } from "@/lib/settings-storage";
 import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
@@ -25,6 +25,35 @@ const DEFAULT_CONFIGS: ApiConfig[] = [
     }
 ];
 
+/**
+ * 「按模型用途」分组：一个 API 配置可以同时担任多个用途。
+ * main = 全局日常对话（聊天/群像主模型），其余是原有的 auxiliary 槽位。
+ * 生图有独立页面，这里不列。
+ */
+type ApiPurposeField =
+    | "main"
+    | "memorySummaryApiConfigId"
+    | "embeddingApiConfigId"
+    | "mascotApiConfigId"
+    | "qaApiConfigId"
+    | "reasoningTranslateApiConfigId"
+    | "koreanSpeechApiConfigId";
+
+const API_PURPOSES: { field: ApiPurposeField; label: string; desc: string }[] = [
+    { field: "main", label: "日常对话", desc: "聊天、群像主模型；其他用途没单独指派时都用它" },
+    { field: "qaApiConfigId", label: "心声 / 查手机 / 观测志", desc: "工坊答疑、诊断与内容开发" },
+    { field: "mascotApiConfigId", label: "小卷助手", desc: "桌面助手对话与工具调用" },
+    { field: "memorySummaryApiConfigId", label: "记忆总结", desc: "聊天记忆压缩" },
+    { field: "embeddingApiConfigId", label: "向量召回", desc: "长期记忆语义检索，需要向量模型" },
+    { field: "reasoningTranslateApiConfigId", label: "思维链翻译", desc: "把思考过程翻成中文" },
+    { field: "koreanSpeechApiConfigId", label: "韩语转写", desc: "中文台词转写成韩语再朗读" },
+];
+
+function purposeOwnerId(binding: BindingConfig, field: ApiPurposeField): string | undefined {
+    if (field === "main") return binding.globalDefaults.apiConfigId;
+    return binding[field];
+}
+
 function getNativeToolProtocolLabel(config: ApiConfig): string {
     if (config.provider === "Anthropic" && !config.baseUrl) return "Anthropic";
     if (config.provider === "Google") return "Gemini";
@@ -38,6 +67,7 @@ export function ApiSettings() {
     const [isNewConfig, setIsNewConfig] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [binding, setBinding] = useState<BindingConfig | null>(null);
 
     // Testing and Fetching states
     const [isFetching, setIsFetching] = useState<Record<string, boolean>>({});
@@ -55,7 +85,33 @@ export function ApiSettings() {
             saveApiConfigs(DEFAULT_CONFIGS);
         }
         setIsLoaded(true);
+        setBinding(loadBindingConfig());
     }, []);
+
+    // 用途指派：main = 全局日常对话，其余写 auxiliary 槽位
+    const assignPurpose = useCallback(
+        (field: ApiPurposeField, configId: string, on: boolean) => {
+            const current = binding ?? loadBindingConfig();
+            let next: BindingConfig;
+            if (field === "main") {
+                next = { ...current, globalDefaults: { ...current.globalDefaults, apiConfigId: configId } };
+            } else if (on) {
+                next = { ...current, [field]: configId };
+            } else {
+                const copy: BindingConfig = { ...current };
+                delete copy[field];
+                next = copy;
+            }
+            setBinding(next);
+            saveBindingConfig(next);
+        },
+        [binding]
+    );
+
+    const purposesOf = useCallback(
+        (configId: string) => (binding ? API_PURPOSES.filter(item => purposeOwnerId(binding, item.field) === configId) : []),
+        [binding]
+    );
 
     const persist = useCallback((newConfigs: ApiConfig[]) => {
         setConfigs(newConfigs);
@@ -252,6 +308,17 @@ export function ApiSettings() {
                             <div className="min-w-0 flex flex-col gap-1">
                                 <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{config.name || config.provider}</span>
                                 <span className="menu-desc truncate">{config.defaultModel || config.provider || "未设置模型"}</span>
+                                <div className="flex min-w-0 flex-wrap gap-1 overflow-hidden" style={{ maxHeight: 20 }}>
+                                    {purposesOf(config.id).slice(0, 2).map(item => (
+                                        <span key={item.field} className="ui-badge" data-variant="action" style={{ whiteSpace: "nowrap" }}>{item.label}</span>
+                                    ))}
+                                    {purposesOf(config.id).length > 2 && (
+                                        <span className="ui-badge" data-variant="muted">+{purposesOf(config.id).length - 2}</span>
+                                    )}
+                                    {purposesOf(config.id).length === 0 && (
+                                        <span className="menu-desc">未指派用途</span>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex gap-2 shrink-0 items-center justify-end">
                                 <button
@@ -444,6 +511,36 @@ export function ApiSettings() {
                                                 onChange={(v) => updateConfig(config.id, { preventEmptyGenerateRambling: v })}
                                             />
                                         </div>
+
+                                        <div className="mt-4 flex flex-col gap-1">
+                                            <span className="menu-label font-medium mx-1">用在哪里</span>
+                                            <span className="menu-desc mx-1 whitespace-normal leading-[1.45]">
+                                                同一个 API 可以同时担任多个用途；没勾的用途自动走「日常对话」那个配置。生图有独立页面，不在这里。
+                                            </span>
+                                        </div>
+
+                                        {API_PURPOSES.map(purpose => {
+                                            const ownerId = binding ? purposeOwnerId(binding, purpose.field) : undefined;
+                                            const isOwner = ownerId === config.id;
+                                            const ownerName = ownerId && ownerId !== config.id
+                                                ? (configs.find(item => item.id === ownerId)?.name || configs.find(item => item.id === ownerId)?.provider || "其他配置")
+                                                : "";
+                                            return (
+                                                <div key={purpose.field} className="ui-toggle-row mt-2">
+                                                    <span className="flex min-w-0 flex-col">
+                                                        <span className="menu-label font-medium">{purpose.label}</span>
+                                                        <span className="menu-desc whitespace-normal leading-[1.45]">
+                                                            {isOwner ? purpose.desc : ownerName ? `当前：${ownerName}` : purpose.desc}
+                                                        </span>
+                                                    </span>
+                                                    <Toggle
+                                                        checked={isOwner}
+                                                        disabled={purpose.field === "main" && isOwner}
+                                                        onChange={(v) => assignPurpose(purpose.field, config.id, v)}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
 
                                     </>
                                 )
