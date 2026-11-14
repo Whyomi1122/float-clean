@@ -7,6 +7,7 @@ import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
 import { parseAIResponse, type ParsedMessagePart } from "@/lib/rich-message-parser";
 import { isKnownStickerLabel } from "@/lib/sticker-data";
+import { hasHangul, shouldConvertToKorean } from "@/lib/speech-language";
 import { translateReasoningText } from "@/lib/reasoning-translate";
 import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
@@ -133,6 +134,23 @@ function voiceMessageText(msg: ChatMessage): string {
 function voiceTextHasTranslation(text: string): boolean {
     const parts = text.split(/\s*[|｜]\s*/);
     return parts.length === 2 && !!parts[0].trim() && !!parts[1].trim();
+}
+
+/**
+ * 语音条是不是还在「中 → 韩」预转写路上（气泡里还是中文、还没回写韩语）。
+ * 用来先显示「转写中…」占位，免得文字先中文再跳成韩语（2026-11-14）。
+ * 超过 60 秒还没转成功就放弃占位、直接显示原文，避免转写失败时一直卡在占位上。
+ */
+function isVoicePendingKorean(msg: ChatMessage, characterId?: string): boolean {
+    if (!characterId) return false;
+    if (msg.mediaData?.originalLabel) return false;
+    const label = String(msg.mediaData?.label || "");
+    if (!label.trim()) return false;
+    if (hasHangul(label)) return false;
+    if (!/[\u4E00-\u9FFF]/.test(label)) return false;
+    const created = Date.parse(String(msg.createdAt || ""));
+    if (!Number.isFinite(created) || Date.now() - created > 60_000) return false;
+    return shouldConvertToKorean(characterId);
 }
 
 /**
@@ -6230,6 +6248,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     <div className="voice-msg-text-bubble">
                                         <BilingualTextBlock
                                             text={(() => {
+                                                // 还没转写好在先给占位，别让气泡文字先中文再跳成韩语
+                                                if (msg.role !== "user" && isVoicePendingKorean(renderMsg, character?.id)) return "转写中…";
                                                 const raw = msg.displayProjected ? (renderMsg.mediaData?.label || "") : renderDisplayText(renderMsg.mediaData?.label || "", msg.role === "user" ? 1 : 2, false);
                                                 // 双语格式统一：模型有时把中文译文拆成紧随其后的独立「（…）」/「|…」消息。
                                                 // 若下一条件成立，把它并入转写气泡组成标准双语块，并隐藏原消息；

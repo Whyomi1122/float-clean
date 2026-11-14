@@ -697,9 +697,16 @@ export function parseAIResponse(rawText: string, previousState: StateValue[]): P
         .replace(/\n\n+(?=\[表情包[：:][^\]]+\])/g, "\n")
         .replace(/(\[表情包[：:][^\]]+\])\n\n+/g, "$1\n");
 
+    // 2.65. 补全漏掉的语音条闭合方括号（2026-11-14）：模型偶尔写成「[语音条:原文」就换行、
+    //       或者「原文\n|译文」少了收尾的 ]，整条不成形会直接漏显示。这里先并条再补括号。
+    const voiceClosed = stickerMerged
+        .replace(/\[语音条[：:]([^\]\n]+)\n[ \t]*[|｜][ \t]*([^\n\]]+)\]?/g,
+            (_match, label: string, translation: string) => `[语音条:${label.trim()}|${translation.trim()}]`)
+        .replace(/^([ \t]*\[语音条[：:][^\]\n]*)$/gm, "$1]");
+
     // 2.7. 语音条译文并条：模型偶尔把「原文|译文」的右半边另起一条（甚至隔一个空行），
     //      会让译文单独长成一个「|…」气泡。这里并回语音条；语音条已带译文时丢掉多余译文。
-    const voiceMerged = stickerMerged
+    const voiceMerged = voiceClosed
         .replace(/(\[语音条[：:][^\]]*?[|｜][^\]]*\])\s*\n+\s*[|｜][^\n]+/g, "$1")
         .replace(/(\[语音条[：:]([^\]]+)\])\s*\n+\s*[|｜]\s*([^\n]+)/g,
             (match, tag: string, label: string, translation: string) => {
