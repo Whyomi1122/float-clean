@@ -1015,8 +1015,55 @@ export function removeApiConfigReferences(apiConfigId: string): void {
     if (changed) saveBindingConfig(next);
 }
 
-export function getCharacterBinding(config: BindingConfig, characterId: string): CharacterBinding {
-    const existing = config.characterBindings.find(b => b.characterId === characterId);
+/**
+ * 同源配置合并：把指向 fromId 的绑定全改指向 toId，再删掉 fromId 那张卡。
+ * 2026-11-15：硅基流动这种「同一个 key、只是模型不同」被建成好几张卡，
+ * 合并时不能只删卡（绑定会悬空），必须先把引用搬过去。
+ */
+export function remapApiConfigReferences(fromId: string, toId: string): void {
+    if (!fromId || !toId || fromId === toId) return;
+    const config = loadBindingConfig();
+    let changed = false;
+    const remapSlot = (slot: BindingSlot): BindingSlot => {
+        if (slot.apiConfigId !== fromId) return slot;
+        changed = true;
+        return { ...slot, apiConfigId: toId };
+    };
+    const remapSlotMap = <T extends Partial<Record<string, BindingSlot>>>(slots: T): T => {
+        const next: Partial<Record<string, BindingSlot>> = {};
+        for (const [key, slot] of Object.entries(slots)) {
+            next[key] = slot ? remapSlot(slot) : slot;
+        }
+        return next as T;
+    };
+    const next: BindingConfig = {
+        ...config,
+        globalDefaults: remapSlot(config.globalDefaults),
+        characterBindings: config.characterBindings.map(binding => ({
+            ...binding,
+            defaults: remapSlot(binding.defaults),
+            appOverrides: remapSlotMap(binding.appOverrides),
+        })),
+    };
+    if (config.appDefaults) next.appDefaults = remapSlotMap(config.appDefaults);
+    const auxFields = [
+        "memorySummaryApiConfigId",
+        "embeddingApiConfigId",
+        "mascotApiConfigId",
+        "qaApiConfigId",
+        "reasoningTranslateApiConfigId",
+        "koreanSpeechApiConfigId",
+    ] as const;
+    for (const field of auxFields) {
+        if (next[field] === fromId) {
+            next[field] = toId;
+            changed = true;
+        }
+    }
+    if (changed) saveBindingConfig(next);
+}
+
+export function getCharacterBinding(config: BindingConfig, characterId: string): CharacterBinding {    const existing = config.characterBindings.find(b => b.characterId === characterId);
     if (existing) return existing;
     return { characterId, defaults: {}, appOverrides: {} };
 }
@@ -1046,6 +1093,7 @@ export function resolveBinding(
     // Start with global defaults
     const resolved: BindingSlot = {
         apiConfigId: global.apiConfigId,
+        apiModel: global.apiModel,
         voiceConfigId: global.voiceConfigId,
         presetId: global.presetId,
         userIdentityId: global.userIdentityId,
@@ -1054,7 +1102,12 @@ export function resolveBinding(
     };
 
     const applySlot = (slot: BindingSlot): void => {
-        if (slot.apiConfigId) resolved.apiConfigId = slot.apiConfigId;
+        if (slot.apiConfigId) {
+            // 换配置时，上一层指定的模型不再适用
+            if (resolved.apiConfigId !== slot.apiConfigId) resolved.apiModel = undefined;
+            resolved.apiConfigId = slot.apiConfigId;
+        }
+        if (slot.apiModel) resolved.apiModel = slot.apiModel;
         if (slot.voiceConfigId) resolved.voiceConfigId = slot.voiceConfigId;
         if (slot.presetId) resolved.presetId = slot.presetId;
         if (slot.userIdentityId) resolved.userIdentityId = slot.userIdentityId;
@@ -1091,15 +1144,37 @@ export function resolveAuxiliaryApiConfig(
     const config = loadBindingConfig();
     const apiConfigs = loadApiConfigs();
     const auxId = config[field];
+    // 同一张卡可以给不同用途指定不同模型（2026-11-15 二级选择）
+    const modelField = `${field.replace(/ApiConfigId$/, "")}Model` as keyof BindingConfig;
+    const withModel = (found: ApiConfig | null): ApiConfig | null => {
+        if (!found) return null;
+        const model = config[modelField];
+        if (typeof model !== "string" || !model.trim()) return found;
+        return { ...found, defaultModel: model.trim() };
+    };
     if (auxId) {
         const found = apiConfigs.find(c => c.id === auxId);
-        if (found) return found;
+        if (found) return withModel(found);
     }
     // Fallback: global default API config
     if (config.globalDefaults.apiConfigId) {
-        return apiConfigs.find(c => c.id === config.globalDefaults.apiConfigId) ?? null;
+        return withModel(apiConfigs.find(c => c.id === config.globalDefaults.apiConfigId) ?? null);
     }
     return null;
+}
+
+/**
+ * 槽位（全局 / 角色 / 应用）指定了模型时，用它覆盖配置自带的默认模型。
+ * 没有指定就原样返回，行为与以前完全一致。
+ */
+export function applySlotModel<T extends { defaultModel?: string } | null | undefined>(
+    apiConfig: T,
+    slot?: { apiModel?: string } | null
+): T {
+    if (!apiConfig) return apiConfig;
+    const model = slot?.apiModel?.trim();
+    if (!model) return apiConfig;
+    return { ...apiConfig, defaultModel: model } as T;
 }
 
 // --- Migration from legacy CharacterSettingsOverride ---

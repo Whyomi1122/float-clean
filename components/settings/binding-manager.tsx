@@ -7,6 +7,7 @@ import {
     Box,
     Brain,
     Check,
+    ChevronLeft,
     ChevronRight,
     Code2,
     Languages,
@@ -124,6 +125,8 @@ export function BindingManager() {
     const [activeGlobalSheetField, setActiveGlobalSheetField] = useState<BindingField | null>(null);
     const [activeSlotSheetField, setActiveSlotSheetField] = useState<BindingField | null>(null);
     const [activeAuxSheetField, setActiveAuxSheetField] = useState<AuxBindingField | null>(null);
+    // 二级选择：选完 API 配置后再选模型（值为刚选中的配置 id）
+    const [pickerModelConfigId, setPickerModelConfigId] = useState<string | null>(null);
     const [showCharacterPicker, setShowCharacterPicker] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
 
@@ -301,6 +304,23 @@ export function BindingManager() {
         persist(setCharacterBinding(config, newBinding));
     };
 
+    /** 一次写多个槽位字段（选配置同时清/换模型），避免两次 persist 互相覆盖 */
+    const applySlotPatch = (patch: Partial<BindingSlot>) => {
+        if (level === "global") {
+            persist({ ...config, globalDefaults: { ...config.globalDefaults, ...patch } });
+            return;
+        }
+        const binding = getCharacterBinding(config, selectedCharId);
+        if (level === "character") {
+            persist(setCharacterBinding(config, { ...binding, defaults: { ...binding.defaults, ...patch } }));
+            return;
+        }
+        if (level === "app" && selectedAppId) {
+            const nextSlot = { ...(binding.appOverrides[selectedAppId] || {}), ...patch };
+            persist(setCharacterBinding(config, { ...binding, appOverrides: { ...binding.appOverrides, [selectedAppId]: nextSlot } }));
+        }
+    };
+
     const resetAppBinding = () => {
         if (!selectedAppId) return;
         const binding = getCharacterBinding(config, selectedCharId);
@@ -321,6 +341,7 @@ export function BindingManager() {
     const mergeSlotInto = (target: BindingSlot, slot?: BindingSlot): BindingSlot => {
         if (!slot) return target;
         if (slot.apiConfigId) target.apiConfigId = slot.apiConfigId;
+        if (slot.apiModel) target.apiModel = slot.apiModel;
         if (slot.voiceConfigId) target.voiceConfigId = slot.voiceConfigId;
         if (slot.presetId) target.presetId = slot.presetId;
         if (slot.userIdentityId) target.userIdentityId = slot.userIdentityId;
@@ -498,7 +519,10 @@ export function BindingManager() {
         }
         const value = slot[field];
         const selected = options.find(item => item.id === value);
-        return selected ? { text: selected.name, isEmpty: false } : { text: "", isEmpty: true };
+        if (!selected) return { text: "", isEmpty: true };
+        // 主模型卡：选了配置还能再指定模型
+        const model = field === "apiConfigId" ? slot.apiModel : undefined;
+        return { text: model ? `${selected.name} · ${model}` : selected.name, isEmpty: false };
     };
 
     const getInheritedFieldLabel = (field: BindingField, fallback: string): string => {
@@ -534,8 +558,34 @@ export function BindingManager() {
         );
     };
 
+    const auxModelKey = (field: AuxBindingField) => `${field.replace(/ApiConfigId$/, "")}Model` as keyof BindingConfig;
+
+    const getConfigModelOptions = (configId: string | null | undefined): string[] => {
+        const found = apiConfigs.find(c => c.id === configId);
+        if (!found) return [];
+        const list = [found.defaultModel, ...(found.models || [])]
+            .map(m => (m || "").trim())
+            .filter(Boolean);
+        return Array.from(new Set(list));
+    };
+
+    /** 配置与模型必须一起写，否则第二次 persist 会拿旧 config 覆盖第一次 */
+    const applyAuxConfig = (field: AuxBindingField, configId: string | undefined, model?: string) => {
+        persist({
+            ...config,
+            [field]: configId || undefined,
+            [auxModelKey(field)]: configId ? (model || undefined) : undefined,
+        });
+    };
+
+    const updateAuxModel = (field: AuxBindingField, model: string | undefined) => {
+        applyAuxConfig(field, config[field], model);
+    };
+
     const updateAuxField = (field: AuxBindingField, value: string | undefined) => {
-        persist({ ...config, [field]: value || undefined });
+        // 换配置时丢掉旧模型，避免拿一个不属于该配置的模型名去请求
+        const keepModel = value && value === config[field] ? (config[auxModelKey(field)] as string | undefined) : undefined;
+        applyAuxConfig(field, value, keepModel);
     };
 
     const renderAuxSelect = (
@@ -545,7 +595,10 @@ export function BindingManager() {
         const currentValue = config[field];
         const options = apiConfigs.map(c => ({ id: c.id, name: c.name || c.provider }));
         const selectedOption = options.find(o => o.id === currentValue);
-        const displayValue = selectedOption ? selectedOption.name : "继承全局";
+        const selectedModel = config[auxModelKey(field)] as string | undefined;
+        const displayValue = selectedOption
+            ? (selectedModel ? `${selectedOption.name} · ${selectedModel}` : selectedOption.name)
+            : "继承全局";
 
         return (
             <div key={field} className="binding-aux-select">
@@ -754,10 +807,18 @@ export function BindingManager() {
         const selectedIds = isMulti ? ((currentSlot[field as MultiBindingField] || []).filter(id => options.some(item => item.id === id))) : [];
         const selectedValue = !isMulti ? currentSlot[field as SingleBindingField] : undefined;
         const emptyLabel = level === "global" ? "未设置" : getInheritedFieldLabel(field, inheritLabel);
+        const canPickModel = field === "apiConfigId";
+        const modelStepConfigId = canPickModel ? pickerModelConfigId : null;
+
+        const closePicker = () => {
+            setActiveSlotSheetField(null);
+            setPickerModelConfigId(null);
+        };
 
         const clearSelection = () => {
-            handleUpdate(field, undefined);
-            if (!isMulti) setActiveSlotSheetField(null);
+            if (canPickModel) applySlotPatch({ apiConfigId: undefined, apiModel: undefined });
+            else handleUpdate(field, undefined);
+            if (!isMulti) closePicker();
         };
 
         const toggleMulti = (id: string) => {
@@ -769,7 +830,7 @@ export function BindingManager() {
         };
 
         return (
-            <div className="modal-overlay" data-ui="modal" onClick={() => setActiveSlotSheetField(null)}>
+            <div className="modal-overlay" data-ui="modal" onClick={closePicker}>
                 <div
                     className="binding-picker-dialog"
                     role="dialog"
@@ -778,20 +839,40 @@ export function BindingManager() {
                     onClick={(event) => event.stopPropagation()}
                 >
                     <div className="binding-picker-header">
-                        <button
-                            type="button"
-                            className="binding-picker-icon-btn"
-                            onClick={() => setActiveSlotSheetField(null)}
-                            aria-label="关闭"
-                        >
-                            <X size={17} />
-                        </button>
-                        <h3 className="binding-picker-title">选择{label}</h3>
-                        {isMulti ? (
+                        {modelStepConfigId ? (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={() => setPickerModelConfigId(null)}
+                                aria-label="返回"
+                            >
+                                <ChevronLeft size={17} />
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={closePicker}
+                                aria-label="关闭"
+                            >
+                                <X size={17} />
+                            </button>
+                        )}
+                        <h3 className="binding-picker-title">{modelStepConfigId ? "选择模型" : `选择${label}`}</h3>
+                        {modelStepConfigId ? (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={closePicker}
+                                aria-label="关闭"
+                            >
+                                <X size={17} />
+                            </button>
+                        ) : isMulti ? (
                             <button
                                 type="button"
                                 className="binding-picker-done-btn"
-                                onClick={() => setActiveSlotSheetField(null)}
+                                onClick={closePicker}
                             >
                                 完成
                             </button>
@@ -801,49 +882,109 @@ export function BindingManager() {
                     </div>
                     <div className="binding-picker-body">
                         <div className="binding-sheet-list">
-                            {/* 全局层的 API/预设/身份不提供"未设置"（角色/应用层保留"跟随上级"） */}
-                            {!(level === "global" && isRequiredGlobalField(field)) && (
-                                <button
-                                    type="button"
-                                    className="binding-sheet-option"
-                                    data-selected={isMulti ? selectedIds.length === 0 : !selectedValue}
-                                    onClick={clearSelection}
-                                >
-                                    <span className="binding-sheet-check">{(isMulti ? selectedIds.length === 0 : !selectedValue) && <Check size={15} />}</span>
-                                    <span className="binding-sheet-option-text">{emptyLabel}</span>
-                                </button>
-                            )}
-                            {options.length === 0 ? (
-                                <div className="binding-sheet-empty">暂无可选{label}，请先在对应设置页面创建。</div>
+                            {modelStepConfigId ? (
+                                renderModelOptions(modelStepConfigId, currentSlot.apiModel, model => {
+                                    applySlotPatch({ apiModel: model });
+                                    closePicker();
+                                })
                             ) : (
-                                options.map(option => {
-                                    const selected = isMulti ? selectedIds.includes(option.id) : selectedValue === option.id;
-                                    return (
+                                <>
+                                    {/* 全局层的 API/预设/身份不提供"未设置"（角色/应用层保留"跟随上级"） */}
+                                    {!(level === "global" && isRequiredGlobalField(field)) && (
                                         <button
-                                            key={option.id}
                                             type="button"
                                             className="binding-sheet-option"
-                                            data-selected={selected}
-                                            aria-pressed={selected}
-                                            onClick={() => {
-                                                if (isMulti) {
-                                                    toggleMulti(option.id);
-                                                } else {
-                                                    handleUpdate(field, option.id);
-                                                    setActiveSlotSheetField(null);
-                                                }
-                                            }}
+                                            data-selected={isMulti ? selectedIds.length === 0 : !selectedValue}
+                                            onClick={clearSelection}
                                         >
-                                            <span className="binding-sheet-check">{selected && <Check size={15} />}</span>
-                                            <span className="binding-sheet-option-text">{option.name}</span>
+                                            <span className="binding-sheet-check">{(isMulti ? selectedIds.length === 0 : !selectedValue) && <Check size={15} />}</span>
+                                            <span className="binding-sheet-option-text">{emptyLabel}</span>
                                         </button>
-                                    );
-                                })
+                                    )}
+                                    {options.length === 0 ? (
+                                        <div className="binding-sheet-empty">暂无可选{label}，请先在对应设置页面创建。</div>
+                                    ) : (
+                                        options.map(option => {
+                                            const selected = isMulti ? selectedIds.includes(option.id) : selectedValue === option.id;
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    className="binding-sheet-option"
+                                                    data-selected={selected}
+                                                    aria-pressed={selected}
+                                                    onClick={() => {
+                                                        if (isMulti) {
+                                                            toggleMulti(option.id);
+                                                            return;
+                                                        }
+                                                        if (canPickModel) {
+                                                            // 换卡就丢掉旧模型；同一张卡则保留已选模型
+                                                            applySlotPatch({
+                                                                apiConfigId: option.id,
+                                                                apiModel: selected ? currentSlot.apiModel : undefined,
+                                                            });
+                                                            if (getConfigModelOptions(option.id).length > 0) {
+                                                                setPickerModelConfigId(option.id);
+                                                                return;
+                                                            }
+                                                        } else {
+                                                            handleUpdate(field, option.id);
+                                                        }
+                                                        closePicker();
+                                                    }}
+                                                >
+                                                    <span className="binding-sheet-check">{selected && <Check size={15} />}</span>
+                                                    <span className="binding-sheet-option-text">{option.name}</span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
+        );
+    };
+
+    const renderModelOptions = (configId: string, selectedModel: string | undefined, onPick: (model: string | undefined) => void) => {
+        const models = getConfigModelOptions(configId);
+        const configName = apiConfigs.find(c => c.id === configId)?.name || "所选配置";
+        return (
+            <>
+                <div className="binding-sheet-hint">{configName} · 不指定就跟着配置的默认模型走</div>
+                <button
+                    type="button"
+                    className="binding-sheet-option"
+                    data-selected={!selectedModel}
+                    onClick={() => onPick(undefined)}
+                >
+                    <span className="binding-sheet-check">{!selectedModel && <Check size={15} />}</span>
+                    <span className="binding-sheet-option-text">默认模型</span>
+                </button>
+                {models.length === 0 ? (
+                    <div className="binding-sheet-empty">这张配置还没有模型列表，先到 API 设置里刷新模型。</div>
+                ) : (
+                    models.map(model => {
+                        const selected = selectedModel === model;
+                        return (
+                            <button
+                                key={model}
+                                type="button"
+                                className="binding-sheet-option"
+                                data-selected={selected}
+                                aria-pressed={selected}
+                                onClick={() => onPick(model)}
+                            >
+                                <span className="binding-sheet-check">{selected && <Check size={15} />}</span>
+                                <span className="binding-sheet-option-text">{model}</span>
+                            </button>
+                        );
+                    })
+                )}
+            </>
         );
     };
 
@@ -853,9 +994,16 @@ export function BindingManager() {
         const label = getAuxFieldLabel(field);
         const options = apiConfigs.map(c => ({ id: c.id, name: c.name || c.provider }));
         const selectedValue = config[field];
+        const modelStepConfigId = pickerModelConfigId;
+        const selectedModel = config[auxModelKey(field)] as string | undefined;
+
+        const closePicker = () => {
+            setActiveAuxSheetField(null);
+            setPickerModelConfigId(null);
+        };
 
         return (
-            <div className="modal-overlay" data-ui="modal" onClick={() => setActiveAuxSheetField(null)}>
+            <div className="modal-overlay" data-ui="modal" onClick={closePicker}>
                 <div
                     className="binding-picker-dialog"
                     role="dialog"
@@ -864,53 +1012,89 @@ export function BindingManager() {
                     onClick={(event) => event.stopPropagation()}
                 >
                     <div className="binding-picker-header">
-                        <button
-                            type="button"
-                            className="binding-picker-icon-btn"
-                            onClick={() => setActiveAuxSheetField(null)}
-                            aria-label="关闭"
-                        >
-                            <X size={17} />
-                        </button>
-                        <h3 className="binding-picker-title">选择{label}</h3>
-                        <span className="binding-picker-header-spacer" />
+                        {modelStepConfigId ? (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={() => setPickerModelConfigId(null)}
+                                aria-label="返回"
+                            >
+                                <ChevronLeft size={17} />
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={closePicker}
+                                aria-label="关闭"
+                            >
+                                <X size={17} />
+                            </button>
+                        )}
+                        <h3 className="binding-picker-title">{modelStepConfigId ? "选择模型" : `选择${label}`}</h3>
+                        {modelStepConfigId ? (
+                            <button
+                                type="button"
+                                className="binding-picker-icon-btn"
+                                onClick={closePicker}
+                                aria-label="关闭"
+                            >
+                                <X size={17} />
+                            </button>
+                        ) : (
+                            <span className="binding-picker-header-spacer" />
+                        )}
                     </div>
                     <div className="binding-picker-body">
                         <div className="binding-sheet-list">
-                            <button
-                                type="button"
-                                className="binding-sheet-option"
-                                data-selected={!selectedValue}
-                                onClick={() => {
-                                    updateAuxField(field, undefined);
-                                    setActiveAuxSheetField(null);
-                                }}
-                            >
-                                <span className="binding-sheet-check">{!selectedValue && <Check size={15} />}</span>
-                                <span className="binding-sheet-option-text">继承全局</span>
-                            </button>
-                            {options.length === 0 ? (
-                                <div className="binding-sheet-empty">暂无可选 API 配置，请先在 API 设置页面创建。</div>
-                            ) : (
-                                options.map(option => {
-                                    const selected = selectedValue === option.id;
-                                    return (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            className="binding-sheet-option"
-                                            data-selected={selected}
-                                            aria-pressed={selected}
-                                            onClick={() => {
-                                                updateAuxField(field, option.id);
-                                                setActiveAuxSheetField(null);
-                                            }}
-                                        >
-                                            <span className="binding-sheet-check">{selected && <Check size={15} />}</span>
-                                            <span className="binding-sheet-option-text">{option.name}</span>
-                                        </button>
-                                    );
+                            {modelStepConfigId ? (
+                                renderModelOptions(modelStepConfigId, selectedModel, model => {
+                                    updateAuxModel(field, model);
+                                    closePicker();
                                 })
+                            ) : (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="binding-sheet-option"
+                                        data-selected={!selectedValue}
+                                        onClick={() => {
+                                            updateAuxField(field, undefined);
+                                            closePicker();
+                                        }}
+                                    >
+                                        <span className="binding-sheet-check">{!selectedValue && <Check size={15} />}</span>
+                                        <span className="binding-sheet-option-text">继承全局</span>
+                                    </button>
+                                    {options.length === 0 ? (
+                                        <div className="binding-sheet-empty">暂无可选 API 配置，请先在 API 设置页面创建。</div>
+                                    ) : (
+                                        options.map(option => {
+                                            const selected = selectedValue === option.id;
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    className="binding-sheet-option"
+                                                    data-selected={selected}
+                                                    aria-pressed={selected}
+                                                    onClick={() => {
+                                                        updateAuxField(field, option.id);
+                                                        // 这张配置有模型列表 → 直接进第二步选模型
+                                                        if (getConfigModelOptions(option.id).length > 0) {
+                                                            setPickerModelConfigId(option.id);
+                                                        } else {
+                                                            closePicker();
+                                                        }
+                                                    }}
+                                                >
+                                                    <span className="binding-sheet-check">{selected && <Check size={15} />}</span>
+                                                    <span className="binding-sheet-option-text">{option.name}</span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import type { ApiConfig } from "@/lib/settings-types";
-import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
+import { loadApiConfigs, removeApiConfigReferences, remapApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
 import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
@@ -36,6 +36,8 @@ export function ApiSettings() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isNewConfig, setIsNewConfig] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    /** 关弹窗时发现「同源」的另一张卡，问一句要不要并成一张（2026-11-15） */
+    const [mergeCandidate, setMergeCandidate] = useState<{ keepId: string; absorbId: string; absorbName: string } | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
     // Testing and Fetching states
@@ -122,6 +124,56 @@ export function ApiSettings() {
         if (list[0] === model) return;
         const nextList = [model, ...list.filter(item => item !== model)];
         updateConfig(config.id, { models: nextList, defaultModel: model });
+    };
+
+    /**
+     * 找「同源」的另一张卡：服务商 + 地址 + 密钥完全一样，只是模型不同（2026-11-15）。
+     * 硅基流动这类服务被建成好几张卡就是这么来的。
+     */
+    const findSameSourceConfig = (config: ApiConfig) => {
+        const key = (config.apiKey || "").trim();
+        if (!key) return null;
+        const baseUrl = (config.baseUrl || "").trim().replace(/\/+$/, "").toLowerCase();
+        const provider = config.provider || "";
+        return configs.find(other =>
+            other.id !== config.id
+            && (other.apiKey || "").trim() === key
+            && (other.baseUrl || "").trim().replace(/\/+$/, "").toLowerCase() === baseUrl
+            && (other.provider || "") === provider
+        ) ?? null;
+    };
+
+    /** 合并：保留当前编辑的这张，另一张的模型并进来、开关取或，绑定引用搬过来再删卡 */
+    const mergeSameSourceConfig = (keepId: string, absorbId: string) => {
+        const keep = configs.find(c => c.id === keepId);
+        const absorb = configs.find(c => c.id === absorbId);
+        if (!keep || !absorb) return;
+        const keepModels = selectedModelsOf(keep);
+        const models = [...keepModels, ...selectedModelsOf(absorb).filter(model => !keepModels.includes(model))];
+        const next = configs
+            .filter(c => c.id !== absorbId)
+            .map(c => c.id === keepId
+                ? {
+                    ...c,
+                    models,
+                    defaultModel: c.defaultModel || models[0] || "",
+                    enableImageRecognition: c.enableImageRecognition || absorb.enableImageRecognition,
+                    enableImageGeneration: c.enableImageGeneration || absorb.enableImageGeneration,
+                }
+                : c);
+        remapApiConfigReferences(absorbId, keepId);
+        persist(next);
+    };
+
+    /** 关掉编辑弹窗：顺手看一眼有没有「同源」的另一张卡，有就问一句要不要合并 */
+    const closeEditor = () => {
+        const editing = configs.find(c => c.id === editingId);
+        const duplicate = editing ? findSameSourceConfig(editing) : null;
+        setIsNewConfig(false);
+        setEditingId(null);
+        if (editing && duplicate) {
+            setMergeCandidate({ keepId: editing.id, absorbId: duplicate.id, absorbName: duplicate.name || duplicate.defaultModel || "另一张配置" });
+        }
     };
 
     const toggleModel = (config: ApiConfig, model: string) => {
@@ -315,7 +367,7 @@ export function ApiSettings() {
                         <div className="modal-header" data-ui="modal-header">
                             <button onClick={() => { if (isNewConfig && editingId) removeConfig(editingId); setIsNewConfig(false); setEditingId(null); }} className="modal-header-btn modal-header-btn-muted"><X size={18} /></button>
                             <span className="modal-header-title">{isNewConfig ? "添加配置" : "编辑配置"}</span>
-                            <button onClick={() => { setIsNewConfig(false); setEditingId(null); }} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
+                            <button onClick={() => closeEditor()} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
                         </div>
 
                         <div className="modal-body api-form-body hide-scrollbar flex flex-col gap-4 pb-10" data-ui="modal-body">
@@ -608,6 +660,21 @@ export function ApiSettings() {
                         setConfirmDeleteId(null);
                     }}
                     onCancel={() => setConfirmDeleteId(null)}
+                />
+            )}
+
+            {mergeCandidate && (
+                <ConfirmDialog
+                    title="发现同源配置"
+                    message={`「${mergeCandidate.absorbName}」的服务商、地址和密钥跟这张一模一样。并成一张吗？两张的模型会合在一起，绑定关系也会跟着搬过来。`}
+                    icon={Layers}
+                    confirmLabel="合并"
+                    cancelLabel="先不了"
+                    onConfirm={() => {
+                        mergeSameSourceConfig(mergeCandidate.keepId, mergeCandidate.absorbId);
+                        setMergeCandidate(null);
+                    }}
+                    onCancel={() => setMergeCandidate(null)}
                 />
             )}
         </div>

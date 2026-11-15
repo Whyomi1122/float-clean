@@ -44,6 +44,7 @@ import { buildCalendarScheduleMarker, getCurrentCalendarScheduleForPrompt } from
 import { getWeekStartIso } from "./calendar-utils";
 import {
     resolveBinding,
+    applySlotModel,
     loadBindingConfig,
     loadApiConfigs,
     loadPresets,
@@ -308,7 +309,7 @@ async function buildGroupChatPromptMessages(
     const apiConfigs = loadApiConfigs();
     const boundConfigId = options?.apiConfigId || activeSlot.apiConfigId;
     if (!boundConfigId) throw new ChatEngineError("No API Configuration bound for group chat.");
-    const config = apiConfigs.find(c => c.id === boundConfigId);
+    const config = applySlotModel(apiConfigs.find(c => c.id === boundConfigId), activeSlot);
     if (!config) throw new ChatEngineError("API Configuration not found for group chat.");
 
     const presets = loadPresets();

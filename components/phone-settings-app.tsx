@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, type CSSProperties, type ReactNode } from "react";
-import { Activity, Check, ChevronRight, Clock, Database, FileText, Fingerprint, Globe, HardDrive, Image, Info, KeyRound, Laptop, Layers, Link2, Loader2, LogOut, MessageSquare, Mic, SlidersHorizontal, UserCircle, Wrench, X, CloudUpload } from "lucide-react";
+import { Activity, Check, ChevronRight, Clock, Database, Eye, FileText, Fingerprint, Globe, HardDrive, Image, Info, KeyRound, Laptop, Layers, Link2, Loader2, LogOut, MessageSquare, Mic, ShieldAlert, SlidersHorizontal, UserCircle, Wrench, X, Zap, CloudUpload, type LucideIcon } from "lucide-react";
 import { ConfirmDialog } from "./ui/modal";
 import { useAccount } from "@/lib/account-context";
 import { isSelfHostedModeEnabled } from "@/lib/self-hosting";
@@ -25,7 +25,6 @@ import { StoryClockSettings } from "./settings/story-clock-settings";
 import { getStoryNow, isStoryClockActive, subscribeStoryClock } from "@/lib/story-clock";
 import { fetchIsAdmin } from "@/lib/moderation-client";
 import { PageShell } from "./ui/page-shell";
-import { CardGrid, FeaturedCard, type CardItem, type FeaturedCardItem } from "./ui/card-grid";
 import { GlassIcon } from "./ui/glass-icon";
 import { Toggle } from "./ui/form";
 import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
@@ -132,16 +131,72 @@ function StoryClockQuickCard({ onOpen }: { onOpen: () => void }) {
     }, []);
 
     return (
-        <div className="app-card card-featured settings-toggle-card" role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={onOpen}>
-            <span className="card-icon card-icon-glass">
-                <GlassIcon name="time-aware" />
+        <SettingsRow
+            icon={Clock}
+            label="剧情时间"
+            desc={label}
+            onClick={onOpen}
+        />
+    );
+}
+
+/**
+ * 设置主页的行式条目（方案 A，2026-11-15）：
+ * 之前小方块 / 横条大卡混着放，现在统一成「白卡 + 行」。
+ */
+function SettingsRow({
+    icon: Icon,
+    label,
+    desc,
+    onClick,
+    right,
+}: {
+    icon: LucideIcon;
+    label: string;
+    desc?: string;
+    onClick?: () => void;
+    right?: ReactNode;
+}) {
+    const body = (
+        <>
+            <span className="settings-a-icon">
+                <Icon size={18} strokeWidth={1.7} />
             </span>
-            <div className="card-featured-body">
-                <div className="card-featured-label">剧情时间</div>
-                <div className="card-featured-desc">{label}</div>
+            <span className="settings-a-copy">
+                <span className="settings-a-label">{label}</span>
+                {desc ? <span className="settings-a-desc">{desc}</span> : null}
+            </span>
+            {right ?? <ChevronRight size={16} className="settings-a-chev" />}
+        </>
+    );
+    if (!onClick) {
+        return <div className="settings-a-row">{body}</div>;
+    }
+    return (
+        <button type="button" className="settings-a-row" onClick={onClick}>
+            {body}
+        </button>
+    );
+}
+
+/** 一组白卡：英文大写小标题 + 若干行 */
+function SettingsSection({
+    title,
+    action,
+    children,
+}: {
+    title: string;
+    action?: ReactNode;
+    children: ReactNode;
+}) {
+    return (
+        <section className="settings-a-section">
+            <div className="settings-a-head">
+                <h3 className="settings-a-title">{title}</h3>
+                {action}
             </div>
-            <ChevronRight size={18} className="settings-account-chevron" />
-        </div>
+            <div className="settings-a-rows">{children}</div>
+        </section>
     );
 }
 
@@ -249,19 +304,6 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
         }
     };
 
-    const makeCardItem = (item: typeof SETTINGS_MENU[number]): CardItem => ({
-        id: item.id,
-        icon: item.icon,
-        label: item.label,
-        desc: item.desc,
-        iconColor: item.iconColor,
-        glassIcon: item.glass,
-        onClick: () => {
-            // 施工中：角色电脑先弹提示，可选择仍要看看
-            setCurrentPage(item.id as SubPage);
-        },
-    });
-
     const handleTimeAwareChange = useCallback((next: boolean) => {
         setTimeAware(next);
         saveChatAppSettings({ ...loadChatAppSettings(), timeAware: next });
@@ -295,47 +337,6 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
     }, [onNotice]);
 
     const imageGenerationItem = SETTINGS_MENU.find(i => i.id === "imageGeneration")!;
-    const imageGenerationFeaturedItem: FeaturedCardItem = {
-        id: imageGenerationItem.id,
-        icon: imageGenerationItem.icon,
-        label: imageGenerationItem.label,
-        desc: imageGenerationItem.desc,
-        iconColor: imageGenerationItem.iconColor,
-        glassIcon: imageGenerationItem.glass,
-        onClick: () => setCurrentPage("imageGeneration"),
-    };
-
-    const cloudItem = SETTINGS_MENU.find(i => i.id === "cloud")!;
-    const cloudFeaturedItem: FeaturedCardItem = {
-        id: cloudItem.id,
-        icon: cloudItem.icon,
-        label: cloudItem.label,
-        desc: cloudItem.desc,
-        iconColor: cloudItem.iconColor,
-        onClick: () => setCurrentPage("cloud"),
-    };
-
-    const agentComputerItem = SETTINGS_MENU.find(i => i.id === "agentComputer")!;
-    const agentComputerFeaturedItem: FeaturedCardItem = {
-        id: agentComputerItem.id,
-        icon: agentComputerItem.icon,
-        label: agentComputerItem.label,
-        desc: agentComputerItem.desc,
-        iconColor: agentComputerItem.iconColor,
-        glassIcon: agentComputerItem.glass,
-        onClick: () => setCurrentPage("agentComputer"),
-    };
-
-    const bindingItem = SETTINGS_MENU.find(i => i.id === "binding")!;
-    const bindingFeaturedItem: FeaturedCardItem = {
-        id: bindingItem.id,
-        icon: bindingItem.icon,
-        label: bindingItem.label,
-        desc: bindingItem.desc,
-        iconColor: bindingItem.iconColor,
-        glassIcon: bindingItem.glass,
-        onClick: () => setCurrentPage("binding"),
-    };
 
     const renderSubPage = () => {
         switch (currentPage) {
@@ -422,6 +423,21 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
         return () => window.removeEventListener("settings-navigate", onNav);
     }, []);
 
+    /** 设置主页的行（方案 A，2026-11-15）：图标/名称/说明都从 SETTINGS_MENU 取 */
+    const renderMenuRow = (id: string) => {
+        const item = SETTINGS_MENU.find(entry => entry.id === id);
+        if (!item) return null;
+        return (
+            <SettingsRow
+                key={item.id}
+                icon={item.icon}
+                label={item.label}
+                desc={item.desc}
+                onClick={() => setCurrentPage(item.id as SubPage)}
+            />
+        );
+    };
+
     return (
         <SettingsContext.Provider value={{ setSubpageTitle, setOverrideBack, setSubpageRightAction }}>
             <PageShell title={title} onBack={handleBack} rightAction={currentPage !== "main" ? subpageRightActions[currentPage] : undefined} bodyRef={pageBodyRef}>
@@ -437,121 +453,81 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                                 <ChevronRight size={18} className="settings-account-chevron" />
                             </button>
                         )}
-                        <CardGrid
-                            label="API Config"
-                            labelClassName="settings-menu-section-title"
-                            items={SETTINGS_MENU.filter(item => ["api", "voice"].includes(item.id)).map(makeCardItem)}
-                        />
-                        <div className="settings-data-rules-section">
-                            <h3 className="settings-menu-section-title">Data & Rules</h3>
-                            <div className="mt-[10px] flex flex-col gap-3">
-                                <CardGrid
-                                    items={SETTINGS_MENU.filter(item => ["presets", "worldbook", "regex", "data"].includes(item.id)).map(makeCardItem)}
-                                />
-                                <FeaturedCard item={bindingFeaturedItem} />
-                            </div>
-                        </div>
-                        <div className="settings-image-generation-section">
-                            <h3 className="settings-menu-section-title">Image Generation</h3>
-                            <div className="mt-[10px]">
-                                <FeaturedCard item={imageGenerationFeaturedItem} />
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="settings-menu-section-title">Connections</h3>
-                            <div className="mt-[10px]">
-                                <FeaturedCard item={cloudFeaturedItem} />
-                            </div>
-                            <div className="mt-[10px]">
-                                <CardGrid
-                                    items={SETTINGS_MENU.filter(item => ["weixin", "toolbox"].includes(item.id)).map(makeCardItem)}
-                                />
-                            </div>
-                            <div className="mt-[10px]">
-                                <FeaturedCard item={agentComputerFeaturedItem} />
-                            </div>
-                        </div>
-                        <div className="settings-realtime-section">
-                            <h3 className="settings-menu-section-title">Runtime</h3>
-                            {/* 2026-11-13：原「真实时间感知」开关并进「剧情时间」页，主页只留一张卡片，避免两个时间入口 */}
-                            <div className="app-card card-featured settings-toggle-card">
-                                <span className="card-icon card-icon-glass">
-                                    <GlassIcon name="keep-alive" />
-                                </span>
-                                <div className="card-featured-body">
-                                    <div className="card-featured-label">后台保活</div>
-                                    <div className="card-featured-desc">切到后台时尽量保持网页运行，主动消息与轮询不中断</div>
-                                </div>
-                                <Toggle checked={keepAlive} onChange={handleKeepAliveChange} className="settings-toggle-control" />
-                            </div>
+                        <SettingsSection title="API Config">
+                            {renderMenuRow("api")}
+                            {renderMenuRow("voice")}
+                        </SettingsSection>
+                        <SettingsSection title="Image Generation">
+                            {renderMenuRow("imageGeneration")}
+                        </SettingsSection>
+                        <SettingsSection title="Data & Rules">
+                            {renderMenuRow("presets")}
+                            {renderMenuRow("worldbook")}
+                            {renderMenuRow("regex")}
+                            {renderMenuRow("data")}
+                            {renderMenuRow("binding")}
+                        </SettingsSection>
+                        <SettingsSection title="Connections">
+                            {renderMenuRow("cloud")}
+                            {renderMenuRow("weixin")}
+                            {renderMenuRow("toolbox")}
+                            {renderMenuRow("agentComputer")}
+                        </SettingsSection>
+                        <SettingsSection title="Runtime">
+                            {/* 2026-11-13：原「真实时间感知」开关并进「剧情时间」页，主页只留一行，避免两个时间入口 */}
+                            <SettingsRow
+                                icon={Activity}
+                                label="后台保活"
+                                desc="切到后台时尽量保持网页运行"
+                                right={<Toggle checked={keepAlive} onChange={handleKeepAliveChange} className="settings-toggle-control" />}
+                            />
                             <StoryClockQuickCard onOpen={() => setCurrentPage("storyClock")} />
-                        </div>
+                        </SettingsSection>
                         {isAdmin ? (
-                            <div className="settings-moderation-section">
-                                <h3 className="settings-menu-section-title">Moderation</h3>
-                                <div className="app-card card-featured settings-toggle-card" role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setCurrentPage("moderation")}>
-                                    <span className="card-icon card-icon-glass">
-                                        <GlassIcon name="moderation" />
-                                    </span>
-                                    <div className="card-featured-body">
-                                        <div className="card-featured-label">管理中心</div>
-                                        <div className="card-featured-desc">举报队列、应用审核与用户封禁</div>
-                                    </div>
-                                    <ChevronRight size={18} className="settings-account-chevron" />
-                                </div>
-                            </div>
+                            <SettingsSection title="Moderation">
+                                <SettingsRow
+                                    icon={ShieldAlert}
+                                    label="管理中心"
+                                    desc="举报队列、应用审核与用户封禁"
+                                    onClick={() => setCurrentPage("moderation")}
+                                />
+                            </SettingsSection>
                         ) : null}
-                        <div className="settings-tools-section">
-                            <div className="settings-tools-header">
-                                <div className="settings-tools-title-wrap">
-                                    <h3 className="settings-menu-section-title">Tools</h3>
-                                    <button
-                                        type="button"
-                                        className="settings-tools-info-btn"
-                                        onClick={() => setFloatingDockSheetOpen(true)}
-                                        aria-label="悬浮球偏好设置"
-                                        title="悬浮球偏好设置"
-                                    >
-                                        <span className="settings-tools-info-circle">
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                                <path d="M15.32 18.27L15.10 19.19Q14.09 19.58 13.49 19.79Q12.89 20 12.10 20Q10.88 20 10.21 19.41Q9.53 18.81 9.53 17.90Q9.53 17.54 9.58 17.17Q9.63 16.80 9.74 16.33L10.58 13.37Q10.69 12.94 10.77 12.56Q10.84 12.18 10.84 11.86Q10.84 11.29 10.61 11.07Q10.37 10.85 9.71 10.85Q9.39 10.85 9.05 10.95Q8.71 11.05 8.46 11.14L8.69 10.23Q9.51 9.89 10.26 9.65Q11.01 9.41 11.69 9.41Q12.89 9.41 13.55 10Q14.20 10.58 14.20 11.52Q14.20 11.71 14.16 12.20Q14.11 12.69 13.99 13.09L13.16 16.05Q13.06 16.40 12.98 16.86Q12.89 17.32 12.89 17.55Q12.89 18.14 13.16 18.35Q13.42 18.57 14.07 18.57Q14.38 18.57 14.76 18.46Q15.15 18.35 15.32 18.27M15.54 5.87Q15.54 6.64 14.95 7.18Q14.37 7.73 13.54 7.73Q12.72 7.73 12.13 7.18Q11.54 6.64 11.54 5.87Q11.54 5.10 12.13 4.55Q12.72 4 13.54 4Q14.37 4 14.95 4.55Q15.54 5.10 15.54 5.87" />
-                                            </svg>
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="menu-group settings-tools-menu">
-                                <div className="menu-item settings-tools-menu-item">
-                                    <span className="card-icon card-icon-glass">
-                                        <GlassIcon name="prompt-viewer" />
+                        <SettingsSection
+                            title="Tools"
+                            action={
+                                <button
+                                    type="button"
+                                    className="settings-tools-info-btn"
+                                    onClick={() => setFloatingDockSheetOpen(true)}
+                                    aria-label="悬浮球偏好设置"
+                                    title="悬浮球偏好设置"
+                                >
+                                    <span className="settings-tools-info-circle">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                            <path d="M15.32 18.27L15.10 19.19Q14.09 19.58 13.49 19.79Q12.89 20 12.10 20Q10.88 20 10.21 19.41Q9.53 18.81 9.53 17.90Q9.53 17.54 9.58 17.17Q9.63 16.80 9.74 16.33L10.58 13.37Q10.69 12.94 10.77 12.56Q10.84 12.18 10.84 11.86Q10.84 11.29 10.61 11.07Q10.37 10.85 9.71 10.85Q9.39 10.85 9.05 10.95Q8.71 11.05 8.46 11.14L8.69 10.23Q9.51 9.89 10.26 9.65Q11.01 9.41 11.69 9.41Q12.89 9.41 13.55 10Q14.20 10.58 14.20 11.52Q14.20 11.71 14.16 12.20Q14.11 12.69 13.99 13.09L13.16 16.05Q13.06 16.40 12.98 16.86Q12.89 17.32 12.89 17.55Q12.89 18.14 13.16 18.35Q13.42 18.57 14.07 18.57Q14.38 18.57 14.76 18.46Q15.15 18.35 15.32 18.27M15.54 5.87Q15.54 6.64 14.95 7.18Q14.37 7.73 13.54 7.73Q12.72 7.73 12.13 7.18Q11.54 6.64 11.54 5.87Q11.54 5.10 12.13 4.55Q12.72 4 13.54 4Q14.37 4 14.95 4.55Q15.54 5.10 15.54 5.87" />
+                                        </svg>
                                     </span>
-                                    <span className="settings-tools-menu-copy">
-                                        <span className="menu-label appearance-menu-item-label">提示词查看器</span>
-                                        <span className="menu-desc settings-tools-menu-desc">开启后显示悬浮按钮，可查看当前提示词</span>
-                                    </span>
-                                    <span className="menu-right settings-tools-menu-toggle">
-                                        <Toggle checked={promptViewerEnabled} onChange={handlePromptViewerChange} className="settings-toggle-control" />
-                                    </span>
-                                </div>
-                                <div className="menu-item settings-tools-menu-item">
-                                    <span className="card-icon card-icon-glass">
-                                        <GlassIcon name="quick-action" />
-                                    </span>
-                                    <span className="settings-tools-menu-copy">
-                                        <span className="menu-label appearance-menu-item-label">快捷操作</span>
-                                        <span className="menu-desc settings-tools-menu-desc">快速切换 API 与世界书</span>
-                                    </span>
-                                    <span className="menu-right settings-tools-menu-toggle">
-                                        <Toggle checked={quickActionEnabled} onChange={handleQuickActionChange} className="settings-toggle-control" />
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <CardGrid
-                            label="User"
-                            labelClassName="settings-menu-section-title"
-                            items={SETTINGS_MENU.filter(item => ["identity", "about"].includes(item.id)).map(makeCardItem)}
-                        />
+                                </button>
+                            }
+                        >
+                            <SettingsRow
+                                icon={Eye}
+                                label="提示词查看器"
+                                desc="开启后显示悬浮按钮，可查看当前提示词"
+                                right={<Toggle checked={promptViewerEnabled} onChange={handlePromptViewerChange} className="settings-toggle-control" />}
+                            />
+                            <SettingsRow
+                                icon={Zap}
+                                label="快捷操作"
+                                desc="快速切换 API 与世界书"
+                                right={<Toggle checked={quickActionEnabled} onChange={handleQuickActionChange} className="settings-toggle-control" />}
+                            />
+                        </SettingsSection>
+                        <SettingsSection title="User">
+                            {renderMenuRow("identity")}
+                            {renderMenuRow("about")}
+                        </SettingsSection>
                         {floatingDockSheetOpen && (
                             <div className="modal-overlay modal-overlay-bottom" data-ui="modal" onClick={() => setFloatingDockSheetOpen(false)}>
                                 <div className="modal-sheet" data-ui="modal-sheet" onClick={event => event.stopPropagation()}>

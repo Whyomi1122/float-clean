@@ -326,6 +326,8 @@ export const CONTENT_APP_LABELS: Record<ContentAppId, string> = {
 // Binding slot — config selections for a given scope
 export type BindingSlot = {
     apiConfigId?: string;
+    /** 这张卡里的哪个模型（2026-11-15 二级选择；空 = 用卡上的默认模型） */
+    apiModel?: string;
     voiceConfigId?: string;
     presetId?: string;
     userIdentityId?: string;
@@ -358,6 +360,13 @@ export type BindingConfig = {
     reasoningTranslateApiConfigId?: string;
     /** Auxiliary API: used to transcribe Chinese lines into Korean for speech playback (global) */
     koreanSpeechApiConfigId?: string;
+    // —— 二级选择：同一张卡里指定用哪个模型（2026-11-15，空 = 卡上的默认模型）——
+    memorySummaryModel?: string;
+    embeddingModel?: string;
+    mascotModel?: string;
+    qaModel?: string;
+    reasoningTranslateModel?: string;
+    koreanSpeechModel?: string;
 };
 
 // --- Chat Toolbox ---

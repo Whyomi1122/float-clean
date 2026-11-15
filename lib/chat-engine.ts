@@ -33,6 +33,7 @@ import type { ApiConfig, PresetConfig, Prompt, PromptOrderEntry, RegexConfig } f
 import type { CustomAppPromptProfile } from "./custom-app-types";
 import {
     resolveBinding,
+    applySlotModel,
     loadBindingConfig,
     loadApiConfigs,
     loadPresets,
@@ -1879,7 +1880,7 @@ export async function buildChatPromptMessages(
     }
 
     const apiConfigs = loadApiConfigs();
-    const config = apiConfigs.find(c => c.id === activeSlot.apiConfigId);
+    const config = applySlotModel(apiConfigs.find(c => c.id === activeSlot.apiConfigId), activeSlot);
     if (!config) throw new ChatEngineError(`API Configuration not found for ${character.name}.`);
 
     const presets = loadPresets();

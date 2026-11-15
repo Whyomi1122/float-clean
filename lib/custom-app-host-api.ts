@@ -56,6 +56,7 @@ import {
   loadWorldBooks,
   resolveAuxiliaryApiConfig,
   resolveBinding,
+  applySlotModel,
   resolveUserIdentity,
   ensureSettingsStorageHydrated,
   saveVoiceConfigs,
@@ -279,17 +280,17 @@ function resolveCustomAppApiConfig(app: InstalledCustomApp, record: Record<strin
   if (characterId) {
     const appSlot = resolveBinding(bindings, characterId, `custom_app:${app.id}`);
     if (appSlot.apiConfigId) {
-      const found = apiConfigs.find(config => config.id === appSlot.apiConfigId);
+      const found = applySlotModel(apiConfigs.find(config => config.id === appSlot.apiConfigId), appSlot);
       if (found) return found;
     }
     const chatSlot = resolveBinding(bindings, characterId, "chat");
     if (chatSlot.apiConfigId) {
-      const found = apiConfigs.find(config => config.id === chatSlot.apiConfigId);
+      const found = applySlotModel(apiConfigs.find(config => config.id === chatSlot.apiConfigId), chatSlot);
       if (found) return found;
     }
   }
   if (bindings.globalDefaults.apiConfigId) {
-    const found = apiConfigs.find(config => config.id === bindings.globalDefaults.apiConfigId);
+    const found = applySlotModel(apiConfigs.find(config => config.id === bindings.globalDefaults.apiConfigId), bindings.globalDefaults);
     if (found) return found;
   }
   return apiConfigs[0] ?? null;
