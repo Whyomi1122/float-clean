@@ -6516,9 +6516,9 @@
   opacity: 1;
 }
 
-/* 待选模型列表：最多显示 10 行，超出内部滚动（2026-11-14） */
+/* 待选模型列表：最多显示 6 行，超出内部滚动（2026-11-15：行数太多把弹窗顶长了） */
 .api-model-scroll {
-  max-height: 330px;
+  max-height: 288px;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -6961,4 +6961,30 @@
   font-size: calc(11.5px*var(--app-text-scale,1));
   line-height: 1.45;
   color: var(--c-danger);
+}
+
+/* 已选区 / 可选区之间的细线（方案 A，2026-11-15） */
+.api-form-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: color-mix(in srgb, var(--c-card-border) 60%, transparent);
+}
+
+/* 无灰底的纯图标按钮（可选模型的展开/收起，2026-11-15 用户要求去掉灰底） */
+.api-pill-plain {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-icon);
+  cursor: pointer;
+  transition: color .15s ease, opacity .15s ease;
+}
+
+.api-pill-plain:active {
+  opacity: .55;
 }

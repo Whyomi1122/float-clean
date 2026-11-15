@@ -398,7 +398,6 @@ export function ApiSettings() {
                                         {/* 已选模型：一行一个，右侧是「测试 / ✓ 可用」和删除 */}
                                         <div className="api-row-head">
                                             <span>已选模型</span>
-                                            <span>{selectedModelsOf(config).length} 个</span>
                                         </div>
 
                                         {(selectedModelsOf(config).length > 0) ? (
@@ -456,6 +455,9 @@ export function ApiSettings() {
                                             <span className="api-row-hint">还没选模型，点下面「刷新列表」拉取后勾选</span>
                                         )}
 
+                                        {/* 已选区 / 可选区之间一条细线（方案 A，2026-11-15） */}
+                                        <div className="api-form-divider" />
+
                                         {/* 可选模型：数量在左边，刷新 + 收起在右边 */}
                                         <div className="api-row-head api-row-head-spaced">
                                             <span>
@@ -477,12 +479,12 @@ export function ApiSettings() {
                                                 <button
                                                     type="button"
                                                     onClick={() => setOptionalOpen(prev => ({ ...prev, [config.id]: prev[config.id] === false }))}
-                                                    className="api-pill-btn api-pill-icon"
+                                                    className="api-pill-plain"
                                                     aria-label={optionalOpen[config.id] === false ? "展开可选模型列表" : "收起可选模型列表"}
                                                 >
                                                     {optionalOpen[config.id] === false
-                                                        ? <ChevronDown size={14} />
-                                                        : <ChevronUp size={14} />}
+                                                        ? <ChevronDown size={16} />
+                                                        : <ChevronUp size={16} />}
                                                 </button>
                                             </div>
                                         </div>
@@ -539,18 +541,6 @@ export function ApiSettings() {
                                                 );
                                             })()}
 
-                                            {/* 还没拉列表时：手动填一个模型名 */}
-                                            {(!fetchedModels[config.id] || fetchedModels[config.id].length === 0) && (
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={config.defaultModel}
-                                                        onChange={(e) => updateConfig(config.id, { defaultModel: e.target.value, models: e.target.value.trim() ? [e.target.value.trim()] : [] })}
-                                                        placeholder="手动填模型名，如 deepseek-ai/DeepSeek-V3"
-                                                        className="ui-input flex-1"
-                                                    />
-                                                </div>
-                                            )}
                                         </>
                                         )}
                                         </div>
