@@ -6723,6 +6723,17 @@
   min-width: 0;
 }
 
+/* 标题 + 说明叠成两行（2026-11-15：横排会把「原生工具调用」挤成两行） */
+.api-form-card .api-toggle-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.api-form-card .api-toggle-stack .menu-label {
+  white-space: nowrap;
+}
+
 .api-form-card .api-toggle-desc {
   margin: 0;
   min-width: 0;
@@ -6832,11 +6843,22 @@
 .api-picked-name {
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
   font-size: calc(13px*var(--app-text-scale,1));
   color: var(--c-text-title);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.api-picked-name[data-primary="true"] {
+  font-weight: 600;
+  cursor: default;
 }
 
 .api-picked-tag {

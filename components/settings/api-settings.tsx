@@ -113,6 +113,17 @@ export function ApiSettings() {
      * 多选模型（2026-11-14 用户要求）：一个 API 下可以同时选多个模型，选中的一个个列出来。
      * 调用时用的就是列表第一个（内部仍写 defaultModel，业务层零改动）。
      */
+    /**
+     * 点已选模型的名字 = 让它成为默认调用（2026-11-15 用户要求，之前默认模型根本改不了）。
+     * 做法：把它挪到 models 第一位，defaultModel 跟着第一位走（调用链只读 defaultModel）。
+     */
+    const setPrimaryModel = (config: ApiConfig, model: string) => {
+        const list = selectedModelsOf(config);
+        if (list[0] === model) return;
+        const nextList = [model, ...list.filter(item => item !== model)];
+        updateConfig(config.id, { models: nextList, defaultModel: model });
+    };
+
     const toggleModel = (config: ApiConfig, model: string) => {
         const list = selectedModelsOf(config);
         const selected = list.includes(model);
@@ -399,7 +410,15 @@ export function ApiSettings() {
                                                         <div key={model} className="api-picked-row">
                                                             <div className="api-picked-head">
                                                                 {index === 0 && <span className="api-picked-dot" aria-label="默认调用" title="默认调用这一个" />}
-                                                                <span className="api-picked-name" title={model}>{model}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="api-picked-name"
+                                                                    data-primary={index === 0}
+                                                                    title={index === 0 ? model : `点一下让 ${model} 成为默认调用`}
+                                                                    onClick={() => setPrimaryModel(config, model)}
+                                                                >
+                                                                    {model}
+                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => void testSingleModel(config, model)}
@@ -552,9 +571,9 @@ export function ApiSettings() {
                                         {advancedOpen[config.id] && (
                                         <div className="api-form-rows">
                                         <div className="ui-toggle-row">
-                                            <span className="api-toggle-text">
+                                            <span className="api-toggle-text api-toggle-stack">
                                                 <span className="menu-label font-medium">原生工具调用</span>
-                                                <span className="menu-desc api-toggle-desc">当前自动：{getNativeToolProtocolLabel(config)}</span>
+                                                <span className="menu-desc api-toggle-desc">（当前自动：{getNativeToolProtocolLabel(config)}）</span>
                                             </span>
                                             <Toggle
                                                 checked={config.enableNativeTools !== false}
