@@ -32,8 +32,12 @@ export function stripVoiceNoteWrapper(text: string): string {
     let out = (text || "").replace(/语音条\s*[:：]?/g, "");
     // 独占一行的纯括号残留
     out = out.split(/\r?\n/).filter(line => !/^[\s[\]【】]*$/.test(line)).join("\n");
-    // 整段首尾游离的方括号
-    out = out.replace(/^\s*[[【]\s*/, "").replace(/\s*[\]】]\s*$/, "");
+    // 整段首尾游离的方括号。
+    // 注意（2026-11-15 实机）：旁白暗号 `[旁白] …` 也是以 `[` 开头，以前这里会把左括号吃掉，
+    // 结果正文显示成「旁白] 手机贴在耳边…」。暗号开头就交给后面的暗号处理，别动它。
+    if (!/^\s*[[【]\s*(?:旁白|心理|叙述|动作|内心|韩语|中文|英语|日语|日文)/.test(out)) {
+        out = out.replace(/^\s*[[【]\s*/, "").replace(/\s*[\]】]\s*$/, "");
+    }
     return out.trim();
 }
 
@@ -49,11 +53,27 @@ export function isNarrationLine(line: string): boolean {
 }
 
 /**
+ * 模型偶尔会自己加语言/心理标签（`[韩语]` / `[内心]` / `[中文]` …）。
+ * 这些是给模型看的标记，绝不能上屏，也不能念出来（2026-11-15 实机：聊天室折叠区里出现过「[内心]…」）。
+ * 注意只剥标签本身，标签后面的内容保留。
+ */
+const CHAT_LABEL_MARKER = /[[【]\s*(?:韩语|中文|英语|日语|日文|内心)\s*[\]】][:：]?\s*/g;
+
+export function stripChatMarkers(text: string): string {
+    if (!text) return "";
+    return String(text)
+        .replace(CHAT_LABEL_MARKER, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/^[ \t]+/gm, "")
+        .trim();
+}
+
+/**
  * 把一段内容拆成「台词」与「旁白」。
  * ① 先认行首旁白暗号（正向识别，最可靠）；② 剩下的再走旧启发式。
  */
 export function splitNarration(text: string): { dialogue: string; narration?: string } {
-    text = stripVoiceNoteWrapper(text);
+    text = normalizeNarrationMarker(stripChatMarkers(stripVoiceNoteWrapper(text)));
     const marked: string[] = [];
     const kept: string[] = [];
     for (const line of text.split("\n")) {
@@ -77,7 +97,10 @@ export function splitNarration(text: string): { dialogue: string; narration?: st
  * 旧的旁白启发式：只有整段确实用了通话台词格式时才抽旁白，否则原样返回。
  */
 function splitNarrationHeuristic(text: string): { dialogue: string; narration?: string } {
-    if (!usesCallDialogueFormat(text)) return { dialogue: text };
+    if (!usesCallDialogueFormat(text)) {
+        // 没有暗号、也不是「名|台词」格式：再用引号兜底（2026-11-15 实机「旁白和对白混在一起」）
+        return splitNarrationByQuotes(text) ?? { dialogue: text };
+    }
     const dialogue: string[] = [];
     const narration: string[] = [];
     for (const line of text.split("\n")) {
@@ -100,7 +123,58 @@ const NARRATION_MARKER = /^[\s>*\-•·]*[[【]\s*(?:旁白|心理|叙述|动作
 
 /** 这段文字里有没有行首旁白暗号 */
 export function hasNarrationMarker(text: string): boolean {
-    return String(text || "").split(/\r?\n/).some(line => NARRATION_MARKER.test(line));
+    return normalizeNarrationMarker(String(text || ""))
+        .split(/\r?\n/)
+        .some(line => NARRATION_MARKER.test(line));
+}
+
+/**
+ * 模型常把暗号写在句子中间（「…没事。[旁白] 他走到窗边。」），行首规则就漏了。
+ * 先把行内暗号统一搬到行首，后面继续走行判定（2026-11-15 实机：旁白只剥掉左括号、残留「旁白]」）。
+ */
+function normalizeNarrationMarker(text: string): string {
+    return String(text || "")
+        .replace(/([^\n])[ \t]*[[【]\s*(?:旁白|心理|叙述|动作)\s*[\]】][:：]?\s*/g, "$1\n[旁白] ")
+        .replace(/^[ \t]*[[【]\s*(?:旁白|心理|叙述|动作)\s*[\]】][:：]?\s*/gm, "[旁白] ");
+}
+
+/**
+ * 引号兜底（2026-11-15）：一段里既有带引号的台词、又有不带引号的部分 → 那些裸文字判旁白。
+ * 支持两种写法：
+ *   · 分行的：第一行旁白、第二行「台词」
+ *   · 同行的：`在补觉，正好有功夫配合她。「뭐 테스트야.」`（模型最爱这么写，旧逻辑拆不开）
+ * 两边任意一边为空就不拆（宁可多留一句，也不能把角色说哑）。
+ */
+function splitNarrationByQuotes(text: string): { dialogue: string; narration?: string } | null {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (!lines.length) return null;
+
+    const QUOTE = /[「『“"]|」|』|”|[|｜]/;
+    const QUOTE_OPEN = /[「『“"]/;
+    const dialogue: string[] = [];
+    const narration: string[] = [];
+
+    for (const line of lines) {
+        if (!QUOTE.test(line)) {
+            narration.push(line);
+            continue;
+        }
+        // 同一行里引号前面还有话 → 那截是旁白，剩下是台词
+        const openAt = line.search(QUOTE_OPEN);
+        if (openAt > 0) {
+            const prefix = line.slice(0, openAt).trim();
+            if (prefix && !SPEAKER_PREFIX.test(prefix)) {
+                narration.push(prefix);
+                const rest = line.slice(openAt).trim();
+                if (rest) dialogue.push(rest);
+                continue;
+            }
+        }
+        dialogue.push(line);
+    }
+
+    if (!dialogue.length || !narration.length) return null;
+    return { dialogue: dialogue.join("\n"), narration: narration.join("\n") };
 }
 
 /** 去掉行首旁白暗号，只留正文（展示/TTS 兜底用） */

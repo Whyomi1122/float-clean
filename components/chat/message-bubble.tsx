@@ -14,7 +14,7 @@ import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
 import { holdMusicDuck, releaseMusicDuck } from "@/lib/music-duck";
-import { cleanSpeechFragment, splitNarration, stripPerformanceTags, hasNarrationMarker } from "@/lib/call-text";
+import { cleanSpeechFragment, splitNarration, stripPerformanceTags, hasNarrationMarker, stripChatMarkers } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -607,12 +607,16 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     /** true 时把旁白行从正文抽出、居中淡字渲染（旁白不上屏在气泡内，而是独立展示） */
     narrationMode?: boolean;
 }) {
+    // 2026-11-15：先把模型自带的语言/心理标签（[韩语] [内心] …）剥掉，否则会上屏、还会混进折叠区
+    const cleanedText = stripChatMarkers(text);
     // 2026-11-14 旁白正向识别：带 [旁白] 暗号时，无论哪个页面都抽成独立旁白行（旧消息走原逻辑）
-    const narrationSplitEnabled = narrationMode || hasNarrationMarker(text);
-    const narrationSplit = narrationSplitEnabled ? extractNarration(text) : null;
-    const displaySource = narrationSplit ? narrationSplit.dialogue : text;
+    const narrationSplitEnabled = narrationMode || hasNarrationMarker(cleanedText);
+    const narrationSplit = narrationSplitEnabled ? extractNarration(cleanedText) : null;
+    const displaySource = narrationSplit ? narrationSplit.dialogue : cleanedText;
     const narrationText = narrationSplit ? narrationSplit.narration : undefined;
     const bilingual = splitBilingualText(displaySource);
+    /** 折叠区里的译文同样要剥标签（实机出现过「[内心]…」整段躺在中文折叠里） */
+    const translatedSource = bilingual ? stripChatMarkers(bilingual.translated) : "";
     const [expanded, setExpanded] = useState(defaultExpanded);
     useEffect(() => {
         setExpanded(defaultExpanded);
@@ -666,7 +670,7 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
                 <>
                     <div className="chat-bilingual-divider" />
                     <div className="chat-bilingual-section chat-bilingual-section-translation">
-                        {renderContent(bilingual.translated, "chat-bilingual-content")}
+                        {renderContent(translatedSource, "chat-bilingual-content")}
                     </div>
                 </>
             )}
