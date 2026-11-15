@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown } from "lucide-react";
+import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import type { ApiConfig } from "@/lib/settings-types";
 import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
 import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
-import { Alert } from "@/components/ui/feedback";
 import { determineBaseUrl, simpleLLMCall } from "@/lib/api-helpers";
 
 const DEFAULT_CONFIGS: ApiConfig[] = [
@@ -50,6 +49,8 @@ export function ApiSettings() {
     const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
     /** 拉取模型列表的提示（只显示失败；成功由「可选模型 · N 个」体现，2026-11-14） */
     const [modelNotice, setModelNotice] = useState<Record<string, string>>({});
+    /** 单个模型的测试结果，key = `${configId}::${model}`（2026-11-14 用户要求每个模型能单独测） */
+    const [modelTest, setModelTest] = useState<Record<string, { state: "testing" | "ok" | "fail"; message?: string }>>({});
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -237,6 +238,42 @@ export function ApiSettings() {
         }
     };
 
+    /**
+     * 单独测某一个已选模型（2026-11-14 用户要求「每个被选择的模型可以单独测试」）。
+     * 只把 defaultModel 换成这个模型，其余照旧走 testConnection 的判定逻辑
+     * （向量模型走 /embeddings，聊天模型走 /chat/completions）。
+     */
+    const testSingleModel = async (config: ApiConfig, model: string) => {
+        const key = `${config.id}::${model}`;
+        setModelTest(prev => ({ ...prev, [key]: { state: "testing" } }));
+        const scoped = { ...config, defaultModel: model };
+
+        try {
+            if (isEmbeddingModelName(model)) {
+                const embedding = await generateEmbedding("你好", scoped, { throwOnError: true });
+                if (!embedding) throw new Error("接口未返回向量数据");
+                setModelTest(prev => ({ ...prev, [key]: { state: "ok", message: `维度 ${embedding.length}` } }));
+                return;
+            }
+            const result = await simpleLLMCall(
+                scoped,
+                [{ role: "user", content: "你好" }],
+                { temperature: 0.2, max_tokens: 4096 },
+            );
+            if (result.error || !result.content) {
+                throw new Error(result.error || "模型返回了空内容");
+            }
+            const reply = result.content.replace(/\s+/g, " ").trim();
+            setModelTest(prev => ({
+                ...prev,
+                [key]: { state: "ok", message: reply.length > 40 ? `${reply.slice(0, 40)}...` : reply },
+            }));
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
+            setModelTest(prev => ({ ...prev, [key]: { state: "fail", message: msg } }));
+        }
+    };
+
     if (!isLoaded) return null;
 
     return (
@@ -321,16 +358,16 @@ export function ApiSettings() {
                             <button onClick={() => { setIsNewConfig(false); setEditingId(null); }} className="modal-header-btn modal-header-btn-action"><Check size={18} /></button>
                         </div>
 
-                        <div className="modal-body hide-scrollbar flex flex-col gap-4 pb-10" data-ui="modal-body">
+                        <div className="modal-body api-form-body hide-scrollbar flex flex-col gap-4 pb-10" data-ui="modal-body">
                             {(() => {
                                 const config = configs.find(c => c.id === editingId);
                                 if (!config) return null;
                                 return (
                                     <>
                                         <div className="api-form-card">
-                                        <p className="api-form-card-title">CONNECTION · 连接</p>
+                                        <p className="api-form-card-title">CONNECTION</p>
                                         <div className="flex flex-col gap-1">
-                                            <label className="menu-desc ml-1">配置名称 (Name)</label>
+                                            <label className="api-field-label">名称</label>
                                             <Input
                                                 type="text"
                                                 value={config.name || ""}
@@ -339,7 +376,7 @@ export function ApiSettings() {
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="menu-desc ml-1">服务商 (Provider)</label>
+                                            <label className="api-field-label">服务商</label>
                                             <select
                                                 value={config.provider}
                                                 onChange={(e) => updateConfig(config.id, { provider: e.target.value })}
@@ -361,13 +398,9 @@ export function ApiSettings() {
 
                                         {/* Custom 必填 Base URL；其他 provider 可选填中转站地址 */}
                                         <div className="flex flex-col gap-1">
-                                            <label className="menu-desc ml-1">
-                                                Base URL {config.provider === "Custom" ? "（必填）" : "（可选，留空用官方端点）"}
-                                                {config.provider === "Google" && (
-                                                    <span style={{ color: "#888", marginLeft: 6, fontSize: "0.85em" }}>
-                                                        中转站填 https://xxx/v1beta 走原生协议
-                                                    </span>
-                                                )}
+                                            <label className="api-field-label">
+                                                Base URL
+                                                {config.provider === "Custom" && <span className="api-field-hint">必填</span>}
                                             </label>
                                             <Input
                                                 type="url"
@@ -384,7 +417,7 @@ export function ApiSettings() {
                                         </div>
 
                                         <div className="flex flex-col gap-1">
-                                            <label className="menu-desc ml-1">API Key</label>
+                                            <label className="api-field-label">API Key</label>
                                             <Input
                                                 type="password"
                                                 value={config.apiKey}
@@ -393,71 +426,125 @@ export function ApiSettings() {
                                             />
                                         </div>
 
-                                        <div className="flex gap-3">
+                                        {/* 测试连接：行式小按钮（2026-11-14 用户定稿，不再用绿色大按钮） */}
+                                        <div className="api-row api-test-row">
+                                            <span className="api-row-label">测试连接</span>
                                             <button
+                                                type="button"
                                                 onClick={() => testConnection(config)}
                                                 disabled={isTesting[config.id]}
-                                                className="ui-btn ui-btn ui-btn-success flex-1"
+                                                className="api-pill-btn"
+                                                data-state={
+                                                    isTesting[config.id]
+                                                        ? "testing"
+                                                        : testResult[config.id]?.success
+                                                            ? "ok"
+                                                            : testResult[config.id]?.message
+                                                                ? "fail"
+                                                                : "idle"
+                                                }
                                             >
-                                                <Rss size={16} className={isTesting[config.id] ? "animate-spin" : ""} />
-                                                {isTesting[config.id] ? "测试中..." : "测试连接"}
+                                                {isTesting[config.id]
+                                                    ? "测试中"
+                                                    : testResult[config.id]?.success
+                                                        ? "✓ 成功"
+                                                        : testResult[config.id]?.message
+                                                            ? "✗ 失败"
+                                                            : "测试"}
                                             </button>
                                         </div>
 
                                         {testResult[config.id] && testResult[config.id].message && (
-                                            <Alert variant={testResult[config.id].success ? "success" : "danger"}>
-                                                <AlertCircle size={16} className="mt-[2px] shrink-0" />
-                                                <span className="break-all leading-[1.5]">{testResult[config.id].message}</span>
-                                            </Alert>
+                                            <span
+                                                className="api-row-msg"
+                                                data-state={testResult[config.id].success ? "ok" : "fail"}
+                                            >
+                                                {testResult[config.id].message}
+                                            </span>
                                         )}
                                         </div>
 
                                         <div className="api-form-card">
-                                        <p className="api-form-card-title">MODELS · 模型</p>
+                                        <p className="api-form-card-title">MODELS</p>
                                         {/* 选择模型（可多选，2026-11-14 用户定稿）：
-                                            一个 API 下可以同时选好几个模型，选中的在下面一个个列出来。
-                                            调用的那个 = 列表第一个（内部仍存 defaultModel）。 */}
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <label className="menu-desc ml-1">
-                                                    选择模型（可多选）
-                                                    {selectedModelsOf(config).length > 0 && ` · 已选 ${selectedModelsOf(config).length}`}
-                                                </label>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => fetchModels(config)}
-                                                    disabled={isFetching[config.id]}
-                                                    className="api-model-refresh"
-                                                >
-                                                    <RefreshCw size={13} className={isFetching[config.id] ? "animate-spin" : ""} />
-                                                    {isFetching[config.id] ? "拉取中" : "刷新列表"}
-                                                </button>
+                                            一个 API 下可以同时选好几个模型，每个都能单独测试；
+                                            实际调用的是列表第一个（内部仍存 defaultModel）。 */}
+
+                                        {/* 已选模型：一行一个，右侧是「测试 / ✓ 可用」和删除 */}
+                                        <div className="api-row-head">
+                                            <span>已选模型</span>
+                                            <span>{selectedModelsOf(config).length} 个</span>
+                                        </div>
+
+                                        {(selectedModelsOf(config).length > 0) ? (
+                                            <div className="api-form-rows api-picked-list">
+                                                {selectedModelsOf(config).map((model, index) => {
+                                                    const testKey = `${config.id}::${model}`;
+                                                    const test = modelTest[testKey];
+                                                    return (
+                                                        <div key={model} className="api-picked-row">
+                                                            <div className="api-picked-head">
+                                                                <span className="api-picked-name" title={model}>{model}</span>
+                                                                {index === 0 && <span className="api-picked-tag">默认</span>}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void testSingleModel(config, model)}
+                                                                    disabled={test?.state === "testing"}
+                                                                    className="api-pill-btn"
+                                                                    data-state={test?.state ?? "idle"}
+                                                                >
+                                                                    {test?.state === "testing"
+                                                                        ? "测试中"
+                                                                        : test?.state === "ok"
+                                                                            ? "✓ 可用"
+                                                                            : test?.state === "fail"
+                                                                                ? "✗ 失败"
+                                                                                : "测试"}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="api-picked-remove"
+                                                                    aria-label={`移除 ${model}`}
+                                                                    onClick={() => toggleModel(config, model)}
+                                                                >
+                                                                    <X size={13} />
+                                                                </button>
+                                                            </div>
+                                                            {test?.message && test.state !== "testing" && (
+                                                                <span className="api-picked-msg" data-state={test.state}>
+                                                                    {test.message}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
+                                        ) : (
+                                            <span className="api-row-hint">还没选模型，点下面「刷新列表」拉取后勾选</span>
+                                        )}
 
-                                            {modelNotice[config.id] && (
-                                                <span className="api-model-notice">{modelNotice[config.id]}</span>
-                                            )}
+                                        {/* 可选模型：数量在左边，刷新按钮在右边 */}
+                                        <div className="api-row-head api-row-head-spaced">
+                                            <span>
+                                                可选模型
+                                                {fetchedModels[config.id] && fetchedModels[config.id].length > 0
+                                                    && ` · ${fetchedModels[config.id].length} 个`}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => fetchModels(config)}
+                                                disabled={isFetching[config.id]}
+                                                className="api-pill-btn"
+                                                data-state="idle"
+                                            >
+                                                <RefreshCw size={12} className={isFetching[config.id] ? "animate-spin" : ""} />
+                                                {isFetching[config.id] ? "拉取中" : "刷新列表"}
+                                            </button>
+                                        </div>
 
-                                            {/* 已选：药丸式小标签，横排自动换行 */}
-                                            {(selectedModelsOf(config).length > 0) ? (
-                                                <div className="api-model-chips">
-                                                    {selectedModelsOf(config).map(model => (
-                                                        <span key={model} className="api-model-chip" title={model}>
-                                                            <span>{model}</span>
-                                                            <button
-                                                                type="button"
-                                                                className="api-model-chip-x"
-                                                                aria-label={`移除 ${model}`}
-                                                                onClick={() => toggleModel(config, model)}
-                                                            >
-                                                                <X size={10} strokeWidth={3} />
-                                                            </button>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="menu-desc ml-1">还没选模型，点下面「刷新列表」再勾</span>
-                                            )}
+                                        {modelNotice[config.id] && (
+                                            <span className="api-model-notice">{modelNotice[config.id]}</span>
+                                        )}
 
                                             {/* 待选：勾多少都行，勾中立刻出现在上面的已选列表 */}
                                             {fetchedModels[config.id] && fetchedModels[config.id].length > 0 && (() => {
@@ -467,11 +554,7 @@ export function ApiSettings() {
                                                     ? allModels.filter(item => item.toLowerCase().includes(keyword))
                                                     : allModels;
                                                 return (
-                                                    <div className="flex flex-col gap-1 mt-2">
-                                                        <div className="api-model-subhead">
-                                                            <span>可选模型</span>
-                                                            <span>{keyword ? `${shownModels.length} / ${allModels.length}` : `${allModels.length} 个`}</span>
-                                                        </div>
+                                                    <div className="api-optional-block">
                                                         {allModels.length > 12 && (
                                                             <input
                                                                 type="text"
@@ -511,7 +594,7 @@ export function ApiSettings() {
 
                                             {/* 还没拉列表时：手动填一个模型名 */}
                                             {(!fetchedModels[config.id] || fetchedModels[config.id].length === 0) && (
-                                                <div className="flex gap-2 mt-1">
+                                                <div className="flex gap-2">
                                                     <input
                                                         type="text"
                                                         value={config.defaultModel}
@@ -522,7 +605,6 @@ export function ApiSettings() {
                                                 </div>
                                             )}
                                         </div>
-                                        </div>
 
                                         <div className="api-form-card">
                                         <button
@@ -530,7 +612,7 @@ export function ApiSettings() {
                                             className="api-form-card-head"
                                             onClick={() => setAdvancedOpen(prev => ({ ...prev, [config.id]: !prev[config.id] }))}
                                         >
-                                            <span className="api-form-card-title">ADVANCED · 高级</span>
+                                            <span className="api-form-card-title">ADVANCED</span>
                                             <ChevronDown
                                                 size={15}
                                                 className={`transition-transform ${advancedOpen[config.id] ? "rotate-180" : ""}`}
@@ -538,16 +620,16 @@ export function ApiSettings() {
                                         </button>
 
                                         {advancedOpen[config.id] && (
-                                        <>
+                                        <div className="api-form-rows">
                                         <div
-                                            className="ui-toggle-row mt-2 overflow-visible"
-                                            style={{ display: "block", position: "relative", height: "auto", flexShrink: 0, padding: "14px 76px 14px 16px" }}
+                                            className="ui-toggle-row overflow-visible"
+                                            style={{ display: "block", position: "relative", height: "auto", flexShrink: 0, padding: "13px 76px 13px 0" }}
                                         >
                                             <span className="menu-label font-medium">启用原生工具调用</span>
                                             <span className="menu-desc whitespace-normal break-words leading-[1.45]">
                                                 开启后自动选择该服务商可用的原生工具格式（当前：{getNativeToolProtocolLabel(config)}）；关闭后使用文本动作协议。
                                             </span>
-                                            <span style={{ position: "absolute", top: 0, bottom: 0, right: 16, display: "flex", alignItems: "center" }}>
+                                            <span style={{ position: "absolute", top: 0, bottom: 0, right: 0, display: "flex", alignItems: "center" }}>
                                                 <Toggle
                                                     checked={config.enableNativeTools !== false}
                                                     onChange={(v) => updateConfig(config.id, { enableNativeTools: v })}
@@ -555,12 +637,12 @@ export function ApiSettings() {
                                             </span>
                                         </div>
 
-                                        <div className="ui-toggle-row mt-2">
+                                        <div className="ui-toggle-row">
                                             <span className="menu-label font-medium">启用图像识别</span>
                                             <Toggle checked={config.enableImageRecognition} onChange={(v) => updateConfig(config.id, { enableImageRecognition: v })} />
                                         </div>
 
-                                        <div className="ui-toggle-row mt-2">
+                                        <div className="ui-toggle-row">
                                             <span className="flex min-w-0 flex-col">
                                                 <span className="menu-label font-medium">防胡言乱语</span>
                                                 <span className="menu-desc">防止没有用户输入时胡言乱语</span>
@@ -570,8 +652,7 @@ export function ApiSettings() {
                                                 onChange={(v) => updateConfig(config.id, { preventEmptyGenerateRambling: v })}
                                             />
                                         </div>
-
-                                        </>
+                                        </div>
                                         )}
                                         </div>
 

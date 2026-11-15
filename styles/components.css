@@ -6499,9 +6499,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   /* 本项目 tokens 里没有 --c-accent，之前写了它 → 整条 border 失效，方框直接看不见 */
   border: 1.6px solid #5B8FB9;
   opacity: 0.7;
@@ -6568,31 +6568,40 @@
   opacity: 0.8;
 }
 
-/* 编辑配置弹窗的分组卡片（参考「聊天页设置」的分组白卡，2026-11-14）
-   每组一张圆角卡 + 大写字距小标题，卡片之间自然留白，填表不再一长条糊在一起 */
+
+/* ===== 编辑配置弹窗（2026-11-14 对齐「聊天页设置」的视觉语言）=====
+   弹窗正文铺一层页面底色、卡片改纯白，白卡才浮得出来；
+   组标题纯英文大写淡灰；组内是「行 + 缩进细线」，控件一律裸着不带框。 */
+
+/* 弹窗正文：垫底色（左右负边距让底色铺满，不留白边） */
+.api-form-body {
+  margin: 0 -16px;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  background: var(--c-page-body-bg);
+}
+
 .api-form-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 13px 13px 14px;
+  gap: 12px;
+  padding: 16px 16px 18px;
   border-radius: var(--ui-radius-card);
-  background: var(--c-card);
-  backdrop-filter: blur(var(--ui-blur)) saturate(var(--ui-saturate));
-  -webkit-backdrop-filter: blur(var(--ui-blur)) saturate(var(--ui-saturate));
+  background: var(--c-panel);
   border: none;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.025), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .api-form-card-title {
-  margin: 0 0 0 2px;
-  font-size: calc(10.5px*var(--app-text-scale,1));
+  margin: 2px 0 0;
+  font-size: calc(11px*var(--app-text-scale,1));
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--c-icon);
 }
 
-/* 可折叠分组的标题行（点一下展开/收起） */
+/* 可折叠分组的标题行（点一下展开 / 收起） */
 .api-form-card-head {
   display: flex;
   align-items: center;
@@ -6603,6 +6612,7 @@
   border: 0;
   background: transparent;
   color: var(--c-icon);
+  font-family: inherit;
   cursor: pointer;
 }
 
@@ -6610,112 +6620,255 @@
   margin: 0;
 }
 
-/* 待选模型列表：贴在卡片里直接排下去，不再套一层白底小盒子（2026-11-14） */
+/* 组内小标题行：左边名字，右边数量或小按钮 */
+.api-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: calc(12px*var(--app-text-scale,1));
+  color: var(--c-text);
+}
+
+.api-row-head-spaced {
+  margin-top: 4px;
+}
+
+.api-row-hint {
+  margin-left: 2px;
+  font-size: calc(11.5px*var(--app-text-scale,1));
+  color: var(--c-icon);
+}
+
+/* 字段标题：跟参考页条目标题同款（深色、半粗） */
+.api-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+  font-size: calc(14.5px*var(--app-text-scale,1));
+  font-weight: 600;
+  color: var(--c-text-title);
+}
+
+.api-field-hint {
+  font-size: calc(11px*var(--app-text-scale,1));
+  font-weight: 500;
+  color: var(--c-icon);
+}
+
+/* 弹窗里的输入框 / 下拉：走 tokens 的浅灰填充，无边框 */
+.api-form-card .ui-input,
+.api-form-card .ui-select,
+.api-form-card input[type="text"],
+.api-form-card input[type="password"] {
+  background: var(--c-input);
+  border-color: var(--c-input-border);
+  border-radius: 12px;
+}
+
+/* 「行」：左标题 + 右控件 */
+.api-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.api-row-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(14px*var(--app-text-scale,1));
+  font-weight: 600;
+  color: var(--c-text-title);
+}
+
+.api-row-msg {
+  font-size: calc(11.5px*var(--app-text-scale,1));
+  line-height: 1.5;
+  word-break: break-word;
+  color: var(--c-text);
+}
+
+.api-row-msg[data-state="ok"] {
+  color: var(--c-success);
+}
+
+.api-row-msg[data-state="fail"] {
+  color: var(--c-danger);
+}
+
+/* 小胶囊按钮（测试 / 刷新列表）：行式控件的统一形态，不带边框 */
+.api-pill-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-input);
+  color: var(--c-icon-active);
+  font-family: inherit;
+  font-size: calc(11.8px*var(--app-text-scale,1));
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.api-pill-btn:active {
+  opacity: 0.65;
+}
+
+.api-pill-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.api-pill-btn[data-state="ok"] {
+  color: var(--c-success);
+  background: color-mix(in srgb, var(--c-success) 12%, transparent);
+}
+
+.api-pill-btn[data-state="fail"] {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+}
+
+/* 组内的行容器：行与行之间一条缩进细线 */
+.api-form-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.api-form-rows > * + * {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+
+/* 已选模型：一行一个（模型名 + 测试小按钮 + 删除） */
+.api-picked-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 0;
+}
+
+.api-picked-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.api-picked-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: calc(13px*var(--app-text-scale,1));
+  color: var(--c-text-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-picked-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(91, 143, 185, 0.14);
+  color: #4A7C9E;
+  font-size: calc(10px*var(--app-text-scale,1));
+}
+
+.api-picked-remove {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-icon);
+  cursor: pointer;
+}
+
+.api-picked-remove:active {
+  opacity: 0.6;
+}
+
+.api-picked-msg {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-left: 2px;
+  font-size: calc(11px*var(--app-text-scale,1));
+  line-height: 1.45;
+  word-break: break-word;
+  color: var(--c-text);
+}
+
+.api-picked-msg[data-state="ok"] {
+  color: var(--c-success);
+}
+
+.api-picked-msg[data-state="fail"] {
+  color: var(--c-danger);
+}
+
+/* 可选模型区：搜索框 + 卡内直接排开行（不再套白盒） */
+.api-optional-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .api-model-list {
   display: flex;
   flex-direction: column;
-  margin: 0 -4px;
 }
 
 .api-model-list .api-model-row {
-  padding: 10px 4px;
+  padding: 13px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
 
 .api-model-list .api-model-row:not(:last-child) {
-  border-bottom: 1px solid color-mix(in srgb, var(--c-card-border) 20%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
 }
 
 .api-model-list .api-model-row::after {
   content: none;
 }
 
-/* 拉取模型列表失败时的提示（成功不弹横幅，改由「可选模型 · N 个」表达） */
+.api-model-list .api-model-name {
+  font-size: calc(13px*var(--app-text-scale,1));
+}
+
+/* 高级卡里的开关：拆掉原来那层白框，跟其它行一样裸着排 */
+.api-form-card .ui-toggle-row {
+  min-height: 0;
+  padding: 13px 76px 13px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.api-form-card .ui-toggle-row + .ui-toggle-row {
+  border-top: 1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent);
+}
+
+/* 拉取模型列表失败时的提示（成功不弹横幅，由「可选模型 · N 个」表达） */
 .api-model-notice {
-  margin-left: 4px;
+  margin-left: 2px;
   font-size: calc(11.5px*var(--app-text-scale,1));
   line-height: 1.45;
-  color: #C0554D;
-}
-
-/* 已选模型：药丸小标签横排，点击标签里的 × 移除 */
-.api-model-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.api-model-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 100%;
-  padding: 4px 5px 4px 9px;
-  border-radius: 999px;
-  background: rgba(91, 143, 185, 0.14);
-  color: var(--c-text-title);
-  font-size: calc(11.8px*var(--app-text-scale,1));
-  line-height: 1.25;
-}
-
-.api-model-chip > span {
-  max-width: 46vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.api-model-chip-x {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(91, 143, 185, 0.28);
-  color: var(--c-text-title);
-  cursor: pointer;
-}
-
-.api-model-chip-x:active {
-  opacity: 0.6;
-}
-
-/* 可选模型的小标题行（左边标题、右边数量） */
-.api-model-subhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 2px 2px;
-  font-size: calc(11px*var(--app-text-scale,1));
-  color: var(--c-icon);
-}
-
-/* 「高级设置」折叠按钮 */
-.api-form-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  margin-top: 2px;
-  padding: 8px 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--c-icon-active);
-  font-family: inherit;
-  font-size: calc(12px*var(--app-text-scale,1));
-  cursor: pointer;
-}
-
-.api-form-more:active {
-  background: rgba(0, 0, 0, 0.04);
+  color: var(--c-danger);
 }
