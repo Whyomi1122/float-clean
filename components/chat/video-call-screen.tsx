@@ -10,13 +10,13 @@ import { generateChatCompletion, flattenCompletionResult } from "@/lib/chat-engi
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { cancelFollowUp } from "@/lib/follow-up-service";
 import { createSTTSession, type STTSession } from "@/lib/stt-service";
-import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, playAudioBlobViaMediaElement, setCallAudioSessionActive } from "@/lib/tts-service";
+import { resolveVoiceConfig, synthesizeSpeech, playAudioBlob, playAudioBlobViaMediaElement, setCallAudioSessionActive, isKoreanDominantVoice } from "@/lib/tts-service";
 import { extractChatEmotion, toTtsEmotion } from "@/lib/emotion";
 import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud";
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { BilingualTextBlock } from "./message-bubble";
-import { splitBilingualText } from "@/lib/bilingual-text";
+import { speechTextForContent, splitNarration } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -38,6 +38,8 @@ type SubtitleEntry = {
     id: string;
     role: "user" | "assistant";
     text: string;
+    /** 旁白（只上屏、居中淡字、不朗读），2026-11-15 与语音通话对齐 */
+    narration?: string;
 };
 
 type VideoCallScreenProps = {
@@ -54,11 +56,24 @@ type VideoCallScreenProps = {
     onRestore?: () => void;
 };
 
-function stripBilingualForSpeech(text: string): string {
-    return text
-        .split("\n")
-        .map(line => splitBilingualText(line)?.original || line)
-        .join("\n");
+/**
+ * 只留该念的原文（TTS 取文）。
+ * 2026-11-15 实机：视频通话「朗读是错的」——原来这里只剥译文，旁白被整段念出来。
+ * 改成和语音通话走同一套：剥旁白 → 剥译本 → 剥装饰符（`lib/call-text.ts`）。
+ */
+function stripBilingualForSpeech(text: string, dropTranslation = false): string {
+    return speechTextForContent(text, { dropTranslation });
+}
+
+/**
+ * 字幕拆分（与语音通话同一口径）：有真旁白就抽出来单独淡字显示，台词留在 text。
+ * 全是旁白时把旁白放进 text，免得气泡空着。
+ */
+function splitSubtitleContent(content: string): { text: string; narration?: string } {
+    const { dialogue, narration } = splitNarration(content);
+    const text = dialogue.trim();
+    if (!text && narration) return { text: narration.trim() };
+    return { text, ...(narration ? { narration } : {}) };
 }
 
 // ── Component ───────────────────────────────────────
@@ -442,13 +457,13 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
 
             const { cleanParts } = processAIResponse(aiResponseText);
             const displayText = cleanParts.join("\n");
-            const speechText = stripBilingualForSpeech(displayText);
+            const speechText = stripBilingualForSpeech(displayText, isKoreanDominantVoice(session.contactId));
             // 视频通话整段朗读：情绪从整段回复里取（开关关着就一律不传）
             const callEmotion = isVoiceEmotionEnabled() ? toTtsEmotion(extractChatEmotion(aiResponseText).emotion) : undefined;
 
             if (!displayText) { setCallState("IDLE"); return; }
 
-            setSubtitles(prev => [...prev, { id: `ai-${Date.now()}`, role: "assistant", text: displayText }]);
+            setSubtitles(prev => [...prev, { id: `ai-${Date.now()}`, role: "assistant", ...splitSubtitleContent(displayText) }]);
 
             // 缩小为悬浮窗期间收到的回复：只静默记录文字，不播放语音
             if (minimizedRef.current) {
@@ -773,6 +788,9 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
                         data-role={sub.role}
                     >
                         <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                        {sub.narration && (
+                            <p className="call-subtitle-narration">{sub.narration}</p>
+                        )}
                     </div>
                 ))}
                 {interimText && callState === "USER_SPEAKING" && (

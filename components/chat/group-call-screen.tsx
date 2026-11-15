@@ -13,7 +13,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { BilingualTextBlock } from "./message-bubble";
-import { splitBilingualText } from "@/lib/bilingual-text";
+import { speechTextForContent, splitNarration } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { isAndroidBrowser, isIOSDevice } from "./voice-input-platform";
@@ -34,15 +34,27 @@ type SubtitleEntry = {
     id: string;
     role: "user" | "assistant";
     text: string;
+    /** 旁白（只上屏、淡字、不朗读），2026-11-15 与语音/视频通话对齐 */
+    narration?: string;
     senderName?: string;
     senderCharacterId?: string;
 };
 
+/**
+ * 只留该念的原文（TTS 取文）。
+ * 2026-11-15：与语音通话、视频通话统一走 `lib/call-text.ts` 的同一套（剥旁白 → 剥译本 → 剥装饰符），
+ * 以前这里各自只剥译文，旁白会被念出来、几页之间标准不一致。
+ */
 function stripBilingualForSpeech(text: string): string {
-    return text
-        .split("\n")
-        .map(line => splitBilingualText(line)?.original || line)
-        .join("\n");
+    return speechTextForContent(text);
+}
+
+/** 字幕拆分（与语音/视频通话同一口径）：旁白抽出来单独淡字，全是旁白时才塞回正文 */
+function splitSubtitleContent(content: string): { text: string; narration?: string } {
+    const { dialogue, narration } = splitNarration(content);
+    const text = dialogue.trim();
+    if (!text && narration) return { text: narration.trim() };
+    return { text, ...(narration ? { narration } : {}) };
 }
 
 type GroupCallScreenProps = {
@@ -265,7 +277,7 @@ export function GroupCallScreen({ type, session, characters, onEnd, initiator = 
 
                 setSubtitles(prev => [...prev, {
                     id: aiMsg.id, role: "assistant",
-                    text: displayText,
+                    ...splitSubtitleContent(displayText),
                     senderName: r.characterName,
                     senderCharacterId: r.characterId,
                 }]);
@@ -730,6 +742,7 @@ export function GroupCallScreen({ type, session, characters, onEnd, initiator = 
                         >
                             {sub.senderName && <div className="call-subtitle-sender">{sub.senderName}</div>}
                             <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                            {sub.narration && <p className="call-subtitle-narration">{sub.narration}</p>}
                         </div>
                     ))}
                     {interimText && callState === "USER_SPEAKING" && (
@@ -824,6 +837,7 @@ export function GroupCallScreen({ type, session, characters, onEnd, initiator = 
                         <div key={sub.id} className="gcall-subtitle-bubble" data-role={sub.role}>
                             {sub.senderName && <div className="gcall-subtitle-sender">{sub.senderName}</div>}
                             <BilingualTextBlock text={sub.text} mode="plain" className="call-subtitle-bilingual" defaultExpanded={session.collapseBilingualTranslation !== false ? false : true} />
+                            {sub.narration && <p className="call-subtitle-narration">{sub.narration}</p>}
                         </div>
                     ))}
                     {interimText && callState === "USER_SPEAKING" && (
