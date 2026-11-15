@@ -7982,8 +7982,95 @@
   padding: 0 4px;
 }
 
-/* ===== 旁白行（聊天室气泡内居中淡字；通话页另有 .call-subtitle-narration） ===== */
-.chat-narration-line {
+/* ===== 语音通话 · 摄像头（2026-11-15 从视频通话搬来） ===== */
+.call-camera-btn {
+  position: absolute;
+  /* 与左上返回键同一水平线 */
+  top: calc(var(--page-header-safe-top, 48px) + 4px);
+  right: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(20, 22, 28, 0.42);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.2s ease, transform 0.12s ease;
+}
+.call-camera-btn[data-on] {
+  background: rgba(91, 143, 185, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.call-camera-btn:active { transform: scale(0.94); }
+
+.call-camera-error {
+  position: absolute;
+  right: 14px;
+  top: calc(var(--page-header-safe-top, 48px) + 48px);
+  z-index: 4;
+  max-width: 58%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(20, 22, 28, 0.62);
+  color: #fff;
+  font-size: calc(11px*var(--app-text-scale, 1));
+  line-height: 1.45;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.call-camera-window {
+  position: absolute;
+  right: 14px;
+  /* 贴在摄像头按钮下方，留一点距离 */
+  top: calc(var(--page-header-safe-top, 48px) + 56px);
+  z-index: 3;
+  width: 104px;
+  height: 138px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(12, 14, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.call-camera-window:active { cursor: grabbing; }
+.call-camera-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+.call-camera-window[data-facing="environment"] .call-camera-video { transform: none; }
+.call-camera-switch {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(16, 18, 24, 0.55);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ===== 旁白行（聊天室气泡内居中淡字；通话页另有 .call-subtitle-narration） ===== */.chat-narration-line {
   margin: 6px auto 2px;
   max-width: 92%;
   text-align: center;

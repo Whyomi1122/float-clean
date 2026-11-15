@@ -196,8 +196,154 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             return next;
         });
     }, []);
-    const requestAbortRef = useRef<AbortController | null>(null);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // ── 摄像头（从视频通话搬来，2026-11-15）────────────────
+    const [cameraOn, setCameraOn] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState<"user" | "environment">("user");
+    const [cameraError, setCameraError] = useState<string | null>(null);
+    const cameraOnRef = useRef(false);
+    const cameraStreamRef = useRef<MediaStream | null>(null);
+    const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+    // 小窗位置（拖过就记住）
+    const [cameraWindowPos, setCameraWindowPos] = useState<{ x: number; y: number } | null>(null);
+    const cameraDragRef = useRef<{ dx: number; dy: number } | null>(null);
+    const CAMERA_WINDOW_KEY = "float:voice-call:camera-window";
+    useEffect(() => { cameraOnRef.current = cameraOn; }, [cameraOn]);
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(CAMERA_WINDOW_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as { x?: number; y?: number };
+            if (typeof parsed?.x === "number" && typeof parsed?.y === "number") {
+                setCameraWindowPos({ x: parsed.x, y: parsed.y });
+            }
+        } catch { /* 忽略坏数据 */ }
+    }, []);
+
+    const stopCamera = useCallback(() => {
+        cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+        if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+        cameraOnRef.current = false;
+        setCameraOn(false);
+    }, []);
+
+    const startCamera = useCallback(async (facing: "user" | "environment") => {
+        if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+            setCameraError("这个浏览器不支持摄像头");
+            return;
+        }
+        cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false,
+            });
+            cameraStreamRef.current = stream;
+            setCameraError(null);
+            cameraOnRef.current = true;
+            setCameraOn(true);
+        } catch (error) {
+            const name = (error as { name?: string })?.name || "";
+            setCameraError(
+                name === "NotAllowedError" || name === "SecurityError"
+                    ? "没有摄像头权限，先在浏览器里允许"
+                    : name === "NotFoundError"
+                        ? "没找到摄像头"
+                        : "摄像头打不开，关掉再试一次"
+            );
+            cameraOnRef.current = false;
+            setCameraOn(false);
+        }
+    }, []);
+
+    const toggleCamera = useCallback(() => {
+        if (cameraOnRef.current) stopCamera();
+        else void startCamera(cameraFacing);
+    }, [cameraFacing, startCamera, stopCamera]);
+
+    const switchCamera = useCallback(() => {
+        const next = cameraFacing === "user" ? "environment" : "user";
+        setCameraFacing(next);
+        void startCamera(next);
+    }, [cameraFacing, startCamera]);
+
+    // 视频节点挂流（节点每次重渲染可能新建）
+    useEffect(() => {
+        const el = cameraVideoRef.current;
+        if (!el) return;
+        el.srcObject = cameraStreamRef.current;
+        if (cameraOn) el.play().catch(() => { });
+    }, [cameraOn]);
+
+    // 挂断 / 卸载时一定关掉摄像头，否则指示灯一直亮
+    useEffect(() => () => {
+        cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+    }, []);
+
+    /** 抓一帧给模型看：640 宽，够认人也压得住体积 */
+    const captureCameraFrame = useCallback((): string | null => {
+        const video = cameraVideoRef.current;
+        if (!video || !cameraOnRef.current) return null;
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        if (!width || !height) return null;
+        const targetW = 640;
+        const targetH = Math.max(1, Math.round((height / width) * targetW));
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        try {
+            ctx.drawImage(video, 0, 0, targetW, targetH);
+            return canvas.toDataURL("image/jpeg", 0.72);
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const handleCameraPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        cameraDragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }, []);
+
+    const handleCameraPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        const drag = cameraDragRef.current;
+        if (!drag) return;
+        const parentRect = event.currentTarget.parentElement?.getBoundingClientRect();
+        const boxW = event.currentTarget.offsetWidth;
+        const boxH = event.currentTarget.offsetHeight;
+        const maxX = Math.max(0, (parentRect?.width ?? window.innerWidth) - boxW);
+        const maxY = Math.max(0, (parentRect?.height ?? window.innerHeight) - boxH);
+        const x = Math.min(Math.max(0, event.clientX - (parentRect?.left ?? 0) - drag.dx), maxX);
+        const y = Math.min(Math.max(0, event.clientY - (parentRect?.top ?? 0) - drag.dy), maxY);
+        setCameraWindowPos({ x, y });
+    }, []);
+
+    const handleCameraPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        if (!cameraDragRef.current) return;
+        cameraDragRef.current = null;
+        try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* 已释放 */ }
+        setCameraWindowPos(prev => {
+            if (prev) {
+                try { localStorage.setItem(CAMERA_WINDOW_KEY, JSON.stringify(prev)); } catch { /* 存不下就算 */ }
+            }
+            return prev;
+        });
+    }, []);
+
+    // 提示 4 秒后自己消失
+    useEffect(() => {
+        if (!cameraError) return;
+        const timer = window.setTimeout(() => setCameraError(null), 4000);
+        return () => window.clearTimeout(timer);
+    }, [cameraError]);
+
+    const requestAbortRef = useRef<AbortController | null>(null);    const timerRef = useRef<NodeJS.Timeout | null>(null);
     const callStartRef = useRef<number>(0);
     const minimizedRef = useRef(false);
     const stateRef = useRef<string>("CONNECTING");
@@ -573,11 +719,14 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             };
 
             // 3. Generate AI response（强制流式：不等整段，先到先播）
+            // 开着摄像头就抓当前一帧带过去（<=> 用户「让他看见我」）
+            const cameraFrame = cameraOnRef.current ? captureCameraFrame() : null;
             const aiResponseText = flattenCompletionResult(await generateChatCompletion(session, messagesRef.current, {
                 appTags: ["chat", "voice"],
                 signal: request.signal,
                 forceStream: true,
                 extraSystemInstructions: buildCallLanguageInstruction(session.contactId),
+                attachedImages: cameraFrame ? [cameraFrame] : undefined,
             }, {
                 onStreamDelta: (delta: string) => {
                     if (!delta) return;
@@ -1064,6 +1213,53 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                         <path d="M15 18l-6-6 6-6" />
                     </svg>
                 </button>
+            )}
+
+            {/* 摄像头开关：小窗就贴在它下面（可拖动） */}
+            {callState !== "ENDED" && (
+                <button
+                    type="button"
+                    className="call-camera-btn"
+                    data-on={cameraOn || undefined}
+                    onClick={toggleCamera}
+                    aria-label={cameraOn ? "关闭摄像头" : "打开摄像头"}
+                    title={cameraOn ? "关闭摄像头" : "打开摄像头"}
+                >
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                        {!cameraOn && <line x1="2" y1="2" x2="22" y2="22" />}
+                    </svg>
+                </button>
+            )}
+            {cameraError && <div className="call-camera-error">{cameraError}</div>}
+            {cameraOn && (
+                <div
+                    className="call-camera-window"
+                    data-facing={cameraFacing}
+                    style={cameraWindowPos ? { left: cameraWindowPos.x, top: cameraWindowPos.y, right: "auto", bottom: "auto" } : undefined}
+                    onPointerDown={handleCameraPointerDown}
+                    onPointerMove={handleCameraPointerMove}
+                    onPointerUp={handleCameraPointerUp}
+                    onPointerCancel={handleCameraPointerUp}
+                >
+                    <video ref={cameraVideoRef} className="call-camera-video" muted playsInline />
+                    <button
+                        type="button"
+                        className="call-camera-switch"
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={switchCamera}
+                        aria-label="切换前后摄像头"
+                        title="切换前后摄像头"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                            <path d="M21 3v5h-5" />
+                            <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                            <path d="M3 21v-5h5" />
+                        </svg>
+                    </button>
+                </div>
             )}
 
             {/* Content wrapper — force white text so themes don't override call UI */}
