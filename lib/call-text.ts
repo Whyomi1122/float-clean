@@ -30,12 +30,15 @@ export function usesCallDialogueFormat(text: string): boolean {
  */
 export function stripVoiceNoteWrapper(text: string): string {
     let out = (text || "").replace(/语音条\s*[:：]?/g, "");
+    // 情绪/语气标签（`[情绪:happy]`）只给 TTS 用，绝不上屏。
+    // 2026-11-15 实机：流式预览里露出「情绪:happy]」——下面那段「剥开头游离 [ 」把左括号吃掉了一半。
+    out = out.replace(/[[【]\s*(?:情绪|语气|emotion)\s*[:：][^\]】\r\n]*[\]】]?/gi, "");
     // 独占一行的纯括号残留
     out = out.split(/\r?\n/).filter(line => !/^[\s[\]【】]*$/.test(line)).join("\n");
     // 整段首尾游离的方括号。
     // 注意（2026-11-15 实机）：旁白暗号 `[旁白] …` 也是以 `[` 开头，以前这里会把左括号吃掉，
     // 结果正文显示成「旁白] 手机贴在耳边…」。暗号开头就交给后面的暗号处理，别动它。
-    if (!/^\s*[[【]\s*(?:旁白|心理|叙述|动作|内心|韩语|中文|英语|日语|日文)/.test(out)) {
+    if (!/^\s*[[【]\s*(?:旁白|心理|叙述|动作|内心|韩语|中文|英语|日语|日文|情绪|语气)/.test(out)) {
         out = out.replace(/^\s*[[【]\s*/, "").replace(/\s*[\]】]\s*$/, "");
     }
     return out.trim();
@@ -58,10 +61,13 @@ export function isNarrationLine(line: string): boolean {
  * 注意只剥标签本身，标签后面的内容保留。
  */
 const CHAT_LABEL_MARKER = /[[【]\s*(?:韩语|中文|英语|日语|日文|内心)\s*[\]】][:：]?\s*/g;
+/** 情绪标签（`[情绪:happy]`）只给 TTS 用，任何地方都不该上屏（2026-11-15 实机） */
+const EMOTION_LABEL_MARKER = /[[【]\s*(?:情绪|语气|emotion)\s*[:：][^\]】\r\n]*[\]】]?/gi;
 
 export function stripChatMarkers(text: string): string {
     if (!text) return "";
     return String(text)
+        .replace(EMOTION_LABEL_MARKER, "")
         .replace(CHAT_LABEL_MARKER, "")
         .replace(/[ \t]{2,}/g, " ")
         .replace(/^[ \t]+/gm, "")
@@ -86,8 +92,9 @@ export function splitNarration(text: string): { dialogue: string; narration?: st
     }
     if (!marked.length) return splitNarrationHeuristic(text);
     const restText = kept.join("\n").trim();
-    // 整段全是旁白 = 不能掏空正文（会让角色哑掉），按原样整段当台词
-    if (!restText) return { dialogue: text };
+    // 整段全是旁白：台词留空、旁白照实带出去，由调用方用「居中淡字」渲染。
+    // （2026-11-15 实机：以前这里把原文塞回 dialogue，结果气泡里直接露出「[旁白] 门一开…」）
+    if (!restText) return { dialogue: "", narration: marked.join("\n") };
     const rest = splitNarrationHeuristic(restText);
     const narrationText = [rest.narration, ...marked].filter(Boolean).join("\n").trim();
     return { dialogue: rest.dialogue, ...(narrationText ? { narration: narrationText } : {}) };
@@ -302,16 +309,66 @@ export function speechTextForContent(content: string, options?: SpeechCleanOptio
     const { dialogue } = splitNarration(unwrapped);
     const spoken = cleanSpeechFragment(dialogue, options);
     if (spoken) return spoken;
-    const fallback = cleanSpeechFragment(unwrapped, options);
+    // 台词是空的（整段旁白）→ 兜底念正文：先摘掉暗号，别把「[旁白]」念出来
+    const fallback = cleanSpeechFragment(stripNarrationMarker(unwrapped), options);
     if (fallback) return fallback;
     return unwrapped.trim();
+}
+
+const HANGUL_RE = /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/;
+const HAN_RE = /[\u4E00-\u9FFF]/;
+
+/** 这一段是不是「纯中文」的一句（去掉括号标点后只剩汉字） */
+function looksLikeChineseLine(text: string): boolean {
+    const core = text.replace(/[（(【[]/g, "").replace(/[)\s）】\]]/g, "").replace(/[。，、！？…；：,.!?;:]/g, "");
+    if (!core) return false;
+    return HAN_RE.test(core) && !HANGUL_RE.test(core) && !/[A-Za-z]{4,}/.test(core);
+}
+
+/**
+ * 模型常把译文单独写一段（有时带括号），通话里会被切成两个气泡，看着像两句台词。
+ * 这里把「紧跟在韩语后面的纯中文段」并回上一条，还原成「韩语 +（中文）」一个气泡。
+ * 2026-11-15 实机：图 1 的 `지금 갈게, 문 열어둬.` /`（我现在过去，门留着。）` 分成了两条。
+ */
+export function mergeTranslationParts<T extends { content: string }>(parts: T[]): T[] {
+    const merged: T[] = [];
+    for (const part of parts) {
+        const prev = merged[merged.length - 1];
+        const following = !!prev && HANGUL_RE.test(prev.content) && !looksLikeChineseLine(prev.content);
+        if (prev && following && looksLikeChineseLine(part.content)) {
+            const raw = part.content.trim();
+            const addition = /^[（(]/.test(raw) ? raw : `（${raw}）`;
+            merged[merged.length - 1] = { ...prev, content: `${prev.content.trim()}\n${addition}` };
+            continue;
+        }
+        merged.push(part);
+    }
+    return merged;
+}
+
+/**
+ * 台词气泡里的「双语句式」统一成：韩语一行 +（中文）一行。
+ * 模型有时把译文直接写成裸的下一行（没有括号），有时带括号，界面看着两种格式（2026-11-15 实机图 3）。
+ */
+export function normalizeBilingualLayout(text: string): string {
+    const lines = String(text || "").split(/\r?\n/);
+    const out: string[] = [];
+    for (const line of lines) {
+        const prev = out[out.length - 1];
+        const isTranslation = !!line.trim() && looksLikeChineseLine(line) && !/^\s*[（(]/.test(line);
+        if (prev && HANGUL_RE.test(prev) && !looksLikeChineseLine(prev) && isTranslation) {
+            out.push(`（${line.trim()}）`);
+            continue;
+        }
+        out.push(line);
+    }
+    return out.join("\n").trim();
 }
 
 /**
  * 把一段回复切成适合分段合成的短句：先合成第一句就能开播，
  * 后面几句在播放的同时并行合成，首字出声延迟明显降低。
- */
-export function splitSpeechChunks(text: string, maxLen = 40): string[] {
+ */export function splitSpeechChunks(text: string, maxLen = 40): string[] {
     const cleaned = text.replace(/\s+/g, " ").trim();
     if (!cleaned) return [];
     const pieces = cleaned.match(/[^。！？!?…；;\n]+[。！？!?…；;]?/g) || [cleaned];

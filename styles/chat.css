@@ -7973,6 +7973,14 @@
   white-space: pre-wrap;
 }
 .call-subtitle[data-role="user"] .call-subtitle-narration { display: none; }
+/* 整条都是旁白时不留气泡底（2026-11-15：以前塞回台词，气泡里直接露出「[旁白] …」） */
+.call-subtitle[data-narration-only="true"] {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0 4px;
+}
 
 /* ===== 旁白行（聊天室气泡内居中淡字；通话页另有 .call-subtitle-narration） ===== */
 .chat-narration-line {

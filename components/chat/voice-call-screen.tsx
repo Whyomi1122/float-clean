@@ -17,7 +17,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { SubtitleText } from "./subtitle-text";
-import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags, cleanSpeechFragment } from "@/lib/call-text";
+import { splitNarration, speechTextForContent, splitSpeechBySentenceCount, splitSentencesForDisplay, stripVoiceNoteWrapper, stripPerformanceTags, cleanSpeechFragment, mergeTranslationParts, normalizeBilingualLayout } from "@/lib/call-text";
 import { extractChatEmotion, toTtsEmotion, type ChatEmotion } from "@/lib/emotion";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
@@ -74,8 +74,8 @@ function stripNarrationForSpeech(text: string, dropTranslation = false): string 
 // 字幕拆分：有真旁白时抽出来单独淡字显示，台词留在 text（朗读 + 气泡）
 function splitSubtitleContent(content: string): { text: string; narration?: string } {
     const { dialogue, narration } = splitNarration(content);
-    const text = dialogue.trim();
-    return { text, ...(narration ? { narration } : {}) };
+    // 整段都是旁白时不要把原文塞回 text（塞回去气泡里就会露出「[旁白] …」），交给 narration 淡字渲染
+    return { text: normalizeBilingualLayout(dialogue), ...(narration ? { narration: narration.trim() } : {}) };
 }
 
 // 通话口径注入：语言（韩语主导）+ 声音表现力标签（实验开关，默认关）。
@@ -412,11 +412,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             : undefined;
 
         // Filter out non-chat action types (voice_call, video_call, poke, etc.)
-        const chatParts = parts.filter(p =>
+        const chatParts = mergeTranslationParts(parts.filter(p =>
             !p.mediaType || !["voice_call", "video_call", "poke", "accept_red_packet", "decline_red_packet", "accept_transfer", "decline_transfer", "accept_payment_request", "decline_payment_request"].includes(p.mediaType)
         ).map(p => p.mediaType === "audio"
             ? { ...p, content: p.mediaData?.label || p.content, mediaType: undefined, mediaData: undefined }
-            : p);
+            : p));
 
         // Save messages to storage
         if (chatParts.length === 0 && (statusPanel || innerMonologue)) {
@@ -1292,6 +1292,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                     key={`${sub.id}-${index}`}
                                     className="call-subtitle"
                                     data-role={sub.role}
+                                    data-narration-only={!sub.text && sub.narration ? "true" : undefined}
                                     data-speaking={(speakingId === sub.id && isLastPart) || undefined}
                                 >
                                     {isEditingThis && isLastPart ? (
@@ -1308,7 +1309,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                             {part && (
                                                 <span className="call-subtitle-body"><SubtitleText text={part} /></span>
                                             )}
-                                            {sub.narration && isLastPart && (
+                                            {sub.narration && (
                                                 <div className="call-subtitle-narration">{sub.narration}</div>
                                             )}
                                         </>

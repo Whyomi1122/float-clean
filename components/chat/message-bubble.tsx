@@ -14,7 +14,7 @@ import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { findStickerByName } from "@/lib/sticker-data";
 import { splitBilingualText } from "@/lib/bilingual-text";
 import { holdMusicDuck, releaseMusicDuck } from "@/lib/music-duck";
-import { cleanSpeechFragment, splitNarration, stripPerformanceTags, hasNarrationMarker, stripChatMarkers } from "@/lib/call-text";
+import { cleanSpeechFragment, splitNarration, stripPerformanceTags, hasNarrationMarker, stripChatMarkers, normalizeBilingualLayout } from "@/lib/call-text";
 import { isInvisibleOrWhitespaceOnly } from "@/lib/rich-message-parser";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -612,7 +612,8 @@ export const BilingualTextBlock = memo(function BilingualTextBlock({
     // 2026-11-14 旁白正向识别：带 [旁白] 暗号时，无论哪个页面都抽成独立旁白行（旧消息走原逻辑）
     const narrationSplitEnabled = narrationMode || hasNarrationMarker(cleanedText);
     const narrationSplit = narrationSplitEnabled ? extractNarration(cleanedText) : null;
-    const displaySource = narrationSplit ? narrationSplit.dialogue : cleanedText;
+    // 台词统一成「韩语一行 +（中文）一行」，别让模型有时带括号有时不带（2026-11-15 实机）
+    const displaySource = normalizeBilingualLayout(narrationSplit ? narrationSplit.dialogue : cleanedText);
     const narrationText = narrationSplit ? narrationSplit.narration : undefined;
     const bilingual = splitBilingualText(displaySource);
     /** 折叠区里的译文同样要剥标签（实机出现过「[内心]…」整段躺在中文折叠里） */

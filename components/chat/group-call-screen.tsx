@@ -13,7 +13,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { BilingualTextBlock } from "./message-bubble";
-import { speechTextForContent, splitNarration } from "@/lib/call-text";
+import { speechTextForContent, splitNarration, mergeTranslationParts, normalizeBilingualLayout } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { isAndroidBrowser, isIOSDevice } from "./voice-input-platform";
@@ -49,12 +49,10 @@ function stripBilingualForSpeech(text: string): string {
     return speechTextForContent(text);
 }
 
-/** 字幕拆分（与语音/视频通话同一口径）：旁白抽出来单独淡字，全是旁白时才塞回正文 */
+/** 字幕拆分（与语音/视频通话同一口径）：旁白单独淡字，整条都是旁白时也不塞回正文 */
 function splitSubtitleContent(content: string): { text: string; narration?: string } {
     const { dialogue, narration } = splitNarration(content);
-    const text = dialogue.trim();
-    if (!text && narration) return { text: narration.trim() };
-    return { text, ...(narration ? { narration } : {}) };
+    return { text: normalizeBilingualLayout(dialogue), ...(narration ? { narration: narration.trim() } : {}) };
 }
 
 type GroupCallScreenProps = {
@@ -253,7 +251,7 @@ export function GroupCallScreen({ type, session, characters, onEnd, initiator = 
                     r.responseText,
                     getLatestCharacterStateValues(r.characterId),
                 );
-                const textParts = parts.filter(p => !p.mediaType && p.content.trim());
+                const textParts = mergeTranslationParts(parts.filter(p => !p.mediaType && p.content.trim()));
                 const displayText = textParts.map(p => p.content).join("\n");
                 const speechText = stripBilingualForSpeech(displayText);
 

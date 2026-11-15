@@ -16,7 +16,7 @@ import { isCallRecordingSupported, resolveCloudSttConfig } from "@/lib/stt-cloud
 import { useHoldToTalk } from "./use-hold-to-talk";
 import { suspendKeepAliveForCall, resumeKeepAliveAfterCall } from "@/lib/use-weixin-bridge";
 import { BilingualTextBlock } from "./message-bubble";
-import { speechTextForContent, splitNarration } from "@/lib/call-text";
+import { speechTextForContent, splitNarration, mergeTranslationParts, normalizeBilingualLayout } from "@/lib/call-text";
 import type { Character } from "@/lib/character-types";
 import { useCallKeyboardOffsetStyle } from "./use-call-keyboard-offset";
 import { CallSttWarningDialog, hideCallSttWarningPermanently, isCallSttWarningHidden } from "./call-stt-warning-dialog";
@@ -67,13 +67,11 @@ function stripBilingualForSpeech(text: string, dropTranslation = false): string 
 
 /**
  * 字幕拆分（与语音通话同一口径）：有真旁白就抽出来单独淡字显示，台词留在 text。
- * 全是旁白时把旁白放进 text，免得气泡空着。
+ * 整段都是旁白时不再塞回正文（否则气泡里会露出「[旁白] …」）。
  */
 function splitSubtitleContent(content: string): { text: string; narration?: string } {
     const { dialogue, narration } = splitNarration(content);
-    const text = dialogue.trim();
-    if (!text && narration) return { text: narration.trim() };
-    return { text, ...(narration ? { narration } : {}) };
+    return { text: normalizeBilingualLayout(dialogue), ...(narration ? { narration: narration.trim() } : {}) };
 }
 
 // ── Component ───────────────────────────────────────
@@ -455,7 +453,9 @@ export function VideoCallScreen({ session, character, onEnd, onConnect, initiato
             }));
             if (stateRef.current === "ENDED") return;
 
-            const { cleanParts } = processAIResponse(aiResponseText);
+            const { cleanParts: rawParts } = processAIResponse(aiResponseText);
+            // 译文被单独写成一段时会变成两个气泡，这里并回上一条
+            const cleanParts = mergeTranslationParts(rawParts.map(content => ({ content }))).map(p => p.content);
             const displayText = cleanParts.join("\n");
             const speechText = stripBilingualForSpeech(displayText, isKoreanDominantVoice(session.contactId));
             // 视频通话整段朗读：情绪从整段回复里取（开关关着就一律不传）
