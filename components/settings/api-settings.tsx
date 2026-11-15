@@ -551,18 +551,15 @@ export function ApiSettings() {
 
                                         {advancedOpen[config.id] && (
                                         <div className="api-form-rows">
-                                        <div
-                                            className="ui-toggle-row overflow-visible"
-                                            style={{ display: "block", position: "relative", height: "auto", flexShrink: 0, padding: "13px 76px 13px 0" }}
-                                        >
-                                            <span className="menu-label font-medium">原生工具调用</span>
-                                            <span className="menu-desc">自动匹配服务商格式（当前：{getNativeToolProtocolLabel(config)}）</span>
-                                            <span style={{ position: "absolute", top: 0, bottom: 0, right: 0, display: "flex", alignItems: "center" }}>
-                                                <Toggle
-                                                    checked={config.enableNativeTools !== false}
-                                                    onChange={(v) => updateConfig(config.id, { enableNativeTools: v })}
-                                                />
+                                        <div className="ui-toggle-row">
+                                            <span className="api-toggle-text">
+                                                <span className="menu-label font-medium">原生工具调用</span>
+                                                <span className="menu-desc api-toggle-desc">当前自动：{getNativeToolProtocolLabel(config)}</span>
                                             </span>
+                                            <Toggle
+                                                checked={config.enableNativeTools !== false}
+                                                onChange={(v) => updateConfig(config.id, { enableNativeTools: v })}
+                                            />
                                         </div>
 
                                         <div className="ui-toggle-row">
@@ -571,10 +568,7 @@ export function ApiSettings() {
                                         </div>
 
                                         <div className="ui-toggle-row">
-                                            <span className="flex min-w-0 flex-col">
-                                                <span className="menu-label font-medium">防胡言乱语</span>
-                                                <span className="menu-desc">无输入时不主动发言</span>
-                                            </span>
+                                            <span className="menu-label font-medium">防胡言乱语</span>
                                             <Toggle
                                                 checked={config.preventEmptyGenerateRambling === true}
                                                 onChange={(v) => updateConfig(config.id, { preventEmptyGenerateRambling: v })}

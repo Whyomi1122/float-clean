@@ -6573,9 +6573,10 @@
    弹窗正文铺一层页面底色、卡片改纯白，白卡才浮得出来；
    组标题纯英文大写淡灰；组内是「行 + 缩进细线」，控件一律裸着不带框。 */
 
-/* 弹窗正文：垫底色（左右负边距让底色铺满，不留白边） */
+/* 弹窗正文：垫底色。注意不要再写负边距——上一次写成 `margin:0 -16px` + 18px 内边距，
+   父容器根本没有 16px 内边距，结果整块被推出屏幕、左右顶格（2026-11-15 实机反馈） */
 .api-form-body {
-  margin: 0 -16px;
+  margin: 0;
   padding-left: 18px !important;
   padding-right: 18px !important;
   background: var(--c-page-body-bg);
@@ -6692,14 +6693,46 @@
   color: var(--c-icon);
 }
 
-/* 弹窗里的输入框 / 下拉：走 tokens 的浅灰填充，无边框 */
+/* 弹窗里的输入框 / 下拉：走 tokens 的浅灰填充，无边框，四个输入框统一高度（2026-11-15） */
 .api-form-card .ui-input,
 .api-form-card .ui-select,
 .api-form-card input[type="text"],
 .api-form-card input[type="password"] {
+  height: 46px;
+  min-height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
   background: var(--c-input);
   border-color: var(--c-input-border);
   border-radius: 12px;
+}
+
+/* 高级卡的开关行：文字在左、开关统一贴右，说明只占一行不换行 */
+.api-form-card .ui-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.api-form-card .api-toggle-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.api-form-card .api-toggle-desc {
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.api-form-card .ui-toggle-row > *:last-child {
+  flex: 0 0 auto;
 }
 
 /* 「行」：左标题 + 右控件 */
@@ -6888,7 +6921,7 @@
 /* 高级卡里的开关：拆掉原来那层白框，跟其它行一样裸着排 */
 .api-form-card .ui-toggle-row {
   min-height: 0;
-  padding: 13px 76px 13px 0;
+  padding: 13px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
