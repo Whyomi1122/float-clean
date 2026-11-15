@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown } from "lucide-react";
+import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import type { ApiConfig } from "@/lib/settings-types";
 import { loadApiConfigs, removeApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
@@ -43,10 +43,10 @@ export function ApiSettings() {
     const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
     /** 模型多选列表的搜索关键字（列表太长时才出现搜索框） */
     const [modelFilter, setModelFilter] = useState<Record<string, string>>({});
-    const [isTesting, setIsTesting] = useState<Record<string, boolean>>({});
-    const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
     /** 编辑配置弹窗里「高级设置」这一段是否展开（默认收起，2026-11-14） */
     const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
+    /** 「可选模型」列表是否展开（右上角小箭头收起，2026-11-14） */
+    const [optionalOpen, setOptionalOpen] = useState<Record<string, boolean>>({});
     /** 拉取模型列表的提示（只显示失败；成功由「可选模型 · N 个」体现，2026-11-14） */
     const [modelNotice, setModelNotice] = useState<Record<string, string>>({});
     /** 单个模型的测试结果，key = `${configId}::${model}`（2026-11-14 用户要求每个模型能单独测） */
@@ -126,10 +126,6 @@ export function ApiSettings() {
         const newFetchedModels = { ...fetchedModels };
         delete newFetchedModels[id];
         setFetchedModels(newFetchedModels);
-
-        const newTestResults = { ...testResult };
-        delete newTestResults[id];
-        setTestResult(newTestResults);
     };
 
     // Use unified determineBaseUrl from api-helpers
@@ -191,57 +187,10 @@ export function ApiSettings() {
         }
     };
 
-    const testConnection = async (config: ApiConfig) => {
-        if (!config.defaultModel) {
-            setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: "请先输入或选择默认模型" } }));
-            return;
-        }
-
-        setIsTesting(prev => ({ ...prev, [config.id]: true }));
-        setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: "" } }));
-
-        try {
-            // 向量模型配置：测 /embeddings 端点。原来一律测 /chat/completions，
-            // 导致 embedding 配置永远 404「测试失败」。
-            if (isEmbeddingModelName(config.defaultModel)) {
-                const embedding = await generateEmbedding("你好", config, { throwOnError: true });
-                if (!embedding) throw new Error("接口未返回向量数据");
-                setTestResult(prev => ({
-                    ...prev,
-                    [config.id]: { success: true, message: `测试成功! 向量模型可用，维度 ${embedding.length}` },
-                }));
-                return;
-            }
-            const result = await simpleLLMCall(
-                config,
-                [{ role: "user", content: "你好" }],
-                // Cap (not spend): reasoning models (deepseek-reasoner / gemini-pro 等) burn
-                // tokens on hidden reasoning first, so a tiny cap leaves the visible
-                // content empty and the test falsely fails (finishReason=length).
-                // 4096 covers heavy thinkers; a "你好" reply still stops well before it.
-                { temperature: 0.2, max_tokens: 4096 },
-            );
-            if (result.error || !result.content) {
-                throw new Error(result.error || "模型返回了空内容");
-            }
-            const reply = result.content.replace(/\s+/g, " ").trim();
-            const preview = reply.length > 80 ? `${reply.slice(0, 80)}...` : reply;
-            setTestResult(prev => ({
-                ...prev,
-                [config.id]: { success: true, message: `测试成功! 模型回复: ${preview}` },
-            }));
-        } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
-            setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: `测试失败: ${msg}` } }));
-        } finally {
-            setIsTesting(prev => ({ ...prev, [config.id]: false }));
-        }
-    };
-
     /**
      * 单独测某一个已选模型（2026-11-14 用户要求「每个被选择的模型可以单独测试」）。
-     * 只把 defaultModel 换成这个模型，其余照旧走 testConnection 的判定逻辑
-     * （向量模型走 /embeddings，聊天模型走 /chat/completions）。
+     * 只把 defaultModel 换成这个模型：向量模型走 /embeddings，聊天模型走 /chat/completions。
+     * 原来那条「测试连接」整行按钮已删（它只测默认模型，和每行测试重复）。
      */
     const testSingleModel = async (config: ApiConfig, model: string) => {
         const key = `${config.id}::${model}`;
@@ -366,7 +315,8 @@ export function ApiSettings() {
                                     <>
                                         <div className="api-form-card">
                                         <p className="api-form-card-title">CONNECTION</p>
-                                        <div className="flex flex-col gap-1">
+                                        <div className="api-field-pair">
+                                        <div className="api-field-col">
                                             <label className="api-field-label">名称</label>
                                             <Input
                                                 type="text"
@@ -375,7 +325,7 @@ export function ApiSettings() {
                                                 placeholder="例如: 我的 OpenAI"
                                             />
                                         </div>
-                                        <div className="flex flex-col gap-1">
+                                        <div className="api-field-col">
                                             <label className="api-field-label">服务商</label>
                                             <select
                                                 value={config.provider}
@@ -394,6 +344,7 @@ export function ApiSettings() {
                                                 <option value="TogetherAI">Together AI</option>
                                                 <option value="Custom">自定义 (Custom)</option>
                                             </select>
+                                        </div>
                                         </div>
 
                                         {/* Custom 必填 Base URL；其他 provider 可选填中转站地址 */}
@@ -425,43 +376,6 @@ export function ApiSettings() {
                                                 placeholder="sk-..."
                                             />
                                         </div>
-
-                                        {/* 测试连接：行式小按钮（2026-11-14 用户定稿，不再用绿色大按钮） */}
-                                        <div className="api-row api-test-row">
-                                            <span className="api-row-label">测试连接</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => testConnection(config)}
-                                                disabled={isTesting[config.id]}
-                                                className="api-pill-btn"
-                                                data-state={
-                                                    isTesting[config.id]
-                                                        ? "testing"
-                                                        : testResult[config.id]?.success
-                                                            ? "ok"
-                                                            : testResult[config.id]?.message
-                                                                ? "fail"
-                                                                : "idle"
-                                                }
-                                            >
-                                                {isTesting[config.id]
-                                                    ? "测试中"
-                                                    : testResult[config.id]?.success
-                                                        ? "✓ 成功"
-                                                        : testResult[config.id]?.message
-                                                            ? "✗ 失败"
-                                                            : "测试"}
-                                            </button>
-                                        </div>
-
-                                        {testResult[config.id] && testResult[config.id].message && (
-                                            <span
-                                                className="api-row-msg"
-                                                data-state={testResult[config.id].success ? "ok" : "fail"}
-                                            >
-                                                {testResult[config.id].message}
-                                            </span>
-                                        )}
                                         </div>
 
                                         <div className="api-form-card">
@@ -484,8 +398,8 @@ export function ApiSettings() {
                                                     return (
                                                         <div key={model} className="api-picked-row">
                                                             <div className="api-picked-head">
+                                                                {index === 0 && <span className="api-picked-dot" aria-label="默认调用" title="默认调用这一个" />}
                                                                 <span className="api-picked-name" title={model}>{model}</span>
-                                                                {index === 0 && <span className="api-picked-tag">默认</span>}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => void testSingleModel(config, model)}
@@ -496,9 +410,9 @@ export function ApiSettings() {
                                                                     {test?.state === "testing"
                                                                         ? "测试中"
                                                                         : test?.state === "ok"
-                                                                            ? "✓ 可用"
+                                                                            ? "可用"
                                                                             : test?.state === "fail"
-                                                                                ? "✗ 失败"
+                                                                                ? "失败"
                                                                                 : "测试"}
                                                                 </button>
                                                                 <button
@@ -523,25 +437,39 @@ export function ApiSettings() {
                                             <span className="api-row-hint">还没选模型，点下面「刷新列表」拉取后勾选</span>
                                         )}
 
-                                        {/* 可选模型：数量在左边，刷新按钮在右边 */}
+                                        {/* 可选模型：数量在左边，刷新 + 收起在右边 */}
                                         <div className="api-row-head api-row-head-spaced">
                                             <span>
                                                 可选模型
                                                 {fetchedModels[config.id] && fetchedModels[config.id].length > 0
                                                     && ` · ${fetchedModels[config.id].length} 个`}
                                             </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => fetchModels(config)}
-                                                disabled={isFetching[config.id]}
-                                                className="api-pill-btn"
-                                                data-state="idle"
-                                            >
-                                                <RefreshCw size={12} className={isFetching[config.id] ? "animate-spin" : ""} />
-                                                {isFetching[config.id] ? "拉取中" : "刷新列表"}
-                                            </button>
+                                            <div className="api-row-actions">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fetchModels(config)}
+                                                    disabled={isFetching[config.id]}
+                                                    className="api-pill-btn"
+                                                    data-state="idle"
+                                                >
+                                                    <RefreshCw size={12} className={isFetching[config.id] ? "animate-spin" : ""} />
+                                                    {isFetching[config.id] ? "拉取中" : "刷新列表"}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setOptionalOpen(prev => ({ ...prev, [config.id]: prev[config.id] === false }))}
+                                                    className="api-pill-btn api-pill-icon"
+                                                    aria-label={optionalOpen[config.id] === false ? "展开可选模型列表" : "收起可选模型列表"}
+                                                >
+                                                    {optionalOpen[config.id] === false
+                                                        ? <ChevronDown size={14} />
+                                                        : <ChevronUp size={14} />}
+                                                </button>
+                                            </div>
                                         </div>
 
+                                        {(optionalOpen[config.id] !== false) && (
+                                        <>
                                         {modelNotice[config.id] && (
                                             <span className="api-model-notice">{modelNotice[config.id]}</span>
                                         )}
@@ -604,6 +532,8 @@ export function ApiSettings() {
                                                     />
                                                 </div>
                                             )}
+                                        </>
+                                        )}
                                         </div>
 
                                         <div className="api-form-card">
@@ -625,10 +555,8 @@ export function ApiSettings() {
                                             className="ui-toggle-row overflow-visible"
                                             style={{ display: "block", position: "relative", height: "auto", flexShrink: 0, padding: "13px 76px 13px 0" }}
                                         >
-                                            <span className="menu-label font-medium">启用原生工具调用</span>
-                                            <span className="menu-desc whitespace-normal break-words leading-[1.45]">
-                                                开启后自动选择该服务商可用的原生工具格式（当前：{getNativeToolProtocolLabel(config)}）；关闭后使用文本动作协议。
-                                            </span>
+                                            <span className="menu-label font-medium">原生工具调用</span>
+                                            <span className="menu-desc">自动匹配服务商格式（当前：{getNativeToolProtocolLabel(config)}）</span>
                                             <span style={{ position: "absolute", top: 0, bottom: 0, right: 0, display: "flex", alignItems: "center" }}>
                                                 <Toggle
                                                     checked={config.enableNativeTools !== false}
@@ -638,14 +566,14 @@ export function ApiSettings() {
                                         </div>
 
                                         <div className="ui-toggle-row">
-                                            <span className="menu-label font-medium">启用图像识别</span>
+                                            <span className="menu-label font-medium">图像识别</span>
                                             <Toggle checked={config.enableImageRecognition} onChange={(v) => updateConfig(config.id, { enableImageRecognition: v })} />
                                         </div>
 
                                         <div className="ui-toggle-row">
                                             <span className="flex min-w-0 flex-col">
                                                 <span className="menu-label font-medium">防胡言乱语</span>
-                                                <span className="menu-desc">防止没有用户输入时胡言乱语</span>
+                                                <span className="menu-desc">无输入时不主动发言</span>
                                             </span>
                                             <Toggle
                                                 checked={config.preventEmptyGenerateRambling === true}
