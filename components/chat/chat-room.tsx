@@ -40,7 +40,8 @@ import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-
 import { ChatSettingsPanel } from "./chat-settings-panel";
 import { startPersistentVoiceCall, VOICE_CALL_ENDED } from "./persistent-voice-call";
 import CallReplayScreen from "./call-replay-screen";
-import { VideoCallScreen } from "./video-call-screen";
+// 视频通话已停用（2026-11-16）：UI 不再挂载，能力已搬进 voice-call-screen
+// import { VideoCallScreen } from "./video-call-screen";
 import { GroupCallScreen } from "./group-call-screen";
 import { TransferTargetModal } from "./transfer-target-modal";
 import { GiftPickerModal } from "./gift-picker-modal";
@@ -5945,7 +5946,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const isSilentThought = !visibleContent && !renderMsg.mediaType && hasFoldedPanel && msg.role !== "user";
                     const isStandaloneHtmlPreview = !renderMsg.mediaType && isStandaloneHtmlPreviewContent(bubbleDisplayContent);
                     // 整条都是旁白：不套气泡，走居中灰色斜体（2026-11-15 用户口径）
-                    const isNarrationOnlyBubble = !renderMsg.mediaType && !isStandaloneHtmlPreview && isNarrationOnlyContent(bubbleDisplayContent || "");
+                    // 注意用原始 content 判断：bubbleDisplayContent 过了一遍用户正则，[旁白] 暗号可能已被清掉
+                    const isNarrationOnlyBubble = !renderMsg.mediaType && !isStandaloneHtmlPreview && isNarrationOnlyContent(renderMsg.content || bubbleDisplayContent || "");
                     const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview;
                     // Empty bubble: no visible content AND no visual media AND no folded panel.
                     const isEmptyBubble = !isVisualMedia && !visibleContent && uiRole(msg) !== "system" && !hasFoldedPanel;
@@ -6990,17 +6992,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 不被卸载，计时/字幕等状态得以保留；组件内部依据 minimized 决定渲染
                 全屏界面还是左侧悬浮窗 */}
 
-            {showVideoCall && character && (
-                <VideoCallScreen
-                    session={session}
-                    character={character}
-                    initiator={callInitiator}
-                    minimized={callMinimized}
-                    onMinimize={() => setCallMinimized(true)}
-                    onRestore={() => setCallMinimized(false)}
-                    onEnd={() => returnFromCall(() => setShowVideoCall(false))}
-                />
-            )}
+            {/* 视频通话 UI 已隐藏（2026-11-16 用户口径：入口收起，界面也不用留）
+                摄像头能力已搬进语音通话（voice-call-screen），video-call-screen.tsx 只留作参考 */}
 
         </div >
     );

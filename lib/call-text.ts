@@ -362,7 +362,8 @@ export function mergeTranslationParts<T extends { content: string }>(parts: T[])
 export function normalizeBilingualLayout(text: string): string {
     const lines = String(text || "").split(/\r?\n/);
     const out: string[] = [];
-    for (const line of lines) {
+    for (const rawLine of lines) {
+        const line = fixBilingualBrackets(rawLine);
         const prev = out[out.length - 1];
         const isTranslation = !!line.trim() && looksLikeChineseLine(line) && !/^\s*[（(]/.test(line);
         if (prev && HANGUL_RE.test(prev) && !looksLikeChineseLine(prev) && isTranslation) {
@@ -372,6 +373,27 @@ export function normalizeBilingualLayout(text: string): string {
         out.push(line);
     }
     return out.join("\n").trim();
+}
+
+/**
+ * 清理双语句式里的括号残渣（2026-11-16 实机图 2）：
+ * `韩语】（中文）`、`（中文]`、`韩语】（` 都是同一类问题——模型用 `【】` 包台词、
+ * 又用 `（）` 包译文，剥标签时只剥掉了开头那个。
+ * 只动「行内/行尾的孤立括号」，不动行首的 `【旁白】` 这类暗号。
+ */
+export function fixBilingualBrackets(line: string): string {
+    if (!line) return line;
+    let out = String(line);
+    // 译文前的孤立 】
+    out = out.replace(/[ \t]*】[ \t]*(?=[（(])/g, " ");
+    // 行尾孤立的 】
+    out = out.replace(/[ \t]*】[ \t]*$/g, "");
+    // 只剩半个 】
+    out = out.replace(/[ \t]*】/g, "");
+    // 混用括号：（中文] / [中文）
+    out = out.replace(/（([^（）()\]]*)\]/g, "（$1）");
+    out = out.replace(/\[([^（）()\[\]]*)）/g, "（$1）");
+    return out.replace(/[ \t]{2,}/g, " ").trimEnd();
 }
 
 /**

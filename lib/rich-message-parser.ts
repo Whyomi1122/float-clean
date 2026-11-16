@@ -14,6 +14,7 @@ import type { StateValue } from "./chat-storage";
 import { parseStateValues, mergeStateValues } from "./state-value-parser";
 import { stripActionShells } from "./action-parser";
 import { stripTextToolDirectives } from "./text-tool-protocol";
+import { mergeTranslationParts } from "./call-text";
 import { extractChatEmotion, type ChatEmotion } from "./emotion";
 import {
     formatCustomAppDirectiveSummary,
@@ -738,8 +739,12 @@ export function parseAIResponse(rawText: string, previousState: StateValue[]): P
         // 情绪是整轮共用一个（模型一轮一个语气），贴到这一轮的每条消息上，朗读语音条时用
         .map(p => (turnEmotion ? { ...p, emotion: turnEmotion } : p));
 
+    // 5.5 「韩语 +（中文）」必须落在同一个气泡：把单独成段的纯中文译文并回上一条台词。
+    //     2026-11-16 实机：同一轮里韩语和译文各占一条，看着像说了两句。
+    const mergedParts = mergeTranslationParts(cleaned);
+
     return {
-        parts: cleaned,
+        parts: mergedParts,
         stateValues,
         freshStateValues: parsedSV.stateValues,
         statusPanel: restore(status.content),
