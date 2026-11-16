@@ -87,52 +87,52 @@ export function AgentComputerSettings({ onNotice }: { onNotice?: (msg: string) =
     };
 
     return (
-        <div className="flex flex-col gap-[16px]">
-            <div className="ui-group-card !items-stretch">
-                <div className="flex items-start gap-3">
-                    <div className="ui-icon-circle shrink-0"><Laptop size={20} /></div>
-                    <div className="flex-1 flex flex-col gap-1">
-                        <span className="menu-label font-medium">角色电脑</span>
-                        <span className="menu-desc !mt-0">
-                            给角色和小坊各配一台云端小电脑：持久硬盘 + 常用命令。
-                            部署在你自己的 Cloudflare 账号里（免费计划即可），数据只属于你。
+        <div className="flex flex-col gap-6">
+            <div className="prefs-block">
+                <span className="prefs-block-label">Role Computer</span>
+                <div className="prefs-row">
+                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">角色电脑</span>
+                        <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                            给角色和小坊各配一台云端小电脑：持久硬盘 + 常用命令。部署在你自己的 Cloudflare 账号里（免费计划即可），数据只属于你。
                         </span>
                     </div>
                 </div>
-                <div className="flex flex-col gap-3 mt-4">
-                    <div className="flex items-center gap-3">
-                        <div className="flex-1 flex flex-col gap-1 min-w-0">
-                            <span className="menu-label">容器版（真 Linux）</span>
-                            <span className="menu-desc !mt-0">可装软件、全功能联网；需 Cloudflare 付费计划（$5/月起）</span>
-                        </div>
-                        <Toggle checked={containerDeploy} onChange={setContainerDeploy} />
+                <div className="prefs-row">
+                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">容器版（真 Linux）</span>
+                        <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">可装软件、全功能联网；需 Cloudflare 付费计划（$5/月起）</span>
                     </div>
-                    <button
-                        type="button"
-                        className="ui-btn ui-btn-primary w-full justify-center"
-                        onClick={() => window.open(containerDeploy ? AGENT_COMPUTER_CONTAINER_DEPLOY_URL : AGENT_COMPUTER_DEPLOY_URL, "_blank", "noopener")}
-                    >
-                        <Rocket size={16} /> {containerDeploy ? "一键部署（容器版）到 Cloudflare" : "一键部署到 Cloudflare"}
-                    </button>
-                    <span className="menu-desc !mt-0 text-center">
+                    <Toggle checked={containerDeploy} onChange={setContainerDeploy} className="settings-toggle-control" />
+                </div>
+                <button
+                    type="button"
+                    className="prefs-row"
+                    onClick={() => window.open(containerDeploy ? AGENT_COMPUTER_CONTAINER_DEPLOY_URL : AGENT_COMPUTER_DEPLOY_URL, "_blank", "noopener")}
+                >
+                    <span className="ts-14 text-[var(--c-text)]">{containerDeploy ? "一键部署（容器版）到 Cloudflare ↗" : "一键部署到 Cloudflare ↗"}</span>
+                </button>
+                <button
+                    type="button"
+                    className="prefs-row"
+                    onClick={() => window.open("https://github.com/xiaolongbao0709/agent-computer#部署按钮失败--想删掉重新部署", "_blank", "noopener")}
+                >
+                    <span className="ts-14 text-[var(--c-text)] opacity-70">一键部署失败？这里有另一条路</span>
+                </button>
+                <div className="pb-3">
+                    <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
                         {containerDeploy
                             ? "容器版配置已内置，流程与普通部署相同、无需改任何文件；部署时同样需要自定「AGENT_TOKEN」密钥。"
                             : "部署时需要自定一段「AGENT_TOKEN」连接密钥；完成后把 Worker 地址和密钥填到下面。"}
                     </span>
-                    <button
-                        type="button"
-                        className="menu-desc !mt-0 text-center underline bg-transparent border-none cursor-pointer"
-                        onClick={() => window.open("https://github.com/xiaolongbao0709/agent-computer#部署按钮失败--想删掉重新部署", "_blank", "noopener")}
-                    >
-                        一键部署失败？这里有另一条路
-                    </button>
                 </div>
             </div>
 
-            <div className="ui-group-card !items-stretch">
-                <div className="flex flex-col gap-3">
+            <div className="prefs-block">
+                <span className="prefs-block-label">Connection</span>
+                <div className="flex flex-col gap-3 py-3">
                     <div className="flex flex-col gap-1.5">
-                        <span className="menu-label font-medium">Worker 地址</span>
+                        <span className="ts-13 font-semibold text-[var(--c-text-title)]">Worker 地址</span>
                         <Input
                             value={config.endpoint}
                             placeholder="https://ai-phone-agent-computer.xxx.workers.dev"
@@ -140,7 +140,7 @@ export function AgentComputerSettings({ onNotice }: { onNotice?: (msg: string) =
                         />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                        <span className="menu-label font-medium">连接密钥（AGENT_TOKEN）</span>
+                        <span className="ts-13 font-semibold text-[var(--c-text-title)]">连接密钥（AGENT_TOKEN）</span>
                         <Input
                             type="password"
                             value={config.token}
@@ -157,7 +157,7 @@ export function AgentComputerSettings({ onNotice }: { onNotice?: (msg: string) =
                         {testing ? <><Loader2 size={16} className="animate-spin" /> 测试中…</> : "连接测试并保存"}
                     </button>
                     {status && (
-                        <span className="menu-desc !mt-0 text-center">
+                        <span className="ts-11 text-center leading-relaxed text-[var(--c-text)] opacity-70">
                             {status.ok
                                 ? status.mode === "container"
                                     ? "✓ 已连接：容器模式（真 Linux，可 npm/pip、全功能网络）"
@@ -167,30 +167,30 @@ export function AgentComputerSettings({ onNotice }: { onNotice?: (msg: string) =
                                 : `✗ 连接失败：${status.error}`}
                         </span>
                     )}
-                    {config.endpoint.trim() !== "" && (
-                        <button type="button" className="ui-btn w-full justify-center text-[var(--c-danger)]" onClick={handleDisconnect}>
-                            断开连接
-                        </button>
-                    )}
                 </div>
+                {config.endpoint.trim() !== "" && (
+                    <button type="button" className="prefs-row" onClick={handleDisconnect}>
+                        <span className="ts-14 text-[var(--c-danger)]">断开连接</span>
+                    </button>
+                )}
             </div>
 
             {connected && (
-                <div className="ui-group-card !items-stretch">
-                    <span className="menu-label font-medium">谁在用这台电脑</span>
-                    <div className="flex items-center gap-3 mt-3">
-                        <div className="flex-1 flex flex-col gap-1 min-w-0">
-                            <span className="menu-label">角色</span>
-                            <span className="menu-desc !mt-0">每个角色一台独立电脑：写日记、翻旧文件、发文件、跑命令</span>
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Who Uses It</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">角色</span>
+                            <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">每个角色一台独立电脑：写日记、翻旧文件、发文件、跑命令</span>
                         </div>
-                        <Toggle checked={characterOn} onChange={handleCharacterToggle} />
+                        <Toggle checked={characterOn} onChange={handleCharacterToggle} className="settings-toggle-control" />
                     </div>
-                    <div className="flex items-center gap-3 mt-3">
-                        <div className="flex-1 flex flex-col gap-1 min-w-0">
-                            <span className="menu-label">小坊（工坊）</span>
-                            <span className="menu-desc !mt-0">给小坊一台工作机：读写文件、执行命令，产出文件交付给你</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">小坊（工坊）</span>
+                            <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">给小坊一台工作机：读写文件、执行命令，产出文件交付给你</span>
                         </div>
-                        <Toggle checked={workshopOn} onChange={handleWorkshopToggle} />
+                        <Toggle checked={workshopOn} onChange={handleWorkshopToggle} className="settings-toggle-control" />
                     </div>
                 </div>
             )}

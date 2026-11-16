@@ -821,7 +821,7 @@ export function ToolboxSettings() {
             </div>
             {/* REST Tools */}
             <div className="flex justify-between items-center gap-3">
-                <p className="settings-menu-section-title">Tools</p>
+                <p className="prefs-block-label m-0">Tools</p>
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
@@ -938,7 +938,7 @@ export function ToolboxSettings() {
 
             {/* Workflows */}
             <div className="flex justify-between items-center gap-3">
-                <p className="settings-menu-section-title">Workflows</p>
+                <p className="prefs-block-label m-0">Workflows</p>
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
@@ -1069,7 +1069,7 @@ export function ToolboxSettings() {
 
             {/* Internal Capabilities */}
             <div className="flex justify-between items-center">
-                <p className="settings-menu-section-title">Internal Capabilities</p>
+                <p className="prefs-block-label m-0">Internal Capabilities</p>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -1109,7 +1109,7 @@ export function ToolboxSettings() {
 
             {/* Custom APP Tools */}
             <div className="flex justify-between items-center">
-                <p className="settings-menu-section-title">Custom APP Tools</p>
+                <p className="prefs-block-label m-0">Custom APP Tools</p>
             </div>
 
             {customAppTools.length === 0 ? (
@@ -1203,7 +1203,7 @@ export function ToolboxSettings() {
 
             {/* MCP Servers */}
             <div className="flex justify-between items-center gap-3">
-                <p className="settings-menu-section-title">MCP Servers</p>
+                <p className="prefs-block-label m-0">MCP Servers</p>
                 <button
                     onClick={addMcpServer}
                     className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-black px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"

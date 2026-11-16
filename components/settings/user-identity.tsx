@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useContext, useMemo } from "react";
-import { Plus, User, Trash2, FileEdit, AlertCircle, Camera, Link, X, Check } from "lucide-react";
+import { User, AlertCircle, Camera, Link, X, Check, ChevronRight } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
 import { loadUserIdentities, saveUserIdentities } from "@/lib/settings-storage";
 import { composeImagePrompt } from "@/lib/image-generation-service";
@@ -105,17 +105,10 @@ export function UserIdentitySettings() {
     }, [identities, setIdentities]);
 
     useEffect(() => {
-        setSubpageRightAction("identity",
-            <button
-                onClick={addIdentity}
-                className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-            >
-                <Plus size={15} strokeWidth={1.8} />
-                <span>新增身份</span>
-            </button>
-        );
+        // 2026-11-16 设置内页重排：「新增身份」从右上角胶囊挪到列表卡底行
+        setSubpageRightAction("identity", null);
         return () => setSubpageRightAction("identity", null);
-    }, [addIdentity, setSubpageRightAction]);
+    }, [setSubpageRightAction]);
 
     const updateIdentity = (id: string, updates: Partial<UserIdentity>) => {
         setIdentities(identities.map(i => i.id === id ? { ...i, ...updates } : i));
@@ -137,76 +130,48 @@ export function UserIdentitySettings() {
             </div>
 
             {identities.length === 0 ? (
-                <div className="ui-empty">
-                    <div className="ui-icon-circle">
-                        <User size={24} />
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Identities</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有身份卡片</span>
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">填写你的身份信息，AI 会更懂你是谁</span>
+                        </div>
                     </div>
-                    <span className="menu-label font-semibold">没有身份卡片</span>
-                    <span className="menu-desc max-w-[240px]">
-                        在此管理您的个人身份信息，以便 AI 能够更好地了解您。
-                    </span>
-                    <button onClick={addIdentity} className="ui-btn ui-btn-primary rounded-[20px] mt-2">
-                        <Plus size={16} /> 添加身份
+                    <button type="button" className="prefs-row" onClick={addIdentity}>
+                        <span className="ts-14 text-[var(--c-text)]">＋ 新增身份</span>
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Identities</span>
                     {identities.map(identity => (
-                        <div
+                        <button
                             key={identity.id}
-                            className="ui-config-card min-w-0 cursor-pointer overflow-hidden"
-                            style={{ aspectRatio: "3 / 2", padding: "12px", justifyContent: "space-between" }}
-                            role="button"
-                            tabIndex={0}
+                            type="button"
+                            className="prefs-row"
                             aria-label={`编辑 ${identity.name || "身份"}`}
                             onClick={() => setEditingId(identity.id)}
-                            onKeyDown={(event) => {
-                                if (event.target !== event.currentTarget) return;
-                                if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    setEditingId(identity.id);
-                                }
-                            }}
                         >
-                            <div className="min-w-0 flex flex-col gap-1">
-                                <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{identity.name || "未命名身份"}</span>
-                                <span className="menu-desc truncate">{identity.occupation || identity.bio || identity.gender || "未填写身份信息"}</span>
-                            </div>
-                            <div className="flex items-end justify-between gap-2">
-                                {identity.avatarUrl ? (
-                                    <img src={identity.avatarUrl} alt={identity.name} className="h-9 w-9 rounded-full object-cover shrink-0" />
-                                ) : (
-                                    <div className="h-9 w-9 rounded-full bg-[var(--c-page-body-bg)] text-[var(--c-icon)] grid place-items-center shrink-0">
-                                        <User size={18} />
-                                    </div>
-                                )}
-
-                                <div className="flex gap-2 shrink-0 items-center">
-                                    <button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            setEditingId(identity.id);
-                                        }}
-                                        className="ui-link-btn"
-                                    >
-                                        <FileEdit size={18} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            setConfirmDeleteId(identity.id);
-                                        }}
-                                        className="ui-link-btn"
-                                        data-variant="danger"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                            {identity.avatarUrl ? (
+                                <img src={identity.avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
+                            ) : (
+                                <span className="h-11 w-11 shrink-0 rounded-xl bg-[var(--c-input)] grid place-items-center text-[var(--c-icon)]">
+                                    <User size={18} />
+                                </span>
+                            )}
+                            <span className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{identity.name || "未命名身份"}</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                    {identity.occupation || identity.bio || identity.gender || "未填写身份信息"}
+                                </span>
+                            </span>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                        </button>
                     ))}
+                    <button type="button" className="prefs-row" onClick={addIdentity}>
+                        <span className="ts-14 text-[var(--c-text)]">＋ 新增身份</span>
+                    </button>
                 </div>
             )}
 
@@ -345,6 +310,23 @@ export function UserIdentitySettings() {
                                             identity={identity}
                                             onChange={(patch) => updateIdentity(identity.id, patch)}
                                         />
+
+                                        {!isNewIdentity && (
+                                            <div className="prefs-block">
+                                                <button
+                                                    type="button"
+                                                    className="prefs-row"
+                                                    onClick={() => {
+                                                        const id = identity.id;
+                                                        setIsNewIdentity(false);
+                                                        setEditingId(null);
+                                                        setConfirmDeleteId(id);
+                                                    }}
+                                                >
+                                                    <span className="ts-14 text-[var(--c-danger)]">删除这张身份卡</span>
+                                                </button>
+                                            </div>
+                                        )}
                                     </>
                                 )
                             })()}

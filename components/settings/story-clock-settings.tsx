@@ -168,14 +168,13 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
     return (
         <div className="flex flex-col gap-6">
             <div className="flex items-center gap-2">
-                <Clock size={20} strokeWidth={1.8} className="mx-2 text-black/60" />
-                <h2 className="m-0 ts-24 font-bold italic leading-none text-black">Story Clock</h2>
+                <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">Story Clock</h2>
             </div>
 
             {/* 时间线选择：默认 + 每个剧本各一条 */}
-            <div className="flex flex-col gap-2">
-                <h3 className="mx-2 text-[13px] font-bold text-black/50">选一条时间线</h3>
-                <div className="flex flex-wrap gap-2 px-2">
+            <div className="prefs-block">
+                <span className="prefs-block-label">Timeline</span>
+                <div className="flex flex-wrap gap-2 py-3">
                     {timelines.map(option => {
                         const active = (option.scope ?? null) === currentScope;
                         const offset = getStoryOffset(option.scope ?? null);
@@ -197,39 +196,44 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                         );
                     })}
                 </div>
-                <p className="mx-2 m-0 text-[12px] leading-relaxed text-black/40">
-                    同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「通用（现实）时间线」。
-                </p>
-                {timelines.length <= 1 && (
-                    <p className="mx-2 m-0 text-[12px] leading-relaxed text-amber-600/80">
-                        还没读到剧本分组：群像里走完一段并归档（杀青）之后，这里会按剧本列出各自的线。
+                <div className="pb-3">
+                    <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                        同一剧本的角色共用一条时间线；不属于任何剧本的角色、以及群聊，走「通用（现实）时间线」。
                     </p>
-                )}
+                    {timelines.length <= 1 && (
+                        <p className="m-0 mt-1 ts-11 leading-relaxed text-amber-600/80">
+                            还没读到剧本分组：群像里走完一段并归档（杀青）之后，这里会按剧本列出各自的线。
+                        </p>
+                    )}
+                </div>
             </div>
 
-            <div className="ui-config-card" style={{ gap: 10 }}>
-                <div className="flex items-center justify-between gap-3">
-                    <span className="text-[13px] font-semibold text-black/45">剧情时间</span>
-                    <span className="text-[15px] font-bold text-black tabular-nums">{formatDateTime(storyNow)}</span>
+            <div className="prefs-block">
+                <span className="prefs-block-label">Story Time</span>
+                <div className="prefs-row">
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">剧情时间</span>
+                    <span className="ts-14 font-bold text-[var(--c-text-title)] tabular-nums">{formatDateTime(storyNow)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                    <span className="text-[13px] font-semibold text-black/45">现实时间</span>
-                    <span className="text-[13px] font-medium text-black/60 tabular-nums">{formatDateTime(realNow)}</span>
+                <div className="prefs-row">
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">现实时间</span>
+                    <span className="ts-13 text-[var(--c-text)] opacity-70 tabular-nums">{formatDateTime(realNow)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                    <span className="text-[13px] font-semibold text-black/45">偏移</span>
-                    <span className="text-[13px] font-medium text-black/60">{describeOffset(offsetMs)}</span>
+                <div className="prefs-row">
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">偏移</span>
+                    <span className="ts-13 text-[var(--c-text)] opacity-70">{describeOffset(offsetMs)}</span>
                 </div>
-                <p className="m-0 text-[12px] leading-relaxed text-black/40">
-                    普通聊天、一起听、归档、界面上的时间都按剧情时间走。历史消息的时间戳不会改，只换算显示。
-                </p>
+                <div className="pb-3">
+                    <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                        普通聊天、一起听、归档、界面上的时间都按剧情时间走。历史消息的时间戳不会改，只换算显示。
+                    </p>
+                </div>
             </div>
 
             {/* 锚点卡片只对剧本时间线有意义：通用（现实）线没有群像锚点，整块隐藏（2026-11-14） */}
             {currentScope !== null && (
-                <div className="flex flex-col gap-3">
-                    <h3 className="mx-2 text-[13px] font-bold text-black/50">对齐群像当前锚点</h3>
-                    <div className="ui-config-card" style={{ gap: 10 }}>
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Align To Anchor</span>
+                    <div className="flex flex-col gap-3 py-2">
                         {anchorLoading ? (
                             <span className="text-[13px] text-black/45">读取群像归档…</span>
                         ) : activeOption?.anchor ? (
@@ -264,11 +268,11 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 </div>
             )}
 
-            <div className="flex flex-col gap-3">
-                <h3 className="mx-2 text-[13px] font-bold text-black/50">手动校准（{activeOption?.label || "通用（现实）时间线"}）</h3>
-                <div className="ui-config-card" style={{ gap: 10 }}>
-                    <span className="text-[12px] leading-relaxed text-black/45">
-                        告诉 App「这条时间线里现在是几点」，之后都从这里继续走。
+            <div className="prefs-block">
+                <span className="prefs-block-label">Manual Calibration</span>
+                <div className="flex flex-col gap-3 py-2">
+                    <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                        告诉 App「这条时间线里现在是几点」，之后都从这里继续走。（{activeOption?.label || "通用（现实）时间线"}）
                     </span>
                     <input
                         type="datetime-local"
@@ -289,18 +293,16 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
             </div>
 
             {typeof timeAware === "boolean" && onTimeAwareChange && (
-                <div className="flex flex-col gap-3">
-                    <h3 className="mx-2 text-[13px] font-bold text-black/50">历史时间标注</h3>
-                    <div className="ui-config-card" style={{ gap: 10 }}>
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="flex flex-col gap-1">
-                                <span className="text-[14px] font-semibold text-black">在历史事件流里标注时间</span>
-                                <span className="text-[12px] leading-relaxed text-black/45">
-                                    关掉后喂给 AI 的历史消息不带「几点几分」，TA 就不那么在意时间。原「真实时间感知」开关。
-                                </span>
-                            </div>
-                            <Toggle checked={timeAware} onChange={() => onTimeAwareChange(!timeAware)} className="settings-toggle-control" />
+                <div className="prefs-block">
+                    <span className="prefs-block-label">History Timestamps</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">在历史事件流里标注时间</span>
+                            <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                                关掉后喂给 AI 的历史消息不带「几点几分」，TA 就不那么在意时间。原「真实时间感知」开关。
+                            </span>
                         </div>
+                        <Toggle checked={timeAware} onChange={() => onTimeAwareChange(!timeAware)} className="settings-toggle-control" />
                     </div>
                 </div>
             )}
