@@ -805,7 +805,7 @@ export function ToolboxSettings() {
                 onChange={handleImportTools}
             />
             {/* 通用：单条消息的工具循环轮数上限 */}
-            <div className="ui-group-card !flex-row !items-center">
+            <div className="prefs-row">
                 <div className="flex-1 flex flex-col gap-1 min-w-0">
                     <span className="menu-label">工具轮数上限</span>
                     <span className="menu-desc !mt-0 !whitespace-normal">单条消息最多进行几轮工具调用（每轮一次模型请求，轮内条数不限）。连续干活的任务（如角色电脑跑命令）可调高</span>
@@ -834,7 +834,7 @@ export function ToolboxSettings() {
                     <button
                         type="button"
                         onClick={addRestPackage}
-                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-black px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-[var(--c-primary)] px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                     >
                         <Plus size={14} strokeWidth={1.8} />
                         添加套件
@@ -843,15 +843,18 @@ export function ToolboxSettings() {
             </div>
 
             {restTools.length === 0 && restPackages.length === 0 ? (
-                <div className="ui-empty-compact mt-2">
-                    <div className="ui-icon-circle"><Wrench size={24} /></div>
-                    <span className="menu-label font-semibold">没有工具</span>
-                    <span className="menu-desc max-w-[240px]">可以创建单件 REST 工具，也可以创建套件后添加多个子工具。</span>
+                <div className="prefs-block">
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有工具</span>
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">可以创建单件 REST 工具，也可以创建套件后添加多个子工具</span>
+                        </div>
+                    </div>
                 </div>
             ) : (
-                <div className="flex flex-col gap-2">
+                <div className="prefs-block">
                     {singleRestTools.map(t => (
-                        <div key={t.id} className="ui-group-card !flex-row !items-center">
+                        <div key={t.id} className="prefs-row">
                             <button onClick={() => setEditRestId(t.id)}
                                 className="flex-1 min-w-0 bg-none border-none cursor-pointer py-2 px-0 text-left flex items-center gap-2 overflow-hidden">
                                 <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -877,7 +880,7 @@ export function ToolboxSettings() {
                         const children = restTools.filter(t => t.packageId === pkg.id);
                         return (
                             <div key={pkg.id} className="flex flex-col gap-1.5">
-                                <div className="ui-group-card !flex-row !items-center">
+                                <div className="prefs-row">
                                     <button onClick={() => setEditRestPackageId(pkg.id)}
                                         className="flex-1 min-w-0 bg-none border-none cursor-pointer py-2 px-0 text-left flex items-center gap-2 overflow-hidden">
                                         <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -902,13 +905,13 @@ export function ToolboxSettings() {
                                     </div>
                                 </div>
 
-                                <div className="ml-3 flex flex-col gap-1.5 border-l border-[var(--c-border)] pl-3">
+                                <div className="ml-3 flex flex-col border-l border-[var(--c-card-border)] pl-3">
                                     {children.length === 0 ? (
                                         <div className="ui-group-card py-2">
                                             <span className="menu-desc !mt-0">暂无子工具</span>
                                         </div>
                                     ) : children.map(t => (
-                                        <div key={t.id} className="ui-group-card !flex-row !items-center py-2">
+                                        <div key={t.id} className="prefs-row">
                                             <button onClick={() => setEditRestId(t.id)}
                                                 className="flex-1 min-w-0 bg-none border-none cursor-pointer py-1 px-0 text-left flex items-center gap-2 overflow-hidden">
                                                 <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -951,7 +954,7 @@ export function ToolboxSettings() {
                     <button
                         type="button"
                         onClick={addCompositePackage}
-                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-black px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-[var(--c-primary)] px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                     >
                         <Plus size={14} strokeWidth={1.8} />
                         添加套件
@@ -960,11 +963,11 @@ export function ToolboxSettings() {
             </div>
 
             {compositeTools.length === 0 && compositePackages.length === 0 ? (
-                <div className="ui-empty-compact mt-2"><span className="menu-desc">暂无 Workflows</span></div>
+                <div className="prefs-block"><div className="prefs-row"><span className="ts-11 text-[var(--c-text)] opacity-70">暂无 Workflows</span></div></div>
             ) : (
-                <div className="flex flex-col gap-2">
+                <div className="prefs-block">
                     {singleCompositeTools.map(t => (
-                        <div key={t.id} className="ui-group-card !flex-row !items-center">
+                        <div key={t.id} className="prefs-row">
                             <button onClick={() => setEditCompositeId(t.id)}
                                 className="flex-1 min-w-0 bg-none border-none cursor-pointer py-2 px-0 text-left flex items-center gap-2 overflow-hidden">
                                 <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -991,7 +994,7 @@ export function ToolboxSettings() {
                         const isExpanded = expandedCompositePackageIds.has(pkg.id);
                         return (
                             <div key={pkg.id} className="flex flex-col gap-1.5">
-                                <div className="ui-group-card !flex-row !items-center">
+                                <div className="prefs-row">
                                     <button
                                         type="button"
                                         onClick={() => toggleCompositePackageExpanded(pkg.id)}
@@ -1032,13 +1035,13 @@ export function ToolboxSettings() {
                                 </div>
 
                                 {isExpanded && (
-                                    <div className="ml-3 flex flex-col gap-1.5 border-l border-[var(--c-border)] pl-3">
+                                    <div className="ml-3 flex flex-col border-l border-[var(--c-card-border)] pl-3">
                                         {children.length === 0 ? (
                                             <div className="ui-group-card py-2">
                                                 <span className="menu-desc !mt-0">暂无组合工具</span>
                                             </div>
                                         ) : children.map(t => (
-                                            <div key={t.id} className="ui-group-card !flex-row !items-center py-2">
+                                            <div key={t.id} className="prefs-row">
                                                 <button onClick={() => setEditCompositeId(t.id)}
                                                     className="flex-1 min-w-0 bg-none border-none cursor-pointer py-1 px-0 text-left flex items-center gap-2 overflow-hidden">
                                                     <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -1072,7 +1075,7 @@ export function ToolboxSettings() {
                 <p className="prefs-block-label m-0">Internal Capabilities</p>
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="prefs-block">
                 {/* 角色电脑的开关收进 设置 → 角色电脑，与小坊的开关放在一处 */}
                 {internalCapabilities.filter(item => item.id !== AGENT_COMPUTER_CAPABILITY_ID).map(item => {
                     const summary = (
@@ -1086,7 +1089,7 @@ export function ToolboxSettings() {
                     );
 
                     return (
-                        <div key={item.id} className="ui-group-card !flex-row !items-center">
+                        <div key={item.id} className="prefs-row">
                             <button onClick={() => setEditInternalId(item.id)}
                                 className="flex-1 min-w-0 bg-none border-none cursor-pointer py-2 px-0 text-left flex items-center gap-2 overflow-hidden">
                                 {summary}
@@ -1113,16 +1116,18 @@ export function ToolboxSettings() {
             </div>
 
             {customAppTools.length === 0 ? (
-                <div className="ui-empty-compact mt-2">
-                    <span className="menu-desc">暂无共享给聊天和其他 APP 的自定义 APP 工具</span>
+                <div className="prefs-block">
+                    <div className="prefs-row">
+                        <span className="ts-11 text-[var(--c-text)] opacity-70">暂无共享给聊天和其他 APP 的自定义 APP 工具</span>
+                    </div>
                 </div>
             ) : (
-                <div className="flex flex-col gap-2">
+                <div className="prefs-block">
                     {customAppToolGroups.map(group => {
                         const first = group[0];
                         if (group.length === 1) {
                             return (
-                                <div key={customAppToolKey(first)} className="ui-group-card !flex-row !items-center">
+                                <div key={customAppToolKey(first)} className="prefs-row">
                                     <button
                                         type="button"
                                         onClick={() => setEditCustomAppToolKey(customAppToolKey(first))}
@@ -1148,7 +1153,7 @@ export function ToolboxSettings() {
                         const isExpanded = expandedCustomAppGroupIds.has(first.appId);
                         return (
                             <div key={first.appId} className="flex flex-col gap-1.5">
-                                <div className="ui-group-card !flex-row !items-center">
+                                <div className="prefs-row">
                                     <button
                                         type="button"
                                         onClick={() => toggleCustomAppGroupExpanded(first.appId)}
@@ -1172,9 +1177,9 @@ export function ToolboxSettings() {
                                     </div>
                                 </div>
                                 {isExpanded && (
-                                <div className="ml-3 flex flex-col gap-1.5 border-l border-[var(--c-border)] pl-3">
+                                <div className="ml-3 flex flex-col border-l border-[var(--c-card-border)] pl-3">
                                     {group.map(tool => (
-                                        <div key={customAppToolKey(tool)} className="ui-group-card !flex-row !items-center py-2">
+                                        <div key={customAppToolKey(tool)} className="prefs-row">
                                             <button
                                                 type="button"
                                                 onClick={() => setEditCustomAppToolKey(customAppToolKey(tool))}
@@ -1206,7 +1211,7 @@ export function ToolboxSettings() {
                 <p className="prefs-block-label m-0">MCP Servers</p>
                 <button
                     onClick={addMcpServer}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-black px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-[var(--c-primary)] px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                 >
                     <Plus size={14} strokeWidth={1.8} />
                     添加新MCP工具
@@ -1214,11 +1219,11 @@ export function ToolboxSettings() {
             </div>
 
             {mcpServers.length === 0 ? (
-                <div className="ui-empty-compact mt-2"><span className="menu-desc">暂无 MCP 服务器</span></div>
+                <div className="prefs-block"><div className="prefs-row"><span className="ts-11 text-[var(--c-text)] opacity-70">暂无 MCP 服务器</span></div></div>
             ) : (
-                <div className="flex flex-col gap-2">
+                <div className="prefs-block">
                     {mcpServers.map(s => (
-                        <div key={s.id} className="ui-group-card !flex-row !items-center">
+                        <div key={s.id} className="prefs-row">
                             <button onClick={() => setEditMcpId(s.id)}
                                 className="flex-1 min-w-0 bg-none border-none cursor-pointer py-2 px-0 text-left flex items-center gap-2 overflow-hidden">
                                 <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -1874,7 +1879,7 @@ function CompositeStepsEditor({
     }
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="prefs-block">
             {steps.map((step, index) => (
                 <div key={step.id || index} className="ui-group-card gap-2">
                     <div className="flex items-center justify-between gap-2">
@@ -1964,7 +1969,7 @@ function FixedParamsEditor({
     function remove(key: string) { const next = { ...params }; delete next[key]; onChange(next); }
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="prefs-block">
             {entries.map(([key, value], i) => (
                 <div key={i} className="flex gap-2 items-center">
                     {/* min-w-0：input 固有最小宽度 ~170px，不放开的话两个输入框会把窄弹窗撑出横向滚动 */}

@@ -40,6 +40,10 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
     const [isLoaded, setIsLoaded] = useState(false);
     const [expandUid, setExpandUid] = useState<string | null>(null);
     const [importError, setImportError] = useState<string | null>(null);
+    // ── 新建世界书 底部弹窗（2026-11-16：先起名再创建） ──
+    const [createSheetOpen, setCreateSheetOpen] = useState(false);
+    const [newBookName, setNewBookName] = useState("");
+    const [newBookDesc, setNewBookDesc] = useState("");
 
     /** 格式导入：粘贴 / 选 .txt 的世界书·文风·归档，自动识别类型后导入 */
     const [showTxtImport, setShowTxtImport] = useState(false);
@@ -283,11 +287,20 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
 
     // --- Book Level Operations ---
     const addBook = useCallback(() => {
-        const newBook = createWorldBook("新世界书");
+        setCreateSheetOpen(true);
+    }, []);
+
+    /** 弹窗里填完名称/说明后真正创建（2026-11-16） */
+    const createBookFromSheet = useCallback(() => {
+        const newBook = createWorldBook(newBookName.trim() || "新世界书");
+        if (newBookDesc.trim()) newBook.description = newBookDesc.trim();
         persist([newBook, ...books]);
+        setCreateSheetOpen(false);
+        setNewBookName("");
+        setNewBookDesc("");
         setActiveBookId(newBook.id);
         setViewMode("detail");
-    }, [books, persist]);
+    }, [newBookName, newBookDesc, books, persist]);
 
     useEffect(() => {
         // 2026-11-16 设置内页重排：「导入 / 新建」从右上角胶囊挪到列表卡底行，这里不再挂载右上动作
@@ -698,7 +711,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                 <button
                                     type="button"
                                     onClick={() => handleExport(activeBook)}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95"
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95"
                                 >
                                     <Download size={15} strokeWidth={1.8} />
                                     <span>导出世界书</span>
@@ -1002,7 +1015,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                             <button
                                 type="button"
                                 onClick={() => setAddEntryMenuOpen(true)}
-                                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                             >
                                 <Plus size={15} strokeWidth={1.8} />
                                 添加条目
@@ -1034,7 +1047,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                 />
             )}
 
-            {importError && (
+            {importError && !showTxtImport && (
                 <ConfirmDialog
                     title="导入失败"
                     message={importError}
@@ -1045,6 +1058,47 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                     onConfirm={() => setImportError(null)}
                     onCancel={() => setImportError(null)}
                 />
+            )}
+
+            {/* 新建世界书：先起名再创建（2026-11-16） */}
+            {createSheetOpen && (
+                <BottomSheet
+                    title="新建世界书"
+                    onClose={() => setCreateSheetOpen(false)}
+                    onDone={createBookFromSheet}
+                >
+                    <div className="flex flex-col gap-4 pb-2">
+                        <div className="flex flex-col gap-1.5">
+                            <span className="prefs-block-label">名称</span>
+                            <input
+                                className="ui-input"
+                                value={newBookName}
+                                onChange={(e) => setNewBookName(e.target.value)}
+                                placeholder="比如「海边的旧房子」"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <span className="prefs-block-label">说明（可选）</span>
+                            <input
+                                className="ui-input"
+                                value={newBookDesc}
+                                onChange={(e) => setNewBookDesc(e.target.value)}
+                                placeholder="这个设定的用途"
+                            />
+                        </div>
+                        <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                            创建后会进入世界书详情，可以继续加条目。
+                        </p>
+                        <button
+                            type="button"
+                            className="ui-btn ui-btn-primary w-full justify-center"
+                            onClick={createBookFromSheet}
+                        >
+                            创建世界书
+                        </button>
+                    </div>
+                </BottomSheet>
             )}
 
             {/* 格式导入（.txt 自动识别：世界书 / 归档） */}
@@ -1088,7 +1142,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                         onClick={() => setTxtImportKind(value)}
                                         className={`flex-1 rounded-full px-3 py-2 text-[13px] font-bold transition-colors ${
                                             txtImportKind === value
-                                                ? "bg-black text-white"
+                                                ? "bg-[var(--c-primary)] text-white"
                                                 : "bg-[var(--c-card-hover,#F3F5F8)] text-[var(--c-text-dim)]"
                                         }`}
                                     >
@@ -1113,7 +1167,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                                 onClick={() => setTxtImportBookMode(value)}
                                                 className={`flex-1 rounded-full px-3 py-2 text-[13px] font-bold transition-colors ${
                                                     txtImportBookMode === value
-                                                        ? "bg-black text-white"
+                                                        ? "bg-[var(--c-primary)] text-white"
                                                         : "bg-[var(--c-card-hover,#F3F5F8)] text-[var(--c-text-dim)]"
                                                 }`}
                                             >
@@ -1217,7 +1271,7 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                                 onClick={() => setTxtImportArchiveMode(value)}
                                                 className={`flex-1 rounded-full px-3 py-2 text-[13px] font-bold transition-colors ${
                                                     txtImportArchiveMode === value
-                                                        ? "bg-black text-white"
+                                                        ? "bg-[var(--c-primary)] text-white"
                                                         : "bg-[var(--c-card-hover,#F3F5F8)] text-[var(--c-text-dim)]"
                                                 }`}
                                             >
@@ -1231,6 +1285,11 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
 
                         {txtImportError && (
                             <p className="text-[12px] font-semibold text-red-500">{txtImportError}</p>
+                        )}
+
+                        {/* JSON 导入失败也留在弹窗里提示（2026-11-16），不再另弹对话框 */}
+                        {importError && (
+                            <p className="text-[12px] font-semibold text-red-500">{importError}</p>
                         )}
 
                         <button

@@ -43,6 +43,17 @@
   --c-danger: #FF3B30;
   --c-warning: #FF9500;
 
+  /* ── 主色（2026-11-16：按钮 / 开关 / 选中态统一蓝，用户选定 A 雾蓝） ── */
+  --c-primary: #5B8FB9;
+  /* 主按钮底、开关「开」、选中胶囊、Tab 下划线、聚焦圈 */
+  --c-primary-ink: #3E729B;
+  /* 浅底上的蓝字（次要按钮文字、行内文字按钮、右侧当前值） */
+  --c-primary-soft: rgba(91, 143, 185, 0.14);
+  /* 次要按钮底、选中胶囊的浅色变体 */
+  --c-primary-ring: rgba(91, 143, 185, 0.28);
+  /* 主按钮投影、聚焦外圈 */
+  --c-primary-shadow: 0 4px 14px rgba(91, 143, 185, 0.32);
+
   /* ── 业务色 7 ── */
   --c-redpacket: #e8602c;
   --c-redpacket-gold: #fa9d3b;

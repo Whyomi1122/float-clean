@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // components/ensemble/ensemble-status-sheet.tsx
 // 群像「状态面板」设置页（对齐用户提供的图：① 字段 / DATA ② 模板 / TEMPLATE）
@@ -180,7 +180,7 @@ export function StatusToggleRow({
         type="button"
         onClick={() => onChange(!checked)}
         className={`shrink-0 w-[46px] h-[27px] rounded-full transition-colors duration-200 relative ${
-          checked ? "bg-[#111111]" : "bg-black/15"
+          checked ? "bg-[var(--c-primary)]" : "bg-black/15"
         }`}
         role="switch"
         aria-checked={checked}

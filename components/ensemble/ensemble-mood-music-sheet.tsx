@@ -99,7 +99,7 @@ export default function EnsembleMoodMusicSheet({ scriptId, scriptTitle, apiConfi
               className={`shrink-0 px-3.5 py-2 rounded-[11px] text-[12px] font-medium transition-all ${
                 running || !apiConfig
                   ? "bg-black/[0.06] text-black/25"
-                  : "bg-[#111111] text-white active:scale-[0.97]"
+                  : "bg-[var(--c-primary)] text-white active:scale-[0.97]"
               }`}
             >
               {running ? "生成中" : apiConfig ? "生成" : "无模型"}

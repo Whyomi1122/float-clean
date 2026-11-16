@@ -787,7 +787,7 @@ function PalettePresetPage({
         </button>
         <button
           type="button"
-          className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+          className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
           onClick={handleApplyAll}
         >
           <PaintBucket size={15} strokeWidth={1.8} />
@@ -902,7 +902,7 @@ function TextScalePage({
         <div className="my-3">
           <button
             type="button"
-            className="inline-flex h-10 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
             onClick={() => fontFileRef.current?.click()}
           >
             <Type size={15} strokeWidth={1.8} />
@@ -1416,7 +1416,7 @@ function WallpaperPage({
       <div className="flex flex-col items-center justify-center pt-2 pb-4 border-b border-black/5">
         <button
           type="button"
-          className="inline-flex items-center justify-center gap-1.5 rounded-[20px] bg-black px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+          className="inline-flex items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
           onClick={() => fileRef.current?.click()}
         >
           <Plus size={15} strokeWidth={1.8} />
@@ -1612,7 +1612,7 @@ function WidgetManagerPage({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col items-center justify-center pt-2 pb-4 border-b border-black/5">
           <button
-             className={`px-6 py-2.5 rounded-[20px] text-sm font-bold shadow-sm transition-all focus:outline-none ${(showStudio && !editingTemplate) ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-black text-white hover:bg-gray-800 hover:shadow-md active:scale-95'}`}
+             className={`px-6 py-2.5 rounded-[20px] text-sm font-bold shadow-sm transition-all focus:outline-none ${(showStudio && !editingTemplate) ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-[var(--c-primary)] text-white hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95'}`}
              onClick={() => {
                if (showStudio && !editingTemplate) {
                  setShowStudio(false);

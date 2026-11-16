@@ -208,6 +208,13 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
     const [groupTestInput, setGroupTestInput] = useState("");
     const [groupTestExpandStep, setGroupTestExpandStep] = useState<number | null>(null);
     const [importError, setImportError] = useState<string | null>(null);
+    // ── 新建 / 导入 底部弹窗（2026-11-16） ──
+    const [createSheetOpen, setCreateSheetOpen] = useState(false);
+    const [newGroupName, setNewGroupName] = useState("");
+    const [newGroupDesc, setNewGroupDesc] = useState("");
+    const [importSheetOpen, setImportSheetOpen] = useState(false);
+    const [importDraft, setImportDraft] = useState("");
+    const [importInlineError, setImportInlineError] = useState<string | null>(null);
     const [customApps, setCustomApps] = useState<InstalledCustomApp[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -293,10 +300,42 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
 
     // --- Group Level Operations ---
     const addGroup = useCallback(() => {
-        const newGroup = createRegexGroup("新正则组");
+        setCreateSheetOpen(true);
+    }, []);
+
+    /** 弹窗里填完名称/说明后真正创建 */
+    const createGroupFromSheet = useCallback(() => {
+        const newGroup = createRegexGroup(newGroupName.trim() || "新正则组");
+        if (newGroupDesc.trim()) newGroup.description = newGroupDesc.trim();
         persist([newGroup, ...groups]);
+        setCreateSheetOpen(false);
+        setNewGroupName("");
+        setNewGroupDesc("");
         setActiveGroupId(newGroup.id);
         setViewMode("detail");
+    }, [newGroupName, newGroupDesc, groups, persist]);
+
+    /** 文件导入 / 粘贴导入共用：失败原因留在弹窗里 */
+    const importRegexText = useCallback((text: string, fallbackName: string) => {
+        try {
+            const parsed = parseRegexFromJson(text, fallbackName);
+            if (!parsed) {
+                setImportInlineError("无法解析正则文件，格式不正确。");
+                return;
+            }
+            const scoped = normalizeGroupScope(parsed);
+            persist([scoped, ...groups]);
+            setActiveGroupId(scoped.id);
+            setImportSheetOpen(false);
+            setImportDraft("");
+            setImportInlineError(null);
+        } catch (err) {
+            setImportInlineError(
+                err instanceof Error && err.message === UNSUPPORTED_IMPORT_FORMAT
+                    ? "不支持该正则格式"
+                    : "无法解析正则文件，格式不正确。"
+            );
+        }
     }, [groups, persist]);
 
     useEffect(() => {
@@ -324,28 +363,9 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const text = event.target?.result as string;
-                const fallbackName = file.name.replace(/\.json$/i, "") || "导入的正则组";
-                const parsed = parseRegexFromJson(text, fallbackName);
-                if (parsed) {
-                    const scoped = normalizeGroupScope(parsed);
-                    persist([scoped, ...groups]);
-                    setActiveGroupId(scoped.id);
-                } else {
-                    setImportError("无法解析正则文件，格式不正确。");
-                }
-            } catch (e) {
-                if (e instanceof Error && e.message === UNSUPPORTED_IMPORT_FORMAT) {
-                    setImportError("不支持该正则格式");
-                } else {
-                    setImportError("无法解析正则文件，格式不正确。");
-                }
-            }
-        };
-        reader.readAsText(file);
+        void file.text().then((text) => {
+            importRegexText(text, file.name.replace(/\.json$/i, "") || "导入的正则组");
+        });
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -529,7 +549,7 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                             <button type="button" className="prefs-row" onClick={addGroup}>
                                 <span className="ts-14 text-[var(--c-text)]">＋ 新建正则组</span>
                             </button>
-                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                            <button type="button" className="prefs-row" onClick={() => { setImportInlineError(null); setImportSheetOpen(true); }}>
                                 <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
                             </button>
                         </div>
@@ -556,7 +576,7 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                             <button type="button" className="prefs-row" onClick={addGroup}>
                                 <span className="ts-14 text-[var(--c-text)]">＋ 新建正则组</span>
                             </button>
-                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                            <button type="button" className="prefs-row" onClick={() => { setImportInlineError(null); setImportSheetOpen(true); }}>
                                 <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
                             </button>
                         </div>
@@ -570,7 +590,7 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                                 <button
                                     type="button"
                                     onClick={() => handleExport(activeGroup)}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95"
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95"
                                 >
                                     <Download size={15} strokeWidth={1.8} />
                                     <span>导出正则</span>
@@ -1056,7 +1076,7 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                             <button
                                 type="button"
                                 onClick={() => setAddRuleMenuOpen(true)}
-                                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                             >
                                 <Plus size={15} strokeWidth={1.8} />
                                 添加条目
@@ -1098,6 +1118,97 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                     onConfirm={() => setImportError(null)}
                     onCancel={() => setImportError(null)}
                 />
+            )}
+
+            {/* 新建正则组：先起名再创建（2026-11-16） */}
+            {createSheetOpen && (
+                <BottomSheet
+                    title="新建正则组"
+                    onClose={() => setCreateSheetOpen(false)}
+                    onDone={createGroupFromSheet}
+                >
+                    <div className="flex flex-col gap-4 pb-2">
+                        <div className="flex flex-col gap-1.5">
+                            <span className="prefs-block-label">名称</span>
+                            <input
+                                className="ui-input"
+                                value={newGroupName}
+                                onChange={(e) => setNewGroupName(e.target.value)}
+                                placeholder="比如「破折号清理」"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <span className="prefs-block-label">说明（可选）</span>
+                            <input
+                                className="ui-input"
+                                value={newGroupDesc}
+                                onChange={(e) => setNewGroupDesc(e.target.value)}
+                                placeholder="一句话描述这组规则做什么"
+                            />
+                        </div>
+                        <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                            创建后会进入组详情，可以继续加规则。
+                        </p>
+                        <button
+                            type="button"
+                            className="ui-btn ui-btn-primary w-full justify-center"
+                            onClick={createGroupFromSheet}
+                        >
+                            创建正则组
+                        </button>
+                    </div>
+                </BottomSheet>
+            )}
+
+            {/* 导入正则组：选文件 / 粘贴 */}
+            {importSheetOpen && (
+                <BottomSheet
+                    title="导入正则组"
+                    onClose={() => {
+                        setImportSheetOpen(false);
+                        setImportInlineError(null);
+                    }}
+                >
+                    <div className="flex flex-col gap-3 pb-2">
+                        <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
+                            支持本 App 导出的正则 JSON；单组或数组都行。
+                        </p>
+                        <button
+                            type="button"
+                            className="ui-btn ui-btn-primary w-full justify-center"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            选择 JSON 文件
+                        </button>
+                        <div className="flex items-center gap-2 ts-11 text-[var(--c-text)] opacity-60">
+                            <span className="h-px flex-1 bg-[var(--c-icon)] opacity-20" />
+                            <span>或直接粘贴</span>
+                            <span className="h-px flex-1 bg-[var(--c-icon)] opacity-20" />
+                        </div>
+                        <textarea
+                            className="ui-textarea"
+                            rows={8}
+                            value={importDraft}
+                            onChange={(e) => {
+                                setImportDraft(e.target.value);
+                                if (importInlineError) setImportInlineError(null);
+                            }}
+                            placeholder={'{\n  "name": "示例正则组",\n  "rules": []\n}'}
+                        />
+                        {importInlineError && (
+                            <p className="m-0 ts-11 leading-relaxed text-[var(--c-danger)]">{importInlineError}</p>
+                        )}
+                        <button
+                            type="button"
+                            className="ui-btn ui-btn-outline w-full justify-center"
+                            disabled={!importDraft.trim()}
+                            onClick={() => importRegexText(importDraft, "导入的正则组")}
+                        >
+                            粘贴内容导入
+                        </button>
+                    </div>
+                </BottomSheet>
             )}
 
             {addRuleMenuOpen && activeGroup && (

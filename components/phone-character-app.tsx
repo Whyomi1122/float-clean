@@ -1087,7 +1087,7 @@ function CharListView({
             <button
               className={`flex items-center justify-center w-[34px] h-[34px] rounded-full transition-colors ${
                 isEditing
-                  ? 'bg-[#111111] text-white shadow-md'
+                  ? 'bg-[var(--c-primary)] text-white shadow-md'
                   : 'bg-black/5 text-[#666] hover:bg-black/10'
               }`}
               onClick={() => toggleEditing()}
@@ -2261,7 +2261,7 @@ function CharArchiveView({
             {isEditing && (
               <div className="mt-2 flex flex-col gap-1 w-full justify-center">
                 <button
-                  className="ts-10 px-3 py-1 bg-[#111111] text-white border-none rounded-full cursor-pointer hover:bg-[#222222] transition-colors"
+                  className="ts-10 px-3 py-1 bg-[var(--c-primary)] text-white border-none rounded-full cursor-pointer hover:bg-[#222222] transition-colors"
                   onClick={() => setShowUrlInput((v) => !v)}
                 >
                   Use IMG URL
@@ -2509,7 +2509,7 @@ function CharArchiveView({
                 <span className="char-log-entry-header !mb-0">BRIEF PERSONA / 简量人设</span>
                 {isEditing && (
                   <button
-                    className="ts-10 px-3 py-1 bg-[#111111] text-white border-none rounded-full cursor-pointer disabled:opacity-50 hover:bg-[#222222] transition-colors"
+                    className="ts-10 px-3 py-1 bg-[var(--c-primary)] text-white border-none rounded-full cursor-pointer disabled:opacity-50 hover:bg-[#222222] transition-colors"
                     disabled={briefBusy}
                     onClick={handleGenerateBrief}
                   >

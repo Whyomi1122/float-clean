@@ -99,7 +99,7 @@ function ToolRow({
           图标与其容器同步收一档，避免「图标空、文字小」的失衡。 */}
       <span
         className={`w-10 h-10 rounded-[12px] shrink-0 grid place-items-center ${
-          enabled ? "bg-[#111111]" : "bg-black/20"
+          enabled ? "bg-[var(--c-primary)]" : "bg-black/20"
         }`}
       >
         <Icon size={18} strokeWidth={1.9} className="text-white" />

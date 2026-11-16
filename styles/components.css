@@ -343,6 +343,28 @@
   gap: 12px;
 }
 
+/* 配置绑定：层级胶囊（2026-11-16：全局 / 角色 / 应用 一行切换） */
+.binding-level-pills {
+  display: flex;
+  gap: 8px;
+}
+.binding-level-pill {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--c-card-border);
+  background: var(--c-panel);
+  color: var(--c-text);
+  font-size: calc(12.5px * var(--app-text-scale, 1));
+  font-weight: 700;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+.binding-level-pill[data-active="true"] {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--c-primary-ring);
+}
+
 .binding-global-primary-row,
 .binding-global-compact-row {
   display: grid;
@@ -962,9 +984,9 @@
 
 .ui-btn-primary,
 .ui-btn-action {
-  background: var(--c-icon-active);
+  background: var(--c-primary);
   color: white;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--c-icon-active) 35%, transparent), inset 0 1px 1px rgba(255,255,255,0.15);
+  box-shadow: var(--c-primary-shadow), inset 0 1px 1px rgba(255,255,255,0.15);
 }
 .ui-btn-success {
   background: var(--c-success);
@@ -978,18 +1000,18 @@
 }
 .ui-btn-ghost {
   background: transparent;
-  color: var(--c-icon-active);
+  color: var(--c-primary-ink);
   padding: 8px 12px;
 }
 .ui-btn-outline {
-  background: color-mix(in srgb, var(--c-text) 8%, transparent);
+  background: var(--c-primary-soft);
   border: none;
-  color: var(--c-text-title);
+  color: var(--c-primary-ink);
 }
 .ui-btn-soft-action {
-  background: color-mix(in srgb, var(--c-icon-active) 10%, transparent);
+  background: var(--c-primary-soft);
   border: none;
-  color: var(--c-icon-active);
+  color: var(--c-primary-ink);
 }
 .ui-btn-soft-danger {
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
@@ -1014,7 +1036,7 @@
 }
 .ui-chip:active { transform: scale(0.96); }
 .ui-chip[data-selected] {
-  background: var(--c-icon-active);
+  background: var(--c-primary);
   color: #fff;
 }
 .ui-chip-avatar {
@@ -1057,7 +1079,7 @@
   outline: none;
   transition: border-color 0.2s;
 }
-.ui-input:focus { border-color: var(--c-icon-active); }
+.ui-input:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft); }
 .ui-input::placeholder { color: var(--c-icon); }
 .ui-input-inline { border: none; padding: 0; background: transparent; }
 
@@ -1075,7 +1097,7 @@
   font-family: inherit;
   transition: border-color 0.2s;
 }
-.ui-textarea:focus { border-color: var(--c-icon-active); }
+.ui-textarea:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft); }
 .ui-textarea::placeholder { color: var(--c-icon); }
 
 .ui-select {
@@ -4031,7 +4053,7 @@
   padding: 0;
 }
 .ui-toggle[data-checked] {
-  background: var(--c-success);
+  background: var(--c-primary);
 }
 .ui-toggle-knob {
   position: absolute;
@@ -4225,7 +4247,7 @@
   transition: background 0.12s ease;
 }
 .ui-icon-btn[data-active="true"] {
-  background: var(--c-icon-active);
+  background: var(--c-primary);
   border-color: transparent;
   color: white;
 }
@@ -4291,14 +4313,14 @@
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.ui-entry-card[data-active="true"] { border-color: var(--c-icon-active); }
+.ui-entry-card[data-active="true"] { border-color: var(--c-primary); }
 .ui-entry-card[data-disabled="true"] { opacity: 0.5; }
 
 /* ── 预设条目按 App 筛选：高亮/变暗 ── */
 .ui-entry-card[data-app-match="1"] {
-  border-color: var(--c-icon-active);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-icon-active) 30%, transparent);
-  background: color-mix(in srgb, var(--c-icon-active) 6%, var(--c-card, #fff));
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--c-primary) 6%, var(--c-card, #fff));
 }
 .ui-entry-card[data-app-match="0"] {
   opacity: 0.3;
@@ -4407,7 +4429,7 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.ui-swipe-action[data-variant="insert"] { background: var(--c-icon-active); }
+.ui-swipe-action[data-variant="insert"] { background: var(--c-primary); }
 .ui-swipe-action[data-variant="replace"] { background: var(--c-warning); }
 .ui-swipe-action[data-variant="export"] { background: var(--c-icon); }
 .ui-swipe-action[data-variant="delete"] { background: var(--c-danger); }
@@ -4431,7 +4453,7 @@
 }
 .ui-slider {
   --ui-slider-track: color-mix(in srgb, var(--c-icon) 48%, transparent);
-  --ui-slider-thumb: var(--c-icon);
+  --ui-slider-thumb: var(--c-primary);
   --ui-slider-thumb-border: var(--c-panel);
   flex: 1 1 auto;
   height: 44px;
@@ -4576,7 +4598,7 @@
 }
 
 .generation-parameter-chip[data-selected] {
-  background: var(--c-icon-active);
+  background: var(--c-primary);
   color: #fff;
   font-weight: 600;
 }
@@ -4960,7 +4982,7 @@
 
 /* ── Checkbox accent color ── */
 .ui-checkbox-accent {
-  accent-color: var(--c-success);
+  accent-color: var(--c-primary);
 }
 
 .ui-checkbox-label {
@@ -4979,7 +5001,7 @@
   width: 14px;
   height: 14px;
   margin: 0;
-  accent-color: var(--c-icon-active);
+  accent-color: var(--c-primary);
 }
 
 /* ── State values panel ── */

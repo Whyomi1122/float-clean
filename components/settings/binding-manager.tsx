@@ -601,31 +601,27 @@ export function BindingManager() {
             : "继承全局";
 
         return (
-            <div key={field} className="binding-aux-select">
-                <button
-                    type="button"
-                    onClick={() => {
-                        reloadData();
-                        setActiveAuxSheetField(field);
-                    }}
-                    className="binding-aux-trigger"
-                    aria-haspopup="dialog"
-                >
-                    {renderAuxFieldIcon(field)}
-                    <span className="binding-card-copy">
-                        <span className="binding-choice-label">{label}</span>
-                        <span className="binding-choice-desc">{getAuxFieldDescription(field)}</span>
-                    </span>
-                    <span className="binding-choice-row">
-                        <span className={selectedOption ? "binding-choice-value" : "binding-choice-value is-empty"}>{displayValue}</span>
-                        <ChevronRight
-                            size={15}
-                            strokeWidth={1.7}
-                            className="binding-choice-chevron"
-                        />
-                    </span>
-                </button>
-            </div>
+            <button
+                key={field}
+                type="button"
+                className="prefs-row"
+                aria-haspopup="dialog"
+                onClick={() => {
+                    reloadData();
+                    setActiveAuxSheetField(field);
+                }}
+            >
+                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">{label}</span>
+                    <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">{getAuxFieldDescription(field)}</span>
+                </div>
+                <span className={selectedOption
+                    ? "ts-12 truncate max-w-[46%] shrink-0 text-[var(--c-primary-ink)]"
+                    : "ts-12 truncate max-w-[46%] shrink-0 text-[var(--c-text)] opacity-45"}>
+                    {displayValue}
+                </span>
+                <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+            </button>
         );
     };
 
@@ -635,51 +631,36 @@ export function BindingManager() {
         onOpenField: (field: BindingField) => void,
         options?: { includeRegex?: boolean },
     ) => {
-        const primaryFields: BindingField[] = ["apiConfigId", "voiceConfigId"];
-        const compactFields: BindingField[] = options?.includeRegex === false
-            ? ["presetId", "worldBookIds"]
-            : ["presetId", "worldBookIds", "regexIds"];
-        const renderBindingCard = (field: BindingField, variant: "large" | "small" | "wide") => {
-            const display = getSlotFieldDisplay(slot, field, emptyText);
-            const valueClassName = [
-                "binding-choice-value",
-                display.isEmpty ? "is-empty" : "",
-                display.isInherited ? "is-inherited" : "",
-            ].filter(Boolean).join(" ");
-            return (
-                <button
-                    key={field}
-                    type="button"
-                    className={`binding-choice-card binding-choice-card-global binding-choice-card-${variant}`}
-                    onClick={() => {
-                        reloadData();
-                        onOpenField(field);
-                    }}
-                >
-                    <span className="binding-card-main">
-                        {renderBindingFieldIcon(field, variant === "wide" ? 23 : 20)}
-                        <span className="binding-card-copy">
-                            <span className="binding-choice-label">{getBindingFieldLabel(field)}</span>
-                            <span className="binding-choice-desc">{getBindingFieldDescription(field)}</span>
-                        </span>
-                    </span>
-                    <span className="binding-choice-row">
-                        <span className={valueClassName}>{display.text}</span>
-                        <ChevronRight size={15} strokeWidth={1.7} className="binding-choice-chevron" />
-                    </span>
-                </button>
-            );
-        };
-
+        const fields: BindingField[] = options?.includeRegex === false
+            ? ["apiConfigId", "voiceConfigId", "presetId", "worldBookIds", "userIdentityId"]
+            : ["apiConfigId", "voiceConfigId", "presetId", "worldBookIds", "regexIds", "userIdentityId"];
         return (
-            <div className="binding-global-grid">
-                <div className="binding-global-primary-row">
-                    {primaryFields.map(field => renderBindingCard(field, "large"))}
-                </div>
-                <div className="binding-global-compact-row" data-count={compactFields.length}>
-                    {compactFields.map(field => renderBindingCard(field, "small"))}
-                </div>
-                {renderBindingCard("userIdentityId", "wide")}
+            <div className="flex flex-col">
+                {fields.map(field => {
+                    const display = getSlotFieldDisplay(slot, field, emptyText);
+                    const valueClassName = [
+                        "ts-12 truncate max-w-[46%] shrink-0",
+                        display.isEmpty ? "text-[var(--c-text)] opacity-45" : "text-[var(--c-primary-ink)]",
+                    ].filter(Boolean).join(" ");
+                    return (
+                        <button
+                            key={field}
+                            type="button"
+                            className="prefs-row"
+                            onClick={() => {
+                                reloadData();
+                                onOpenField(field);
+                            }}
+                        >
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">{getBindingFieldLabel(field)}</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">{getBindingFieldDescription(field)}</span>
+                            </div>
+                            <span className={valueClassName}>{display.text}</span>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                        </button>
+                    );
+                })}
             </div>
         );
     };
@@ -1152,6 +1133,45 @@ export function BindingManager() {
 
     return (
         <div className="flex flex-col gap-[24px]">
+            {/* 层级胶囊（2026-11-16）：一行直接切全局 / 角色 / 应用 */}
+            <div className="binding-level-pills">
+                <button
+                    type="button"
+                    className="binding-level-pill"
+                    data-active={level === "global"}
+                    onClick={() => {
+                        setLevel("global");
+                        setSelectedCharId("");
+                        setSelectedAppId(null);
+                    }}
+                >
+                    全局
+                </button>
+                <button
+                    type="button"
+                    className="binding-level-pill"
+                    data-active={level === "character"}
+                    onClick={() => {
+                        if (selectedCharId) setLevel("character");
+                        else setShowCharacterPicker(true);
+                    }}
+                >
+                    角色
+                </button>
+                <button
+                    type="button"
+                    className="binding-level-pill"
+                    data-active={level === "app"}
+                    onClick={() => {
+                        if (selectedAppId) setLevel("app");
+                        else if (selectedCharId) setLevel("character");
+                        else setShowCharacterPicker(true);
+                    }}
+                >
+                    应用
+                </button>
+            </div>
+
             {/* Level 1: Global defaults + character action */}
             {level === "global" && (
                 <>
@@ -1191,7 +1211,7 @@ export function BindingManager() {
 
                     <section className="prefs-block">
                         <span className="prefs-block-label">App Bindings</span>
-                        <div className="binding-app-grid pb-2">
+                        <div className="flex flex-col">
                             {appOverrideEntries.map(app => {
                                 const appSlot = getAppSpecificSlot(app.id);
                                 const overrideCount = countOverrides(appSlot, app.id);
@@ -1203,25 +1223,23 @@ export function BindingManager() {
                                             setActiveSlotSheetField(null);
                                             setLevel("app");
                                         }}
-                                        className="g-card binding-app-card"
-                                        style={bindingAccentStyle(app.color)}
+                                        className="prefs-row"
                                         aria-label={`${app.label}应用绑定`}
                                     >
-                                        <span className="binding-app-icon">
+                                        <span className="binding-app-icon h-8 w-8 shrink-0 overflow-hidden rounded-lg grid place-items-center" style={bindingAccentStyle(app.color)}>
                                             {app.iconDataUrl ? (
-                                                <img src={app.iconDataUrl} alt="" className="binding-app-icon-image" />
+                                                <img src={app.iconDataUrl} alt="" className="h-full w-full object-cover" />
                                             ) : (
                                                 <IconGlyph id={app.iconId} className="binding-app-icon-glyph" />
                                             )}
                                         </span>
-                                        <span className="binding-app-label">
-                                            {app.label}
-                                        </span>
-                                        {overrideCount > 0 && (
-                                            <span className="binding-app-badge">
-                                                {overrideCount}
+                                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                            <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{app.label}</span>
+                                            <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                                {overrideCount > 0 ? `${overrideCount} 项单独设置` : "继承角色绑定"}
                                             </span>
-                                        )}
+                                        </div>
+                                        <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
                                     </button>
                                 );
                             })}

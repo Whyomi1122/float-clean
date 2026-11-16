@@ -185,9 +185,9 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                                 onClick={() => setSelectedScope(option.scope ?? null)}
                                 className="rounded-full border px-3 py-1.5 text-[12px] font-semibold transition"
                                 style={{
-                                    borderColor: active ? "var(--c-accent, #111)" : "rgba(0,0,0,0.12)",
-                                    background: active ? "rgba(0,0,0,0.06)" : "transparent",
-                                    color: active ? "#111" : "rgba(0,0,0,0.55)",
+                                    borderColor: active ? "var(--c-primary)" : "rgba(0,0,0,0.12)",
+                                    background: active ? "var(--c-primary-soft)" : "transparent",
+                                    color: active ? "var(--c-primary-ink)" : "rgba(0,0,0,0.55)",
                                 }}
                             >
                                 {option.label}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -88,7 +88,8 @@ import {
   saveEnsembleFontData,
   loadEnsembleFontData,
 } from "@/lib/ensemble-storage";
-import { generateStoryboardImage } from "@/lib/ensemble-storyboard";
+import { generateStoryboardImage, getStoryboardDebug, type StoryboardDebug } from "@/lib/ensemble-storyboard";
+import { StoryboardDebugSheet } from "./storyboard-debug-sheet";
 import { buildPlotText } from "@/lib/ensemble-mood-music";
 import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sheet";
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
@@ -1420,6 +1421,32 @@ export function EnsembleApp({
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
   /** 分镜大图预览（2026-11-13）：点一下图 → 全屏看 + 保存 */
   const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string } | null>(null);
+  // 长按分镜图 → 看本次生图实际发出的提示词（排查串脸）
+  const [storyboardDebugOpen, setStoryboardDebugOpen] = useState(false);
+  const [storyboardDebugTurnId, setStoryboardDebugTurnId] = useState<string | null>(null);
+  const [storyboardDebugData, setStoryboardDebugData] = useState<StoryboardDebug | null>(null);
+  const storyboardLongPressRef = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
+
+  const beginStoryboardLongPress = (turnId: string) => {
+    storyboardLongPressRef.current.fired = false;
+    if (storyboardLongPressRef.current.timer !== null) {
+      window.clearTimeout(storyboardLongPressRef.current.timer);
+    }
+    storyboardLongPressRef.current.timer = window.setTimeout(() => {
+      storyboardLongPressRef.current.fired = true;
+      storyboardLongPressRef.current.timer = null;
+      setStoryboardDebugData(getStoryboardDebug(turnId));
+      setStoryboardDebugTurnId(turnId);
+      setStoryboardDebugOpen(true);
+    }, 550);
+  };
+
+  const cancelStoryboardLongPress = () => {
+    if (storyboardLongPressRef.current.timer !== null) {
+      window.clearTimeout(storyboardLongPressRef.current.timer);
+      storyboardLongPressRef.current.timer = null;
+    }
+  };
   /** 他的心情音乐（2026-11-08）：只在剧情室开，弹窗写指令 → 后台生成 */
   const [showMoodMusicSheet, setShowMoodMusicSheet] = useState(false);
   /** 投递：先选「用哪一句台词作为起点」，再选落点（单聊 / 群聊）。 */
@@ -4372,14 +4399,29 @@ ${lastSpeakerNote}
                     <div className="mt-2 flex justify-center">
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          if (storyboardLongPressRef.current.fired) {
+                            storyboardLongPressRef.current.fired = false;
+                            return;
+                          }
                           setStoryboardPreview({
                             url: turn.storyboardUrl!,
                             name: `分镜-${turn.senderName || turn.id}`,
-                          })
-                        }
+                          });
+                        }}
+                        onPointerDown={() => beginStoryboardLongPress(turn.id)}
+                        onPointerUp={cancelStoryboardLongPress}
+                        onPointerLeave={cancelStoryboardLongPress}
+                        onPointerCancel={cancelStoryboardLongPress}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          cancelStoryboardLongPress();
+                          setStoryboardDebugData(getStoryboardDebug(turn.id));
+                          setStoryboardDebugTurnId(turn.id);
+                          setStoryboardDebugOpen(true);
+                        }}
                         className="block w-[88%] overflow-hidden rounded-xl transition-opacity active:opacity-90"
-                        aria-label="查看分镜大图"
+                        aria-label="查看分镜大图（长按看生图提示词）"
                       >
                         <img
                           src={turn.storyboardUrl}
@@ -4795,7 +4837,7 @@ ${lastSpeakerNote}
                     type="button"
                     disabled={!fontUrlDraft.trim()}
                     onClick={() => handleEnsembleFontUseUrl(fontUrlDraft.trim())}
-                    className="mt-2 w-full py-2.5 rounded-[12px] text-[13px] font-medium bg-[#111111] text-white disabled:opacity-25 active:scale-[0.985] transition-transform"
+                    className="mt-2 w-full py-2.5 rounded-[12px] text-[13px] font-medium bg-[var(--c-primary)] text-white disabled:opacity-25 active:scale-[0.985] transition-transform"
                   >
                     应用字体 URL
                   </button>
@@ -5671,7 +5713,7 @@ ${lastSpeakerNote}
           {showWorldBookLogSheet && (() => {
             const log = worldBookLog;
             const SOURCE_LABEL: Record<string, { text: string; cls: string }> = {
-              constant: { text: "常驻", cls: "bg-[#111111] text-white" },
+              constant: { text: "常驻", cls: "bg-[var(--c-primary)] text-white" },
               keyword: { text: "关键词", cls: "bg-[#111111]/10 text-[#111111]" },
               sticky: { text: "粘性驻留", cls: "bg-amber-100 text-amber-700" },
             };
@@ -5887,7 +5929,7 @@ ${lastSpeakerNote}
                             className="px-3 py-2.5 rounded-[12px] hover:bg-black/[0.02]"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="shrink-0 px-1.5 py-[2px] rounded-[5px] text-[9px] font-medium bg-[#111111] text-white">
+                              <span className="shrink-0 px-1.5 py-[2px] rounded-[5px] text-[9px] font-medium bg-[var(--c-primary)] text-white">
                                 归属
                               </span>
                               <span className="flex-1 min-w-0 text-[12px] text-[#111111] font-medium truncate">
@@ -6564,7 +6606,7 @@ ${lastSpeakerNote}
                       setScripts(loadEnsembleScripts());
                       setToast("已保存");
                     }}
-                    className="w-full py-3.5 rounded-[14px] bg-[#111111] text-white text-[13px] font-semibold tracking-[0.16em] inline-flex items-center justify-center gap-2 active:scale-[0.985] transition-transform"
+                    className="w-full py-3.5 rounded-[14px] bg-[var(--c-primary)] text-white text-[13px] font-semibold tracking-[0.16em] inline-flex items-center justify-center gap-2 active:scale-[0.985] transition-transform"
                   >
                     <Check size={15} strokeWidth={2.4} />
                     SAVE DATA
@@ -6621,7 +6663,7 @@ ${lastSpeakerNote}
                       onClick={() => setShowHiddenApis((v) => !v)}
                       className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full active:scale-95 transition-transform ${
                         showHiddenApis
-                          ? "bg-[#111111] text-white"
+                          ? "bg-[var(--c-primary)] text-white"
                           : "bg-black/[0.06] text-black/40"
                       }`}
                       style={{ fontSize: TYPE.MICRO }}
@@ -6684,7 +6726,7 @@ ${lastSpeakerNote}
                                 {cfg.name || "未命名配置"}
                               </span>
                               {apiSelected && (
-                                <span className="shrink-0 px-1.5 py-[2px] rounded-[5px] bg-[#111111] text-white text-[11px] font-semibold leading-none">
+                                <span className="shrink-0 px-1.5 py-[2px] rounded-[5px] bg-[var(--c-primary)] text-white text-[11px] font-semibold leading-none">
                                   当前
                                 </span>
                               )}
@@ -6846,7 +6888,7 @@ ${lastSpeakerNote}
 
           {/* ═══════════ 轻提示 ═══════════ */}
           {toast && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-24 z-[70] px-4 py-2 rounded-full bg-[#111111] text-white text-[11px] font-medium shadow-lg pointer-events-none">
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-24 z-[70] px-4 py-2 rounded-full bg-[var(--c-primary)] text-white text-[11px] font-medium shadow-lg pointer-events-none">
               {toast}
             </div>
           )}

@@ -1337,7 +1337,7 @@
 }
 
 .wt-tab-active {
-  background: #111111;
+  background: var(--c-primary);
   color: #ffffff;
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -1491,8 +1491,8 @@
   background: #f5f5f5;
 }
 .wt-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.wt-btn-primary { background: #222222; border-color: #222222; color: #ffffff; }
-.wt-btn-primary:not(:disabled):hover { background: #000000; border-color: #000000; }
+.wt-btn-primary { background: var(--c-primary); border-color: var(--c-primary); color: #ffffff; }
+.wt-btn-primary:not(:disabled):hover { background: var(--c-primary-ink); border-color: var(--c-primary-ink); }
 .wt-btn-danger { background: #ffffff; border-color: #d32f2f; color: #d32f2f; }
 .wt-btn-danger:not(:disabled):hover { background: #fff5f5; }
 .wt-btn-small { padding: 3px 9px; font-size: calc(11px * var(--app-text-scale, 1)); }

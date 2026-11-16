@@ -305,7 +305,7 @@ export function EnsembleStatusCardLayer({
                 }}
                 className={`w-[30px] h-[30px] rounded-full grid place-items-center text-[12px] font-semibold transition-all ${
                   i === idx
-                    ? "bg-[#111111] text-white scale-105"
+                    ? "bg-[var(--c-primary)] text-white scale-105"
                     : "bg-white/25 text-white/70"
                 }`}
                 title={m.name}

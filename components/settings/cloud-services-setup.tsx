@@ -467,7 +467,7 @@ export function CloudServicesSetup({ onConfigChanged }: { onConfigChanged?: () =
             <div className="flex flex-col items-center justify-center gap-2 pt-1">
                 <button
                     type="button"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-[20px] bg-black px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95 focus:outline-none"
                     onClick={() => window.open(SUPABASE_TOKENS_URL, "_blank", "noopener")}
                 >
                     <ExternalLink size={15} strokeWidth={1.8} />
@@ -492,7 +492,7 @@ export function CloudServicesSetup({ onConfigChanged }: { onConfigChanged?: () =
                 <button
                     type="button"
                     aria-label="确认并选择 Supabase 组织与部署范围"
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-white shadow-sm transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-30 focus:outline-none"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--c-primary)] text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] active:scale-95 disabled:opacity-30 focus:outline-none"
                     onClick={() => void openScopeDialog()}
                     disabled={Boolean(busy) || !token.trim()}
                 >
