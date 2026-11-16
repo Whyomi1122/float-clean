@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useContext, useCallback, useMemo } from "react";
-import { Plus, BookOpen, Trash2, Upload, Download, ChevronLeft, AlertCircle, Maximize2, Replace } from "lucide-react";
+import { Plus, BookOpen, Trash2, Upload, Download, ChevronRight, AlertCircle, Maximize2, Replace } from "lucide-react";
 import {
     loadWorldBooks,
     saveWorldBooks,
@@ -290,35 +290,10 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
     }, [books, persist]);
 
     useEffect(() => {
-        if (viewMode !== "list") {
-            setSubpageRightAction("worldbook", null);
-            return;
-        }
-        setSubpageRightAction("worldbook",
-            <div className="flex items-center gap-2">
-                <button
-                    type="button"
-                    onClick={() => {
-                        setImportError(null);
-                        setShowTxtImport(true);
-                    }}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-gray-800 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Upload size={15} strokeWidth={1.8} />
-                    <span>导入</span>
-                </button>
-                <button
-                    type="button"
-                    onClick={addBook}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Plus size={15} strokeWidth={1.8} />
-                    <span>新建世界书</span>
-                </button>
-            </div>
-        );
+        // 2026-11-16 设置内页重排：「导入 / 新建」从右上角胶囊挪到列表卡底行，这里不再挂载右上动作
+        setSubpageRightAction("worldbook", null);
         return () => setSubpageRightAction("worldbook", null);
-    }, [addBook, setSubpageRightAction, viewMode]);
+    }, [setSubpageRightAction]);
 
     const updateBook = (id: string, updates: Partial<WorldBookConfig>) => {
         persist(books.map(b => b.id === id ? { ...b, ...updates, updatedAt: Date.now() } : b));
@@ -670,51 +645,47 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                     </div>
 
                     {books.length === 0 ? (
-                        <div className="ui-empty mt-2">
-                            <div className="ui-icon-circle">
-                                <BookOpen size={24} />
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Worldbooks</span>
+                            <div className="prefs-row">
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有世界书</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">世界书在触发特定词汇时自动插入设定，给 AI 提供长期背景</span>
+                                </div>
                             </div>
-                            <span className="menu-label font-semibold">没有世界书</span>
-                            <span className="menu-desc text-center max-w-[240px] !mt-0">
-                                世界书用于为 AI 提供长期记忆和背景知识，当触发特定词汇时自动插入设定。
-                            </span>
-                            <button onClick={addBook} className="ui-btn ui-btn-primary mt-2">
-                                <Plus size={16} /> 新建世界书
+                            <button type="button" className="prefs-row" onClick={addBook}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建世界书</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => { setImportError(null); setShowTxtImport(true); }}>
+                                <span className="ts-14 text-[var(--c-text)]">从文本 / JSON 导入</span>
                             </button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Worldbooks</span>
                             {books.map(book => (
-                                <div
+                                <button
                                     key={book.id}
-                                    className="ui-config-card min-w-0 cursor-pointer"
-                                    style={{ aspectRatio: "3 / 2", padding: "12px", justifyContent: "space-between" }}
-                                    role="button"
-                                    tabIndex={0}
+                                    type="button"
+                                    className="prefs-row"
                                     aria-label={`编辑 ${book.name || "世界书"}`}
                                     onClick={() => { setActiveBookId(book.id); setViewMode("detail"); }}
-                                    onKeyDown={(event) => {
-                                        if (event.target !== event.currentTarget) return;
-                                        if (event.key === "Enter" || event.key === " ") {
-                                            event.preventDefault();
-                                            setActiveBookId(book.id);
-                                            setViewMode("detail");
-                                        }
-                                    }}
                                 >
-                                    <div className="min-w-0 flex flex-col gap-1.5">
-                                        <div className="min-w-0 flex items-center gap-[6px]">
-                                            <BookOpen size={16} className="shrink-0" />
-                                            <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{book.name}</span>
-                                        </div>
-                                        <span className="menu-desc truncate">{book.description || `${book.entries?.length || 0} 个条目`}</span>
+                                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                        <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{book.name}</span>
+                                        <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                            {book.description || `${book.entries?.length || 0} 个条目`}
+                                        </span>
                                     </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="menu-desc ts-12">条目 {book.entries?.length || 0}</span>
-                                        <ChevronLeft size={16} className="opacity-40" style={{ transform: "rotate(180deg)" }} />
-                                    </div>
-                                </div>
+                                    <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                                </button>
                             ))}
+                            <button type="button" className="prefs-row" onClick={addBook}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建世界书</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => { setImportError(null); setShowTxtImport(true); }}>
+                                <span className="ts-14 text-[var(--c-text)]">从文本 / JSON 导入</span>
+                            </button>
                         </div>
                     )}
                 </>

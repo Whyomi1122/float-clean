@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useContext, useCallback, useMemo } from "react";
-import { Plus, Trash2, Download, Database, Play, Upload, ChevronLeft, AlertCircle, Maximize2, X, Replace, Copy, Check } from "lucide-react";
+import { Plus, Trash2, Download, Database, Play, Upload, ChevronRight, AlertCircle, Maximize2, X, Replace, Copy, Check } from "lucide-react";
 import {
     loadRegexes,
     saveRegexes,
@@ -300,32 +300,10 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
     }, [groups, persist]);
 
     useEffect(() => {
-        if (viewMode !== "list") {
-            setSubpageRightAction("regex", null);
-            return;
-        }
-        setSubpageRightAction("regex",
-            <div className="flex items-center gap-2">
-                <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-gray-800 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Upload size={15} strokeWidth={1.8} />
-                    <span>导入正则</span>
-                </button>
-                <button
-                    type="button"
-                    onClick={addGroup}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Plus size={15} strokeWidth={1.8} />
-                    <span>新建正则</span>
-                </button>
-            </div>
-        );
+        // 2026-11-16 设置内页重排：「导入 / 新建」从右上角胶囊挪到列表卡底行，这里不再挂载右上动作
+        setSubpageRightAction("regex", null);
         return () => setSubpageRightAction("regex", null);
-    }, [addGroup, setSubpageRightAction, viewMode]);
+    }, [setSubpageRightAction]);
 
     const updateGroup = (id: string, updates: Partial<RegexConfig>) => {
         persist(groups.map(g => g.id === id ? { ...g, ...updates, updatedAt: Date.now() } : g));
@@ -540,51 +518,47 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                     </div>
 
                     {groups.length === 0 ? (
-                        <div className="ui-empty mt-2">
-                            <div className="ui-icon-circle">
-                                <Database size={24} />
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Regex Groups</span>
+                            <div className="prefs-row">
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有正则组</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">正则用于在发送或接收时做高阶文本替换与格式处理</span>
+                                </div>
                             </div>
-                            <span className="menu-label font-semibold">没有正则组</span>
-                            <span className="menu-desc max-w-[240px]">
-                                正则用于在发送给 AI 或收到 AI 回复时进行高阶的文本替换与格式处理。
-                            </span>
-                            <button onClick={addGroup} className="ui-btn ui-btn-primary mt-2">
-                                <Plus size={16} /> 新建正则组
+                            <button type="button" className="prefs-row" onClick={addGroup}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建正则组</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                                <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
                             </button>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3">
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Regex Groups</span>
                             {groups.map(group => (
-                                <div
+                                <button
                                     key={group.id}
-                                    className="ui-config-card min-w-0 cursor-pointer"
-                                    style={{ minHeight: "84px", padding: "16px", justifyContent: "space-between" }}
-                                    role="button"
-                                    tabIndex={0}
+                                    type="button"
+                                    className="prefs-row"
                                     aria-label={`编辑 ${group.name || "正则组"}`}
                                     onClick={() => { setActiveGroupId(group.id); setViewMode("detail"); }}
-                                    onKeyDown={(event) => {
-                                        if (event.target !== event.currentTarget) return;
-                                        if (event.key === "Enter" || event.key === " ") {
-                                            event.preventDefault();
-                                            setActiveGroupId(group.id);
-                                            setViewMode("detail");
-                                        }
-                                    }}
                                 >
-                                    <div className="min-w-0 flex flex-col gap-1.5">
-                                        <div className="min-w-0 flex items-center gap-[6px]">
-                                            <Database size={16} className="shrink-0" />
-                                            <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{group.name}</span>
-                                        </div>
-                                        <span className="menu-desc truncate">{group.description || `${group.rules?.length || 0} 个规则`}</span>
+                                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                        <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{group.name}</span>
+                                        <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                            {group.description || `${group.rules?.length || 0} 个规则`}
+                                        </span>
                                     </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="menu-desc ts-12">规则 {group.rules?.length || 0}</span>
-                                        <ChevronLeft size={16} className="opacity-40" style={{ transform: "rotate(180deg)" }} />
-                                    </div>
-                                </div>
+                                    <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                                </button>
                             ))}
+                            <button type="button" className="prefs-row" onClick={addGroup}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建正则组</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                                <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
+                            </button>
                         </div>
                     )}
                 </>

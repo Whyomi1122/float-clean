@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useContext, useCallback, useMemo } from "react";
-import { Plus, Upload, Download, Trash2, RotateCcw, ChevronLeft, ChevronDown, GripVertical, MessageSquare, AlertCircle, Maximize2, Copy, Replace, CheckSquare, Check, Filter, MoreHorizontal } from "lucide-react";
+import { Plus, Upload, Download, Trash2, RotateCcw, ChevronRight, ChevronDown, GripVertical, MessageSquare, AlertCircle, Maximize2, Copy, Replace, CheckSquare, Check, Filter, MoreHorizontal } from "lucide-react";
 import {
     loadPresets,
     savePresets,
@@ -683,32 +683,10 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
     }, [persist, presets]);
 
     useEffect(() => {
-        if (viewMode !== "list") {
-            setSubpageRightAction("presets", null);
-            return;
-        }
-        setSubpageRightAction("presets",
-            <div className="flex items-center gap-2">
-                <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-gray-800 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Upload size={15} strokeWidth={1.8} />
-                    <span>导入预设</span>
-                </button>
-                <button
-                    type="button"
-                    onClick={addPreset}
-                    className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-                >
-                    <Plus size={15} strokeWidth={1.8} />
-                    <span>新建预设</span>
-                </button>
-            </div>
-        );
+        // 2026-11-16 设置内页重排：「导入 / 新建」从右上角胶囊挪到列表卡底行，这里不再挂载右上动作
+        setSubpageRightAction("presets", null);
         return () => setSubpageRightAction("presets", null);
-    }, [addPreset, setSubpageRightAction, viewMode]);
+    }, [setSubpageRightAction]);
 
     const updatePreset = (id: string, updates: Partial<PresetConfig>) => {
         persist(presets.map(p => p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p));
@@ -1127,55 +1105,52 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                     </div>
 
                     {presets.length === 0 ? (
-                        <div className="ui-empty mt-5">
-                            <div className="ui-icon-circle">
-                                <MessageSquare size={24} />
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Presets</span>
+                            <div className="prefs-row">
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有预设</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">预设定义 AI 的回复风格、行为设定和核心参数</span>
+                                </div>
                             </div>
-                            <span className="menu-label font-semibold">没有预设</span>
-                            <span className="menu-desc max-w-[240px]">
-                                预设用于定义 AI 的回复风格、行为设定和核心参数。
-                            </span>
-                            <div className="flex gap-3">
-                                <button onClick={addPreset} className="ui-btn ui-btn-primary">
-                                    <Plus size={16} /> 新建预设
-                                </button>
-                            </div>
+                            <button type="button" className="prefs-row" onClick={addPreset}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建预设</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                                <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
+                            </button>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3">
+                        <div className="prefs-block">
+                            <span className="prefs-block-label">Presets</span>
                             {presets.map(preset => (
-                                <div
+                                <button
                                     key={preset.id}
-                                    className="ui-config-card min-w-0 cursor-pointer"
-                                    style={{ minHeight: "84px", padding: "16px", justifyContent: "space-between" }}
-                                    role="button"
-                                    tabIndex={0}
+                                    type="button"
+                                    className="prefs-row"
                                     aria-label={`编辑 ${preset.name || "预设"}`}
                                     onClick={() => { setEditingId(preset.id); setViewMode("detail"); }}
-                                    onKeyDown={(event) => {
-                                        if (event.target !== event.currentTarget) return;
-                                        if (event.key === "Enter" || event.key === " ") {
-                                            event.preventDefault();
-                                            setEditingId(preset.id);
-                                            setViewMode("detail");
-                                        }
-                                    }}
                                 >
-                                    <div className="min-w-0 flex flex-col gap-1.5">
-                                        <div className="min-w-0 flex items-center gap-[6px]">
-                                            <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{preset.name}</span>
+                                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                            <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{preset.name}</span>
                                             {preset.builtIn && (
                                                 <span className="ui-badge shrink-0" data-variant="success">内置</span>
                                             )}
-                                        </div>
-                                        <span className="menu-desc truncate">{preset.description || `包含 ${preset.prompts?.length || 0} 个设定条目`}</span>
+                                        </span>
+                                        <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                            {preset.description || `包含 ${preset.prompts?.length || 0} 个设定条目`}
+                                        </span>
                                     </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="menu-desc ts-12">条目 {preset.prompts?.length || 0}</span>
-                                        <ChevronLeft size={16} style={{ transform: "rotate(180deg)", opacity: 0.4 }} />
-                                    </div>
-                                </div>
+                                    <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                                </button>
                             ))}
+                            <button type="button" className="prefs-row" onClick={addPreset}>
+                                <span className="ts-14 text-[var(--c-text)]">＋ 新建预设</span>
+                            </button>
+                            <button type="button" className="prefs-row" onClick={() => fileInputRef.current?.click()}>
+                                <span className="ts-14 text-[var(--c-text)]">从 JSON 导入</span>
+                            </button>
                         </div>
                     )}
                 </>
