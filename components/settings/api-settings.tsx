@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useContext } from "react";
-import { Plus, RefreshCw, AlertCircle, FileEdit, Trash2, X, Check, ChevronDown, ChevronUp, Layers } from "lucide-react";
-import { SettingsContext } from "../phone-settings-app";
+import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, AlertCircle, X, Check, ChevronDown, ChevronUp, ChevronRight, Layers } from "lucide-react";
 import type { ApiConfig } from "@/lib/settings-types";
 import { loadApiConfigs, removeApiConfigReferences, remapApiConfigReferences, saveApiConfigs } from "@/lib/settings-storage";
 import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding";
@@ -31,7 +30,6 @@ function getNativeToolProtocolLabel(config: ApiConfig): string {
 }
 
 export function ApiSettings() {
-    const { setSubpageRightAction } = useContext(SettingsContext);
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isNewConfig, setIsNewConfig] = useState(false);
@@ -88,18 +86,7 @@ export function ApiSettings() {
         setEditingId(newConfig.id);
     }, [configs, persist]);
 
-    useEffect(() => {
-        setSubpageRightAction("api",
-            <button
-                onClick={addConfig}
-                className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-[20px] bg-black px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-            >
-                <Plus size={15} strokeWidth={1.8} />
-                <span>新增API方案</span>
-            </button>
-        );
-        return () => setSubpageRightAction("api", null);
-    }, [addConfig, setSubpageRightAction]);
+    // 2026-11-16 设置内页重排：右上「新增API方案」大按钮取消，改为列表卡底的「＋ 新建配置」行
 
     const updateConfig = (id: string, updates: Partial<ApiConfig>) => {
         persist(configs.map(c => c.id === id ? { ...c, ...updates } : c));
@@ -295,69 +282,41 @@ export function ApiSettings() {
             </div>
 
             {configs.length === 0 ? (
-                <div className="ui-empty">
-                    <div className="ui-icon-circle">
-                        <AlertCircle size={24} />
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Model Config</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">没有 API 配置</span>
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">配置密钥和模型以连接到 AI 服务</span>
+                        </div>
                     </div>
-                    <span className="menu-label font-semibold">没有 API 配置</span>
-                    <span className="menu-desc max-w-[240px]">
-                        配置 API 密钥和模型以连接到 AI 服务。
-                    </span>
-                    <button onClick={addConfig} className="ui-btn ui-btn-primary rounded-[20px] mt-2">
-                        <Plus size={16} /> 添加配置
+                    <button type="button" className="prefs-row" onClick={addConfig}>
+                        <span className="ts-14 text-[var(--c-text)]">＋ 新建配置</span>
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Model Config</span>
                     {configs.map(config => (
-                        <div
+                        <button
                             key={config.id}
-                            className="ui-config-card min-w-0 cursor-pointer"
-                            style={{ aspectRatio: "3 / 2", padding: "12px", justifyContent: "space-between" }}
-                            role="button"
-                            tabIndex={0}
+                            type="button"
+                            className="prefs-row"
                             aria-label={`编辑 ${config.name || config.provider}`}
                             onClick={() => setEditingId(config.id)}
-                            onKeyDown={(event) => {
-                                if (event.target !== event.currentTarget) return;
-                                if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    setEditingId(config.id);
-                                }
-                            }}
                         >
-                            <div className="min-w-0 flex flex-col gap-1">
-                                <span className="truncate text-[calc(14.4px*var(--app-text-scale,1))] font-bold leading-tight text-[var(--c-text-title)]">{config.name || config.provider}</span>
-                                <span className="menu-desc truncate">
-                                    {config.defaultModel || config.provider || "未设置模型"}
-                                    {selectedModelsOf(config).length > 1 ? ` +${selectedModelsOf(config).length - 1}` : ""}
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)] truncate">{config.name || config.provider}</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70 truncate">
+                                    {selectedModelsOf(config).length} 个模型 · {config.defaultModel || "未设置模型"}
                                 </span>
                             </div>
-                            <div className="flex gap-2 shrink-0 items-center justify-end">
-                                <button
-                                    type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        setEditingId(config.id);
-                                    }}
-                                    className="ui-link-btn"
-                                >
-                                    <FileEdit size={18} />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        setConfirmDeleteId(config.id);
-                                    }}
-                                    className="ui-link-btn"
-                                    data-variant="danger"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
-                        </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                        </button>
                     ))}
+                    <button type="button" className="prefs-row" onClick={addConfig}>
+                        <span className="ts-14 text-[var(--c-text)]">＋ 新建配置</span>
+                    </button>
                 </div>
             )}
 
@@ -638,6 +597,23 @@ export function ApiSettings() {
                                         </div>
                                         )}
                                         </div>
+
+                                        {/* 删除搬到弹窗里（2026-11-16 设置内页重排：列表只负责进二级页） */}
+                                        {!isNewConfig && (
+                                            <div className="prefs-block">
+                                                <button
+                                                    type="button"
+                                                    className="prefs-row"
+                                                    onClick={() => {
+                                                        const id = config.id;
+                                                        setEditingId(null);
+                                                        setConfirmDeleteId(id);
+                                                    }}
+                                                >
+                                                    <span className="ts-14 text-[var(--c-danger)]">删除这张配置</span>
+                                                </button>
+                                            </div>
+                                        )}
 
                                     </>
                                 )

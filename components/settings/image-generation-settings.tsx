@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { AlertCircle, Camera, ChevronDown, Image, Info, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, ChevronDown, Image, Info, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import type { ImageGenerationSettings as ImageGenerationSettingsType, NovelAiPreset, OpenAiImagePreset } from "@/lib/settings-types";
 import {
     DEFAULT_IMAGE_GENERATION_SETTINGS,
@@ -362,22 +362,20 @@ export function ImageGenerationSettings() {
                 <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">Image Generation</h2>
             </div>
 
-            <div className="menu-group">
-                <div className="menu-item">
-                    <span className="card-icon" style={imageGenerationIconStyle}>
-                        <Sparkles size={22} strokeWidth={1.75} />
-                    </span>
-                    <span className="settings-tools-menu-copy">
-                        <span className="menu-label appearance-menu-item-label">启用自动生图</span>
-                        <span className="menu-desc settings-tools-menu-desc">角色输出照片标签时自动调用图像生成 API。</span>
-                    </span>
-                    <span className="menu-right settings-tools-menu-toggle">
-                        <Toggle checked={settings.enabled} onChange={(enabled) => updateSettings({ enabled })} className="settings-toggle-control" />
-                    </span>
+            <div className="prefs-block">
+                <span className="prefs-block-label">Auto Image</span>
+                <div className="prefs-row">
+                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">启用自动生图</span>
+                        <span className="ts-11 text-[var(--c-text)] opacity-70">角色输出照片标签时自动调用图像生成 API</span>
+                    </div>
+                    <Toggle checked={settings.enabled} onChange={(enabled) => updateSettings({ enabled })} className="settings-toggle-control" />
                 </div>
             </div>
 
-            <div className="menu-group p-4 flex flex-col gap-4">
+            <div className="prefs-block">
+                <span className="prefs-block-label">Engine &amp; Model</span>
+                <div className="flex flex-col gap-4 pb-3">
                 <div className="flex flex-col gap-1">
                     <label className="menu-desc ml-1">生图提供方 / 引擎</label>
                     <Select
@@ -802,30 +800,24 @@ export function ImageGenerationSettings() {
                         className="max-h-[220px] max-w-full self-start rounded-xl border border-[var(--c-card-border)] object-contain"
                     />
                 )}
+                </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-                <p className="settings-menu-section-title">Image Hosting</p>
-                <div className="menu-group">
-                    <div className="menu-item">
-                        <span className="card-icon" style={imageGenerationIconStyle}>
-                            <Upload size={22} strokeWidth={1.75} />
-                        </span>
-                        <span className="settings-tools-menu-copy">
-                            <span className="menu-label appearance-menu-item-label">允许小卷上传图床</span>
-                            <span className="menu-desc settings-tools-menu-desc">开启后，小卷的图像处理套件可以把本地素材上传到公开图床并拿 URL 写 CSS。</span>
-                        </span>
-                        <span className="menu-right settings-tools-menu-toggle">
-                            <Toggle
-                                checked={settings.imageHosting.allowMascotUpload}
-                                onChange={(allowMascotUpload) => updateImageHosting({ allowMascotUpload })}
-                                className="settings-toggle-control"
-                            />
-                        </span>
+            <div className="prefs-block">
+                <span className="prefs-block-label">Image Hosting</span>
+                <div className="prefs-row">
+                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">允许小卷上传图床</span>
+                        <span className="ts-11 text-[var(--c-text)] opacity-70">开启后可用图床把本地素材换成公开 URL 写 CSS</span>
                     </div>
+                    <Toggle
+                        checked={settings.imageHosting.allowMascotUpload}
+                        onChange={(allowMascotUpload) => updateImageHosting({ allowMascotUpload })}
+                        className="settings-toggle-control"
+                    />
                 </div>
 
-                <div className="menu-group p-4 flex flex-col gap-4">
+                <div className="flex flex-col gap-4 pb-3">
                     <div className="flex flex-col gap-1">
                         <label className="menu-desc ml-1">图床提供方</label>
                         <Select
@@ -883,36 +875,33 @@ export function ImageGenerationSettings() {
                         </div>
                     </div>
 
-                    <div className="menu-item !px-0 !py-0">
-                        <span className="settings-tools-menu-copy">
-                            <span className="menu-label appearance-menu-item-label">上传前自动转 WebP</span>
-                            <span className="menu-desc settings-tools-menu-desc">减小 PNG/JPEG 体积；GIF 会保留原格式。</span>
-                        </span>
-                        <span className="menu-right settings-tools-menu-toggle">
-                            <Toggle
-                                checked={settings.imageHosting.autoConvertToWebp}
-                                onChange={(autoConvertToWebp) => updateImageHosting({ autoConvertToWebp })}
-                                className="settings-toggle-control"
-                                disabled={settings.imageHosting.provider !== "imgbb"}
-                            />
-                        </span>
+                    <div className="prefs-row" style={{ borderTop: "1px solid color-mix(in srgb, var(--c-card-border) 55%, transparent)" }}>
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">上传前自动转 WebP</span>
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">减小 PNG/JPEG 体积；GIF 保留原格式</span>
+                        </div>
+                        <Toggle
+                            checked={settings.imageHosting.autoConvertToWebp}
+                            onChange={(autoConvertToWebp) => updateImageHosting({ autoConvertToWebp })}
+                            className="settings-toggle-control"
+                            disabled={settings.imageHosting.provider !== "imgbb"}
+                        />
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-                <p className="settings-menu-section-title">Character References</p>
+            <div className="prefs-block">
+                <span className="prefs-block-label">Character References</span>
                 {settings.provider === "novelai" && (
                     <Alert variant="info">
                         <Info size={16} className="mt-[2px] shrink-0" />
                         <span className="leading-[1.5]">NovelAI 只使用文字提示词生成图片，不读取角色参考图。可点每行的「外观」填写专属提示词（人物性别/发型/服饰），参考图会保留，切回 OpenAI 兼容引擎后仍可使用。</span>
                     </Alert>
                 )}
-                <div className="menu-group">
+                <div className="flex flex-col">
                     {characters.length === 0 ? (
-                        <div className="ui-empty py-8">
-                            <Camera size={22} />
-                            <span className="menu-desc">暂无角色。</span>
+                        <div className="prefs-row">
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">暂无角色</span>
                         </div>
                     ) : characters.map(character => {
                         const preview = referencePreviews[character.id];
@@ -924,7 +913,7 @@ export function ImageGenerationSettings() {
                             || ref?.faceCrop
                         );
                         return (
-                            <div key={character.id} className="menu-item">
+                            <div key={character.id} className="prefs-row">
                             <span className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--c-input)]">
                                 {preview ? (
                                     <img src={preview} alt="" className="h-full w-full object-cover" />
@@ -937,8 +926,8 @@ export function ImageGenerationSettings() {
                                 )}
                             </span>
                             <span className="min-w-0 flex flex-1 flex-col">
-                                <span className="menu-label truncate">{character.name}</span>
-                                <span className="menu-desc truncate">
+                                <span className="ts-14 font-semibold truncate text-[var(--c-text-title)]">{character.name}</span>
+                                <span className="ts-11 truncate text-[var(--c-text)] opacity-70">
                                     {hasProfile ? "已设置外观档案" : "未设置外观档案"} · {preview ? "有参考图" : "无参考图"}
                                 </span>
                             </span>
