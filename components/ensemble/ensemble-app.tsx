@@ -1423,7 +1423,6 @@ export function EnsembleApp({
   const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string } | null>(null);
   // 长按分镜图 → 看本次生图实际发出的提示词（排查串脸）
   const [storyboardDebugOpen, setStoryboardDebugOpen] = useState(false);
-  const [storyboardDebugTurnId, setStoryboardDebugTurnId] = useState<string | null>(null);
   const [storyboardDebugData, setStoryboardDebugData] = useState<StoryboardDebug | null>(null);
   const storyboardLongPressRef = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
 
@@ -1436,7 +1435,6 @@ export function EnsembleApp({
       storyboardLongPressRef.current.fired = true;
       storyboardLongPressRef.current.timer = null;
       setStoryboardDebugData(getStoryboardDebug(turnId));
-      setStoryboardDebugTurnId(turnId);
       setStoryboardDebugOpen(true);
     }, 550);
   };
@@ -4417,7 +4415,6 @@ ${lastSpeakerNote}
                           event.preventDefault();
                           cancelStoryboardLongPress();
                           setStoryboardDebugData(getStoryboardDebug(turn.id));
-                          setStoryboardDebugTurnId(turn.id);
                           setStoryboardDebugOpen(true);
                         }}
                         className="block w-[88%] overflow-hidden rounded-xl transition-opacity active:opacity-90"
@@ -6892,6 +6889,13 @@ ${lastSpeakerNote}
               {toast}
             </div>
           )}
+
+          {/* 长按分镜图 → 本次生图提示词（排查串脸） */}
+          <StoryboardDebugSheet
+            open={storyboardDebugOpen}
+            debug={storyboardDebugData}
+            onClose={() => setStoryboardDebugOpen(false)}
+          />
 
           {/* 统一删除确认弹窗 */}
           {confirmState && (
