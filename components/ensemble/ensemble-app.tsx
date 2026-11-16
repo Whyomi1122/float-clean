@@ -1420,7 +1420,11 @@ export function EnsembleApp({
   const [showWorldBookSheet, setShowWorldBookSheet] = useState(false);
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
   /** 分镜大图预览（2026-11-13）：点一下图 → 全屏看 + 保存 */
-  const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string } | null>(null);
+  const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string; turnId: string } | null>(
+    null
+  );
+  /** 重新生成分镜图时记住是哪一幕，避免重复点击 */
+  const [regeneratingStoryboardTurnId, setRegeneratingStoryboardTurnId] = useState<string | null>(null);
   // 长按分镜图 → 看本次生图实际发出的提示词（排查串脸）
   const [storyboardDebugOpen, setStoryboardDebugOpen] = useState(false);
   const [storyboardDebugData, setStoryboardDebugData] = useState<StoryboardDebug | null>(null);
@@ -1443,6 +1447,34 @@ export function EnsembleApp({
     if (storyboardLongPressRef.current.timer !== null) {
       window.clearTimeout(storyboardLongPressRef.current.timer);
       storyboardLongPressRef.current.timer = null;
+    }
+  };
+
+  /** 重新生成某一幕的分镜图（2026-11-16）：从大图预览层触发，成功后原地换图 */
+  const handleRegenerateStoryboard = async (turnId: string) => {
+    if (!currentScript || regeneratingStoryboardTurnId) return;
+    const turn = (currentScript.turns ?? []).find((t) => t.id === turnId);
+    if (!turn) return;
+    setRegeneratingStoryboardTurnId(turnId);
+    try {
+      const outcome = await generateStoryboardImage(currentScript, turn);
+      if (!outcome.ok || !outcome.url) {
+        setToast("图片没生成出来，稍后再试试");
+        return;
+      }
+      const imageUrl = outcome.url;
+      const tagged = updateEnsembleTurn(currentScript.id, turnId, { storyboardUrl: imageUrl });
+      if (tagged) {
+        setCurrentScript(tagged);
+        setScripts(loadEnsembleScripts());
+      }
+      setStoryboardPreview((prev) => (prev && prev.turnId === turnId ? { ...prev, url: imageUrl } : prev));
+      setToast("已重新生成");
+    } catch (e) {
+      console.error("storyboard regenerate failed:", e);
+      setToast("图片没生成出来，稍后再试试");
+    } finally {
+      setRegeneratingStoryboardTurnId(null);
     }
   };
   /** 他的心情音乐（2026-11-08）：只在剧情室开，弹窗写指令 → 后台生成 */
@@ -4405,6 +4437,7 @@ ${lastSpeakerNote}
                           setStoryboardPreview({
                             url: turn.storyboardUrl!,
                             name: `分镜-${turn.senderName || turn.id}`,
+                            turnId: turn.id,
                           });
                         }}
                         onPointerDown={() => beginStoryboardLongPress(turn.id)}
@@ -6910,12 +6943,14 @@ ${lastSpeakerNote}
         </>
       )}
 
-      {/* 分镜大图预览：点图放大 + 保存（复用聊天的全屏预览层） */}
+      {/* 分镜大图预览：点图放大 + 保存 + 重新生成（复用聊天的全屏预览层） */}
       {storyboardPreview && (
         <MediaPreviewOverlay
           imageUrl={storyboardPreview.url}
           saveFilename={storyboardPreview.name}
           onClose={() => setStoryboardPreview(null)}
+          onRegenerate={() => void handleRegenerateStoryboard(storyboardPreview.turnId)}
+          regenerating={regeneratingStoryboardTurnId === storyboardPreview.turnId}
         />
       )}
     </div>
