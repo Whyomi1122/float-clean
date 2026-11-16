@@ -8,6 +8,7 @@ import {
     type MusicTrack,
 } from "@/lib/music-storage";
 import { useMusicControls, type MusicControlsValue } from "@/lib/music-context";
+import { getCachedMachineLyrics, withMachineLyrics } from "@/lib/lyric-translate";
 import { SessionCustomCSS } from "@/components/ui/session-custom-css";
 import {
     isNeteaseConfigured, loadMusicApiConfig, saveMusicApiConfig,
@@ -230,13 +231,18 @@ export default function MusicApp({ onClose }: Props) {
             return;
         }
         const detail = await getNeteaseSongDetail(result.id);
-        const lyrics = await getNeteaseLyrics(result.id);
+        const rawLyrics = await getNeteaseLyrics(result.id);
+        // 2026-11-16：官翻缺失时用副 API 机翻（只用于显示），先挂原歌词，翻好了再补
+        const lyrics = getCachedMachineLyrics(result.id) || rawLyrics;
         const track = toMusicTrack(result, { lyrics, coverUrl: detail?.coverUrl, name: detail?.name, artists: detail?.artists });
         // Prepend to existing queue
         if (!player.queue.some(t => t.id === track.id)) {
             player.setQueue([track, ...player.queue]);
         }
         player.playUrl(info.url, track);
+        void withMachineLyrics(result.id, rawLyrics).then(merged => {
+            if (merged && merged !== rawLyrics) player.setTrackLyrics(track.id, merged);
+        });
         if (info.trial) showMusicToast("VIP 歌曲，当前播放 30 秒试听", 2600);
     }, [beginMusicLoadingToast, player, showMusicToast, toMusicTrack]);
 
@@ -274,9 +280,13 @@ export default function MusicApp({ onClose }: Props) {
 
         beginMusicLoadingToast(`netease_${playable.song.id}`);
         const detail = await getNeteaseSongDetail(playable.song.id);
-        const lyrics = await getNeteaseLyrics(playable.song.id);
+        const rawLyrics = await getNeteaseLyrics(playable.song.id);
+        const lyrics = getCachedMachineLyrics(playable.song.id) || rawLyrics;
         const track = toMusicTrack(playable.song, { lyrics, coverUrl: detail?.coverUrl, name: detail?.name, artists: detail?.artists });
         player.playUrl(playable.url, track);
+        void withMachineLyrics(playable.song.id, rawLyrics).then(merged => {
+            if (merged && merged !== rawLyrics) player.setTrackLyrics(track.id, merged);
+        });
         if (playable.index > 0) showMusicToast(`已跳过 ${playable.index} 首不可播放歌曲`);
         else if (playable.trial) showMusicToast("VIP 歌曲，当前播放 30 秒试听", 2600);
     }, [beginMusicLoadingToast, player, showMusicToast, toMusicTrack]);

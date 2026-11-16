@@ -9,6 +9,7 @@ import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { setNowPlayingTrack, updateNowPlayingTime, setNowPlayingPlaying, clearNowPlaying, getNowPlayingSnapshot } from "./music-now-playing";
 import { getMusicDuckRatio, subscribeMusicDuck } from "./music-duck";
+import { getCachedMachineLyrics, withMachineLyrics } from "./lyric-translate";
 
 // ── Types ──
 
@@ -43,6 +44,8 @@ export type MusicActions = {
     dismissFloat: () => void;
     openFullPlayer: () => void;
     closeFullPlayer: () => void;
+    /** 2026-11-16：后台机翻歌词回来后，把当前曲目的歌词换掉（只动同 id 的曲目） */
+    setTrackLyrics: (trackId: string, lyrics: string) => void;
 };
 
 type MusicContextValue = MusicState & MusicActions;
@@ -220,17 +223,25 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             audio.src = playUrl;
             // now_playing 桥:注册曲目(歌词异步补)
             setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0 });
-            getNeteaseLyrics(nid).then(lrc => {
+            getNeteaseLyrics(nid).then(async lrc => {
                 if (!lrc) return;
-                setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0, lyrics: lrc });
-                // 2026-11-13：以前歌词只补给了 now_playing 桥，播放器读的是 currentTrack.lyrics，
-                // 所以走 loadAndPlay（点歌单、一起听同步切歌等）时歌词页永远是「暂无歌词」。
-                setCurrentTrack(prev => {
-                    if (!prev || prev.id !== track.id || prev.lyrics === lrc) return prev;
-                    const next = { ...prev, lyrics: lrc };
-                    currentTrackRef.current = next;
-                    return next;
-                });
+                const commitLyrics = (finalLrc: string) => {
+                    setNowPlayingTrack({ trackId: track.id, title: track.title, artist: track.artist, neteaseId: nid, duration: track.duration || 0, lyrics: finalLrc });
+                    // 2026-11-13：以前歌词只补给了 now_playing 桥，播放器读的是 currentTrack.lyrics，
+                    // 所以走 loadAndPlay（点歌单、一起听同步切歌等）时歌词页永远是「暂无歌词」。
+                    setCurrentTrack(prev => {
+                        if (!prev || prev.id !== track.id || prev.lyrics === finalLrc) return prev;
+                        const next = { ...prev, lyrics: finalLrc };
+                        currentTrackRef.current = next;
+                        return next;
+                    });
+                };
+                const cachedMt = getCachedMachineLyrics(nid);
+                commitLyrics(cachedMt || lrc);
+                if (cachedMt) return;
+                // 2026-11-16：官翻缺失时用副 API（思维链翻译）机翻一遍，只用于显示，不注入提示词
+                const withZh = await withMachineLyrics(nid, lrc);
+                if (withZh !== lrc) commitLyrics(withZh);
             }).catch(() => undefined);
         } else {
             // Local tracks: load blob from IndexedDB
@@ -495,6 +506,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         };
     }, [playResolvedTrack, queue]);
 
+    // 2026-11-16：后台机翻歌词回来了，只换当前曲目的歌词（播放器与歌词页都读 currentTrack.lyrics）
+    const setTrackLyrics = useCallback((trackId: string, lyrics: string) => {
+        if (!trackId || !lyrics) return;
+        setCurrentTrack(prev => {
+            if (!prev || prev.id !== trackId || prev.lyrics === lyrics) return prev;
+            const next = { ...prev, lyrics };
+            currentTrackRef.current = next;
+            return next;
+        });
+    }, []);
+
     useEffect(() => {
         registerMusicControlBridge({
             getState: () => ({
@@ -526,10 +548,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         currentTrack, isPlaying, duration, playMode, queue, volume, showFullPlayer, floatDismissed,
         playTrack, playUrl, pause, resume, togglePlay, next, prev, seek,
         setPlayMode, setQueue, removeFromQueue, setVolume, stop, dismissFloat, openFullPlayer, closeFullPlayer,
+        setTrackLyrics,
     }), [
         currentTrack, isPlaying, duration, playMode, queue, volume, showFullPlayer, floatDismissed,
         playTrack, playUrl, pause, resume, togglePlay, next, prev, seek,
-        setQueue, removeFromQueue, setVolume, stop, dismissFloat, openFullPlayer, closeFullPlayer,
+        setQueue, removeFromQueue, setVolume, stop, dismissFloat, openFullPlayer, closeFullPlayer, setTrackLyrics,
     ]);
 
     const value = useMemo<MusicContextValue>(() => ({

@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useMusicPlayer } from "@/lib/music-context";
+import { getCachedMachineLyrics, withMachineLyrics } from "@/lib/lyric-translate";
 import type { MusicTrack } from "@/lib/music-storage";
 import {
     getArtistDetail, getArtistTopSongs, getArtistAlbums,
@@ -74,10 +75,12 @@ export default function MusicArtistPage({ artistId, artistName, onClose }: Props
             return;
         }
         const url = info.url;
-        const [detail, lyrics] = await Promise.all([
+        const [detail, rawLyrics] = await Promise.all([
             getNeteaseSongDetail(song.id).catch(() => null),
             getNeteaseLyrics(song.id).catch(() => ""),
         ]);
+        // 2026-11-16：官翻缺失时用副 API 机翻（只用于显示），先挂原歌词，翻好了再补
+        const lyrics = getCachedMachineLyrics(song.id) || rawLyrics;
         const track: MusicTrack = {
             id: `netease_${song.id}`,
             title: detail?.name || song.name,
@@ -92,6 +95,9 @@ export default function MusicArtistPage({ artistId, artistName, onClose }: Props
             player.setQueue([track, ...player.queue]);
         }
         player.playUrl(url, track);
+        void withMachineLyrics(song.id, rawLyrics).then(merged => {
+            if (merged && merged !== rawLyrics) player.setTrackLyrics(track.id, merged);
+        });
         setPendingSongId(null);
     }, [player]);
 
