@@ -7985,9 +7985,9 @@
 /* ===== 语音通话 · 摄像头（2026-11-15 从视频通话搬来） ===== */
 .call-camera-btn {
   position: absolute;
-  /* 与左上返回键同一水平线 */
+  /* 与左上返回键同一水平线；让出右边「···」的位置 */
   top: calc(var(--page-header-safe-top, 48px) + 4px);
-  right: 14px;
+  right: 58px;
   z-index: 4;
   display: flex;
   align-items: center;
@@ -8078,6 +8078,25 @@
   line-height: 1.6;
   color: var(--text-2, rgba(120, 128, 140, 0.9));
   white-space: pre-wrap;
+}
+
+/* ===== 整条都是旁白：不套气泡，居中灰色斜体（2026-11-15 用户口径，参考图 3） ===== */
+.chat-bubble-role-assistant.chat-bubble-narration-only,
+.chat-bubble-role-assistant.chat-bubble-narration-only:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  max-width: 100%;
+}
+.chat-bubble-role-assistant.chat-bubble-narration-only .chat-narration-line {
+  max-width: 100%;
+  padding: 2px 6px;
+  font-style: italic;
+  font-size: calc(13px*var(--app-text-scale, 1));
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--c-text) 62%, transparent);
 }
 
 /* ===== 回放页：与通话页同款（只读），复用 call-subtitle 气泡 ===== */

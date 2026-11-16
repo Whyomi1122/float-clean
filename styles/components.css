@@ -6998,112 +6998,22 @@
   opacity: .55;
 }
 
-/* ===== 设置主页 · 方案 A（2026-11-15）：白卡 + 行式条目 ===== */
-.settings-a-menu {
-  display: flex;
-  flex-direction: column;
+/* ===== 设置主页（2026-11-15）：与聊天设置页统一，复用 .prefs-block / .prefs-row ===== */
+.settings-main-menu {
   gap: 16px;
 }
 
-.settings-a-section {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 0 6px;
-  border-radius: var(--ui-radius-card);
-  background: var(--c-panel);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .02);
+.settings-main-menu .prefs-block {
+  margin-bottom: 0;
 }
 
-.settings-a-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 16px;
-}
-
-.settings-a-title {
-  margin: 0;
-  font-size: calc(11px*var(--app-text-scale, 1));
-  font-weight: 600;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--c-icon);
-}
-
-.settings-a-rows {
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-a-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 0;
-  background: transparent;
-  font-family: inherit;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
-}
-
-button.settings-a-row:active {
-  background: color-mix(in srgb, var(--c-text) 6%, transparent);
-}
-
-.settings-a-row + .settings-a-row::before {
-  content: "";
-  position: absolute;
-  left: 48px;
-  right: 16px;
-  top: 0;
-  height: 1px;
-  background: color-mix(in srgb, var(--c-card-border) 55%, transparent);
-}
-
-.settings-a-icon {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--c-icon);
-}
-
-.settings-a-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-a-label {
-  font-size: calc(14.5px*var(--app-text-scale, 1));
-  color: var(--c-text-title);
-}
-
-.settings-a-desc {
-  font-size: calc(11.5px*var(--app-text-scale, 1));
-  line-height: 1.4;
-  color: var(--c-text);
+/* 说明只占一行，长了就省略 */
+.settings-main-menu .prefs-row .ts-11 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-a-chev {
-  flex: 0 0 auto;
-  color: var(--c-icon);
-  opacity: .75;
-}
-
-.settings-a-section .settings-tools-info-btn {
+.settings-main-menu .settings-tools-info-btn {
   margin: 0;
 }

@@ -204,6 +204,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const cameraOnRef = useRef(false);
     const cameraStreamRef = useRef<MediaStream | null>(null);
     const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+    // 换前后摄时 cameraOn 不变，靠这个计数把新流挂上去（否则后置是黑屏）
+    const [cameraStreamVersion, setCameraStreamVersion] = useState(0);
     // 小窗位置（拖过就记住）
     const [cameraWindowPos, setCameraWindowPos] = useState<{ x: number; y: number } | null>(null);
     const cameraDragRef = useRef<{ dx: number; dy: number } | null>(null);
@@ -244,6 +246,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             setCameraError(null);
             cameraOnRef.current = true;
             setCameraOn(true);
+            setCameraStreamVersion(version => version + 1);
         } catch (error) {
             const name = (error as { name?: string })?.name || "";
             setCameraError(
@@ -269,13 +272,13 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         void startCamera(next);
     }, [cameraFacing, startCamera]);
 
-    // 视频节点挂流（节点每次重渲染可能新建）
+    // 视频节点挂流（换前后摄会换流，必须跟着重挂）
     useEffect(() => {
         const el = cameraVideoRef.current;
         if (!el) return;
         el.srcObject = cameraStreamRef.current;
         if (cameraOn) el.play().catch(() => { });
-    }, [cameraOn]);
+    }, [cameraOn, cameraStreamVersion]);
 
     // 挂断 / 卸载时一定关掉摄像头，否则指示灯一直亮
     useEffect(() => () => {

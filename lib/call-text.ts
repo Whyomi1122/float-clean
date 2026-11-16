@@ -75,6 +75,15 @@ export function stripChatMarkers(text: string): string {
 }
 
 /**
+ * 整条内容都是旁白（没有台词）——用于聊天室「不套气泡、走居中灰色斜体」。
+ */
+export function isNarrationOnlyContent(text: string): boolean {
+    if (!text || !text.trim()) return false;
+    const { dialogue, narration } = splitNarration(text);
+    return !!narration && !!narration.trim() && !dialogue.trim();
+}
+
+/**
  * 把一段内容拆成「台词」与「旁白」。
  * ① 先认行首旁白暗号（正向识别，最可靠）；② 剩下的再走旧启发式。
  */
@@ -368,7 +377,8 @@ export function normalizeBilingualLayout(text: string): string {
 /**
  * 把一段回复切成适合分段合成的短句：先合成第一句就能开播，
  * 后面几句在播放的同时并行合成，首字出声延迟明显降低。
- */export function splitSpeechChunks(text: string, maxLen = 40): string[] {
+ */
+export function splitSpeechChunks(text: string, maxLen = 40): string[] {
     const cleaned = text.replace(/\s+/g, " ").trim();
     if (!cleaned) return [];
     const pieces = cleaned.match(/[^。！？!?…；;\n]+[。！？!?…；;]?/g) || [cleaned];
@@ -483,6 +493,13 @@ export function splitSentencesForDisplay(text: string): string[] {
         // 按句号切开后要逐句补回括号，否则末尾孤立的「）」会自己成一帧（2026-11-08 实机）。
         const parenOnly = line.match(/^[（(]([^（）()]+)[）)]$/);
         if (parenOnly) {
+            // 单独一行的中文译文：并回上一条韩语，做成「韩语 +（中文）」一个气泡
+            // （2026-11-15 实机：通话页每个译文各自成气泡，看着像多说了好几句）
+            const prev = out[out.length - 1];
+            if (prev && !/[（(]/.test(prev) && HANGUL_RE.test(prev) && !looksLikeChineseLine(prev)) {
+                out[out.length - 1] = `${prev}\n（${parenOnly[1].trim()}）`;
+                continue;
+            }
             const innerParts = splitByPunctuation(parenOnly[1].trim());
             if (innerParts.length > 1) out.push(...innerParts.map(part => `（${part}）`));
             else out.push(line);

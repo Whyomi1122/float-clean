@@ -145,13 +145,13 @@ function StoryClockQuickCard({ onOpen }: { onOpen: () => void }) {
  * 之前小方块 / 横条大卡混着放，现在统一成「白卡 + 行」。
  */
 function SettingsRow({
-    icon: Icon,
     label,
     desc,
     onClick,
     right,
 }: {
-    icon: LucideIcon;
+    /** 2026-11-15 用户要求去掉图标，保留该字段只为不逐个改调用点 */
+    icon?: LucideIcon;
     label: string;
     desc?: string;
     onClick?: () => void;
@@ -159,27 +159,24 @@ function SettingsRow({
 }) {
     const body = (
         <>
-            <span className="settings-a-icon">
-                <Icon size={18} strokeWidth={1.7} />
-            </span>
-            <span className="settings-a-copy">
-                <span className="settings-a-label">{label}</span>
-                {desc ? <span className="settings-a-desc">{desc}</span> : null}
-            </span>
-            {right ?? <ChevronRight size={16} className="settings-a-chev" />}
+            <div className="flex flex-col flex-1 text-left gap-0.5">
+                <span className="ts-14 font-semibold text-[var(--c-text-title)]">{label}</span>
+                {desc ? <span className="ts-11 text-[var(--c-text)] opacity-70">{desc}</span> : null}
+            </div>
+            {right ?? <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />}
         </>
     );
     if (!onClick) {
-        return <div className="settings-a-row">{body}</div>;
+        return <div className="prefs-row">{body}</div>;
     }
     return (
-        <button type="button" className="settings-a-row" onClick={onClick}>
+        <button type="button" className="prefs-row" onClick={onClick}>
             {body}
         </button>
     );
 }
 
-/** 一组白卡：英文大写小标题 + 若干行 */
+/** 一组白卡：小标题 + 若干行（和聊天设置页共用 .prefs-block / .prefs-row） */
 function SettingsSection({
     title,
     action,
@@ -190,13 +187,17 @@ function SettingsSection({
     children: ReactNode;
 }) {
     return (
-        <section className="settings-a-section">
-            <div className="settings-a-head">
-                <h3 className="settings-a-title">{title}</h3>
-                {action}
-            </div>
-            <div className="settings-a-rows">{children}</div>
-        </section>
+        <div className="prefs-block">
+            {action ? (
+                <div className="flex items-center justify-between gap-2">
+                    <span className="prefs-block-label">{title}</span>
+                    {action}
+                </div>
+            ) : (
+                <span className="prefs-block-label">{title}</span>
+            )}
+            {children}
+        </div>
     );
 }
 
