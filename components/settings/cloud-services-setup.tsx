@@ -34,7 +34,8 @@ const SUPABASE_TOKENS_URL = "https://supabase.com/dashboard/account/tokens";
 export function CloudServicesPage() {
     return (
         <div className="page-menu">
-            <div className="menu-group" style={{ padding: "18px 16px" }}>
+            <div className="prefs-block" style={{ padding: "4px 16px 16px" }}>
+                <span className="prefs-block-label">Cloud Deploy</span>
                 <CloudServicesSetup />
             </div>
         </div>

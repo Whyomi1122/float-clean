@@ -120,20 +120,9 @@ const iconStyle = (color: string): CSSProperties => ({
   "--icon-color": color,
 } as CSSProperties);
 
-function DataSettingsIcon({ icon: Icon, color }: { icon: LucideIcon; color: string }) {
-  return (
-    <span className="card-icon" style={iconStyle(color)}>
-      <Icon size={22} strokeWidth={1.75} />
-    </span>
-  );
-}
 
 function DataSectionTitle({ children }: { children: string }) {
-  return (
-    <div className="flex justify-between items-center gap-3">
-      <p className="settings-menu-section-title">{children}</p>
-    </div>
-  );
+  return <span className="prefs-block-label">{children}</span>;
 }
 
 type ModuleChipItem = {
@@ -612,16 +601,15 @@ export function DataManagement({ onNotice }: DataManagementProps) {
 
   return (
     <div className="page-menu data-management-menu" style={{ padding: 0 }}>
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Module Breakdown</DataSectionTitle>
-        <div className="menu-group">
+        <div className="flex flex-col">
           {snapshot?.modules.length ? (
-            <div className="menu-item data-readonly-item data-pie-item">
+            <div className="py-3">
               <ModulePieChart modules={snapshot.modules} totalBytes={snapshot.totalBytes} />
             </div>
           ) : (
-            <div className="menu-item data-readonly-item">
-              <DataSettingsIcon icon={Database} color={BINDING_ACCENTS.api} />
+            <div className="prefs-row">
               <div className="menu-label-group">
                 <span className="menu-label">正在统计</span>
                 <span className="menu-desc">读取本地存储中</span>
@@ -631,11 +619,10 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       </div>
 
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Local Protection</DataSectionTitle>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
-            <DataSettingsIcon icon={ShieldCheck} color={persisted ? BINDING_ACCENTS.embedding : BINDING_ACCENTS.regex} />
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">浏览器持久化保护</span>
               <span className="menu-desc">{persistSupported ? persisted ? "已开启；关闭需到浏览器网站设置中撤销" : "降低被自动清理的概率，但不能替代备份" : "当前浏览器不支持持久化申请，请依赖文件备份"}</span>
@@ -647,11 +634,10 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       </div>
 
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Media Cleanup</DataSectionTitle>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
-            <DataSettingsIcon icon={Archive} color={CONTENT_APP_ACCENTS.moments} />
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">图片/多媒体文件自动压缩及清理</span>
               <span className="menu-desc">开启后每天最多执行一次：4 天以上压缩聊天、朋友圈、小红书动态图片；7 天以上清理聊天图片、朋友圈/小红书真实图和本地音乐。壁纸、图标、dock、字体等常驻资源不纳入自动清理。</span>
@@ -660,7 +646,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
               <Toggle checked={mediaConfig.enabled} onChange={updateMediaMaintenance} disabled={Boolean(busy)} />
             </span>
           </div>
-          <div className="menu-item data-readonly-item">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">清理状态</span>
               <span className="menu-desc">
@@ -691,11 +677,10 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       </div>
 
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Storage Space</DataSectionTitle>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
-            <DataSettingsIcon icon={HardDrive} color={BINDING_ACCENTS.api} />
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">存储空间占用</span>
               <span className="menu-desc">
@@ -718,7 +703,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
             </div>
           </div>
           {spaceStats?.map((stat) => (
-            <div key={stat.id} className="menu-item data-readonly-item">
+            <div key={stat.id} className="prefs-row">
               <div className="menu-label-group">
                 <span className="menu-label">
                   {stat.label} · {formatBytes(stat.bytes)}{stat.count > 0 ? `（${stat.count} 项）` : ""}
@@ -743,10 +728,10 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       </div>
 
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Export & Import</DataSectionTitle>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">本地导出·不含图片/多媒体</span>
               <span className="menu-desc">仅【本地导出备份文件】生效：去掉壁纸、聊天图、朋友圈图等大文件（保留角色头像），文件更小、导出不卡。云端备份已支持分片上传，会完整备份图片，不受此开关影响。</span>
@@ -755,7 +740,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
               <Toggle checked={cloudConfig.excludeMedia} onChange={(checked) => updateCloud({ excludeMedia: checked })} />
             </span>
           </div>
-          <div className="menu-item data-readonly-item">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">导出模块</span>
               <span className="menu-desc">已选择 {selectedExportModules.length} / {DATA_MODULES.length} 个模块</span>
@@ -795,11 +780,10 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       </div>
 
-      <div className="data-section">
+      <div className="prefs-block">
         <DataSectionTitle>Cloud Backup</DataSectionTitle>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
-            <DataSettingsIcon icon={CloudUpload} color={BINDING_ACCENTS.api} />
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">备份到你的 Supabase</span>
               <span className="menu-desc">云端备份与恢复</span>
@@ -905,7 +889,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
             )}
           </div>
 
-          <div className="menu-item data-readonly-item">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">自动备份</span>
               <span className="menu-desc">开启后按间隔在后台静默备份。</span>
@@ -1071,20 +1055,16 @@ export function DataManagement({ onNotice }: DataManagementProps) {
         </div>
       )}
 
-      <div className="data-section data-cleanup-section">
-        <DataSectionTitle>Module Cleanup</DataSectionTitle>
-        <div className="data-danger-alert" role="note" aria-label="危险操作提示">
-          <span className="data-danger-icon" aria-hidden="true">
-            <AlertTriangle size={17} strokeWidth={2.1} />
-          </span>
-          <div className="data-danger-copy">
-            <span>危险操作</span>
-            <p>清理会删除所选模块的本地数据。执行前请先导出备份，误删后只能通过备份文件恢复。</p>
+      <div className="prefs-block">
+        <DataSectionTitle>Danger Zone</DataSectionTitle>
+        <div className="prefs-row">
+          <div className="menu-label-group">
+            <span className="menu-label text-[var(--c-danger)]">清理会删除本地数据</span>
+            <span className="menu-desc">执行前请先导出备份，误删后只能通过备份文件恢复。</span>
           </div>
         </div>
-        <div className="menu-group">
-          <div className="menu-item data-readonly-item">
-            <DataSettingsIcon icon={Trash2} color="#E5484D" />
+        <div className="flex flex-col">
+          <div className="prefs-row">
             <div className="menu-label-group">
               <span className="menu-label">清理模块</span>
               <span className="menu-desc">已选择 {selectedClearModules.length} / {DATA_MODULES.length} 个模块，清理前会先尝试备份</span>

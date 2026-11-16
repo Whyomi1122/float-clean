@@ -1155,24 +1155,17 @@ export function BindingManager() {
             {/* Level 1: Global defaults + character action */}
             {level === "global" && (
                 <>
-                    <section className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between gap-3">
-                            <p className="settings-menu-section-title min-w-0">Global Defaults</p>
-                            <button
-                                type="button"
-                                onClick={() => setShowCharacterPicker(true)}
-                                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[18px] bg-black px-3 text-[calc(11px*var(--app-text-scale,1))] font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-                            >
-                                <UserPlus size={14} strokeWidth={1.8} />
-                                为角色配置专属绑定
-                            </button>
-                        </div>
+                    <section className="prefs-block">
+                        <span className="prefs-block-label">Global Defaults</span>
                         {renderGlobalSlotCards()}
+                        <button type="button" className="prefs-row" onClick={() => setShowCharacterPicker(true)}>
+                            <span className="ts-14 text-[var(--c-text)]">＋ 为角色配置专属绑定</span>
+                        </button>
                     </section>
 
-                    <section className="flex flex-col gap-3">
-                        <p className="settings-menu-section-title">Auxiliary API</p>
-                        <div className="flex flex-col gap-3">
+                    <section className="prefs-block">
+                        <span className="prefs-block-label">Auxiliary API</span>
+                        <div className="flex flex-col">
                             {renderAuxSelect("memorySummaryApiConfigId", "记忆总结 API")}
                             {renderAuxSelect("embeddingApiConfigId", "向量召回 API")}
                             {renderAuxSelect("mascotApiConfigId", "小卷助手 API")}
@@ -1191,14 +1184,14 @@ export function BindingManager() {
             {/* Level 2: Character binding details */}
             {level === "character" && (
                 <>
-                    <section className="flex flex-col gap-3">
-                        <p className="settings-menu-section-title">Character Defaults</p>
+                    <section className="prefs-block">
+                        <span className="prefs-block-label">Character Defaults</span>
                         {renderCharacterSlotCards()}
                     </section>
 
-                    <section className="flex flex-col gap-3">
-                        <p className="settings-menu-section-title">App Bindings</p>
-                        <div className="binding-app-grid">
+                    <section className="prefs-block">
+                        <span className="prefs-block-label">App Bindings</span>
+                        <div className="binding-app-grid pb-2">
                             {appOverrideEntries.map(app => {
                                 const appSlot = getAppSpecificSlot(app.id);
                                 const overrideCount = countOverrides(appSlot, app.id);
@@ -1240,19 +1233,18 @@ export function BindingManager() {
             {/* Level 3: App binding */}
             {level === "app" && (
                 <>
-                    <section className="flex flex-col gap-3">
-                        <p className="settings-menu-section-title">App Binding</p>
+                    <section className="prefs-block">
+                        <span className="prefs-block-label">App Binding</span>
                         {renderBindingSlotCards(currentSlot, inheritLabel, setActiveSlotSheetField, {
                             includeRegex: canBindRegexInApp(selectedAppId),
                         })}
                     </section>
 
-                    <button
-                        onClick={resetAppBinding}
-                        className="ui-btn ui-btn-soft-danger flex justify-center"
-                    >
-                        <RotateCcw size={16} /> 重置此应用绑定
-                    </button>
+                    <div className="prefs-block">
+                        <button type="button" className="prefs-row" onClick={resetAppBinding}>
+                            <span className="ts-14 text-[var(--c-danger)]">重置此应用绑定</span>
+                        </button>
+                    </div>
                 </>
             )}
         </div>

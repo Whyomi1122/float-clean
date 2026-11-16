@@ -317,16 +317,7 @@ export function WeixinSettings({ onOpenCloudServices }: { onOpenCloudServices?: 
     return (
         <div className="flex flex-col gap-[24px] h-full">
             <div className="flex justify-between items-center gap-3">
-                <p className="settings-menu-section-title">WeChat Bots</p>
-                {!addStep && (
-                    <button
-                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[18px] bg-black px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-gray-800 hover:shadow-md active:scale-95 focus:outline-none"
-                        onClick={() => { setAddStep("select-character"); setAddError(""); }}
-                    >
-                        <Plus size={14} strokeWidth={1.8} />
-                        添加微信 Bot
-                    </button>
-                )}
+                <span className="prefs-block-label">WeChat Bots</span>
             </div>
 
             {cloudSyncNotice && (
@@ -334,18 +325,18 @@ export function WeixinSettings({ onOpenCloudServices }: { onOpenCloudServices?: 
             )}
 
             {/* 微信云端助手 */}
-            <div className="ui-group-card !items-stretch">
-                <div className="flex items-start gap-3">
-                    <div className="ui-icon-circle shrink-0"><Cloud size={20} /></div>
-                    <div className="flex-1 flex flex-col gap-1">
-                        <span className="menu-label font-medium">微信云端助手</span>
-                        <span className="menu-desc !mt-0">
+            <div className="prefs-block">
+                <span className="prefs-block-label">Weixin Cloud</span>
+                <div className="prefs-row">
+                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">微信云端助手</span>
+                        <span className="ts-11 text-[var(--c-text)] opacity-70">
                             部署到你自己的 Supabase，无需电脑常开，云端每 10 秒自动回复。
                         </span>
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-3 mt-4">
+                <div className="flex flex-col gap-3 pb-2">
                     <div className="flex items-center gap-3">
                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${weixinCloudDeployed ? "bg-green-500" : "bg-black/20"}`} />
                         <span className="menu-label flex-1">{weixinCloudDeployed ? "已部署" : "未部署"}</span>
@@ -449,22 +440,23 @@ export function WeixinSettings({ onOpenCloudServices }: { onOpenCloudServices?: 
 
             {/* Bot 列表 */}
             {bots.length > 0 && (
-                <div className="flex flex-col gap-2">
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Bots</span>
                     {bots.map(bot => {
                         const char = characters.find(c => c.id === bot.characterId);
                         const status = getWeixinBotStatus(bot.id);
                         return (
-                            <div key={bot.id} className="ui-group-card !flex-row !items-center">
-                                <div className="flex-1 flex flex-col gap-1">
-                                    <div className="flex items-center gap-[6px]">
+                            <div key={bot.id} className="prefs-row">
+                                <div className="flex-1 min-w-0 flex flex-col text-left gap-0.5">
+                                    <div className="flex items-center gap-[6px] min-w-0">
                                         {statusDot(bot.id)}
-                                        <span className="menu-label">{char?.name ?? bot.nickname ?? bot.characterId}</span>
+                                        <span className="ts-14 font-semibold truncate text-[var(--c-text-title)]">{char?.name ?? bot.nickname ?? bot.characterId}</span>
                                     </div>
-                                    <span className={`menu-desc !mt-0 ${status.status === "running" ? "text-green-500" : status.status === "error" ? "text-red-500" : ""}`}>
+                                    <span className={`ts-11 truncate ${status.status === "running" ? "text-green-500" : status.status === "error" ? "text-red-500" : "text-[var(--c-text)] opacity-70"}`}>
                                         {statusLabel(bot.id)}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0">
+                                <div className="flex items-center gap-2 shrink-0">
                                     <button
                                         className="ui-link-btn"
                                         data-variant="muted"
@@ -474,7 +466,7 @@ export function WeixinSettings({ onOpenCloudServices }: { onOpenCloudServices?: 
                                     >
                                         {cloudSyncingId === bot.id ? <Loader2 size={14} className="animate-spin" /> : <CloudUpload size={14} />}
                                     </button>
-                                    <button className="ui-link-btn" data-variant="muted" onClick={() => setConfirmDeleteId(bot.id)}>
+                                    <button className="ui-link-btn" data-variant="danger" onClick={() => setConfirmDeleteId(bot.id)} aria-label="删除 Bot">
                                         <Trash2 size={14} />
                                     </button>
                                     <Toggle checked={bot.enabled} onChange={v => handleToggle(bot.id, v)} />
@@ -482,17 +474,26 @@ export function WeixinSettings({ onOpenCloudServices }: { onOpenCloudServices?: 
                             </div>
                         );
                     })}
+                    {!addStep && (
+                        <button type="button" className="prefs-row" onClick={() => { setAddStep("select-character"); setAddError(""); }}>
+                            <span className="ts-14 text-[var(--c-text)]">＋ 添加微信 Bot</span>
+                        </button>
+                    )}
                 </div>
             )}
 
             {/* 空状态 */}
             {bots.length === 0 && !addStep && (
-                <div className="ui-empty mt-2">
-                    <div className="ui-icon-circle"><MessageSquare size={24} /></div>
-                    <span className="menu-label font-semibold">暂无微信 Bot</span>
-                    <span className="menu-desc max-w-[240px]">通过 iLink 协议让 AI 角色以真实微信号回复消息。</span>
-                    <button className="ui-btn ui-btn-primary" onClick={() => { setAddStep("select-character"); setAddError(""); }}>
-                        <Plus size={16} /> 添加 Bot
+                <div className="prefs-block">
+                    <span className="prefs-block-label">Bots</span>
+                    <div className="prefs-row">
+                        <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                            <span className="ts-14 font-semibold text-[var(--c-text-title)]">暂无微信 Bot</span>
+                            <span className="ts-11 text-[var(--c-text)] opacity-70">通过 iLink 协议让 AI 角色以真实微信号回复消息</span>
+                        </div>
+                    </div>
+                    <button type="button" className="prefs-row" onClick={() => { setAddStep("select-character"); setAddError(""); }}>
+                        <span className="ts-14 text-[var(--c-text)]">＋ 添加微信 Bot</span>
                     </button>
                 </div>
             )}
