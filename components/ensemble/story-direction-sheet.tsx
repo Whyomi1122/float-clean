@@ -13,11 +13,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, RotateCcw, X } from "lucide-react";
 import {
+    clearLastBatch,
     DIRECTION_TYPE_LABEL,
     drawCardTypes,
     generateStoryDirectionCards,
     loadStoryDirectionState,
     pickTypeForRedraw,
+    restoreLastBatch,
     type DirectionType,
     type StoryDirection,
     type StoryDirectionContext,
@@ -27,11 +29,13 @@ interface StoryDirectionSheetProps {
     open: boolean;
     /** 剧本 id：去重列表（recent）每次生成前现读，避免同一会话里越抽越像 */
     scriptId?: string;
+    /** 当前回合数：重开弹窗时回合数没变就还原上次那两张，不重新抽 */
+    turnCount?: number;
     context: StoryDirectionContext;
     onClose: () => void;
     onAdopt: (card: StoryDirection) => void;
     /** 展示过即记（跨批去重），不采纳也记 */
-    onShown: (cards: StoryDirection[]) => void;
+    onShown: (cards: StoryDirection[], turnCount?: number) => void;
 }
 
 const TYPE_ACCENT: Record<DirectionType, string> = {
@@ -41,7 +45,7 @@ const TYPE_ACCENT: Record<DirectionType, string> = {
     accident: "#C77B4A",
 };
 
-export default function StoryDirectionSheet({ open, scriptId, context, onClose, onAdopt, onShown }: StoryDirectionSheetProps) {
+export default function StoryDirectionSheet({ open, scriptId, turnCount, context, onClose, onAdopt, onShown }: StoryDirectionSheetProps) {
     const [cards, setCards] = useState<StoryDirection[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -74,11 +78,22 @@ export default function StoryDirectionSheet({ open, scriptId, context, onClose, 
         }
         setCards(result.cards);
         shownRef.current = result.cards;
-        onShown(result.cards);
-    }, [context, onShown, scriptId]);
+        onShown(result.cards, turnCount);
+    }, [context, onShown, scriptId, turnCount]);
 
     useEffect(() => {
         if (!open) return;
+        // 手滑关掉再打开：还原刚才那两张，不重新抽（重抽有单独的按钮）
+        const saved = restoreLastBatch(scriptId, turnCount);
+        if (saved.length > 0) {
+            setCards(saved);
+            setSelectedId(null);
+            setAdoptingId(null);
+            setError(null);
+            setLoading(false);
+            shownRef.current = saved;
+            return;
+        }
         void drawBatch();
         // 只在打开时抽一批；context 变化不重抽（避免边看边被换掉）
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,11 +120,11 @@ export default function StoryDirectionSheet({ open, scriptId, context, onClose, 
         setCards(prev => {
             const next = prev.map(c => (c.id === cardId ? fresh : c));
             shownRef.current = next;
-            onShown(next);
+            onShown(next, turnCount);
             return next;
         });
         if (selectedId === cardId) setSelectedId(fresh.id);
-    }, [cards, context, onShown, selectedId]);
+    }, [cards, context, onShown, scriptId, selectedId, turnCount]);
 
     const adopt = useCallback(() => {
         const chosen = cards.find(c => c.id === selectedId);
@@ -117,9 +132,17 @@ export default function StoryDirectionSheet({ open, scriptId, context, onClose, 
         setAdoptingId(chosen.id);
         window.setTimeout(() => {
             onAdopt(chosen);
+            // 这一批用掉了：下次打开要重新抽，不还原旧牌
+            clearLastBatch(scriptId);
             setAdoptingId(null);
         }, 200);
-    }, [cards, onAdopt, selectedId]);
+    }, [cards, onAdopt, scriptId, selectedId]);
+
+    /** 两张都不要：明确表示不满意，清掉这批，下次打开重新抽 */
+    const discard = useCallback(() => {
+        clearLastBatch(scriptId);
+        onClose();
+    }, [onClose, scriptId]);
 
     if (!open) return null;
 
@@ -220,7 +243,7 @@ export default function StoryDirectionSheet({ open, scriptId, context, onClose, 
                         </>
                     ) : (
                         <>
-                            <button type="button" className="sd-btn sd-btn-ghost" onClick={onClose}>
+                            <button type="button" className="sd-btn sd-btn-ghost" onClick={discard}>
                                 两张都不要
                             </button>
                             <button type="button" className="sd-btn sd-btn-soft" onClick={() => void drawBatch()} disabled={loading}>

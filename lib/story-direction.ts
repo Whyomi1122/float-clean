@@ -44,8 +44,10 @@ export interface DirectionRecentEntry {
 
 export interface StoryDirectionState {
     active?: StoryDirection;
-    /** 上一批抽到的两张（用于「换这张」去重与软随机判断） */
+    /** 上一批抽到的两张（关掉弹窗再打开要还原，不能重新抽） */
     lastBatch?: StoryDirection[];
+    /** 抽这批时的回合数：回合数变了说明戏往前走过了，旧卡就作废 */
+    lastBatchTurns?: number;
     recent: DirectionRecentEntry[];
 }
 
@@ -113,8 +115,8 @@ export function setActiveDirection(scriptId: string | undefined, active: StoryDi
     saveStoryDirectionState(scriptId, { ...state, active: active ?? undefined });
 }
 
-/** 展示过即记（不采纳也记），去重靠它 */
-export function rememberBatch(scriptId: string | undefined, cards: StoryDirection[]) {
+/** 展示过即记（不采纳也记），去重靠它；顺带把这一批存成 lastBatch 供重开还原 */
+export function rememberBatch(scriptId: string | undefined, cards: StoryDirection[], turnCount?: number) {
     if (!scriptId || cards.length === 0) return;
     const state = loadStoryDirectionState(scriptId);
     const added: DirectionRecentEntry[] = cards.map(c => ({
@@ -123,7 +125,21 @@ export function rememberBatch(scriptId: string | undefined, cards: StoryDirectio
         gist: c.event,
     }));
     const recent = [...added, ...state.recent].slice(0, RECENT_MAX);
-    saveStoryDirectionState(scriptId, { ...state, lastBatch: cards, recent });
+    saveStoryDirectionState(scriptId, { ...state, lastBatch: cards, lastBatchTurns: turnCount, recent });
+}
+
+/**
+ * 重开弹窗时该还原哪一批：回合数没变（戏没往前走）就还原来那两张，
+ * 变了说明现场已经不同，旧卡作废、重新抽。
+ */
+export function restoreLastBatch(scriptId: string | undefined, turnCount?: number): StoryDirection[] {
+    const state = loadStoryDirectionState(scriptId);
+    const batch = state.lastBatch ?? [];
+    if (batch.length === 0) return [];
+    if (typeof turnCount === "number" && typeof state.lastBatchTurns === "number" && state.lastBatchTurns !== turnCount) {
+        return [];
+    }
+    return batch;
 }
 
 /** 刷新/切剧本时把没用的卡丢掉：只保留已经采纳的 active 与 recent */
@@ -201,10 +217,10 @@ export function buildDirectionContext(args: {
     recentDirections?: DirectionRecentEntry[];
     recentLimit?: number;
 }): StoryDirectionContext {
-    const limit = args.recentLimit ?? 10;
+    const limit = args.recentLimit ?? 14;
     const recentLines = args.turns
         .slice(-limit)
-        .map(t => `${t.senderType === "user" ? "用户" : (t.senderName || "旁白")}：${(t.content || "").replace(/\s+/g, " ").slice(0, 160)}`)
+        .map(t => `${t.senderType === "user" ? "用户" : (t.senderName || "旁白")}：${(t.content || "").replace(/\s+/g, " ").slice(0, 200)}`)
         .filter(line => line.trim().length > 3);
 
     // 归档只读：只取最近一条有内容的
@@ -262,6 +278,20 @@ export function buildStoryDirectionSystemPrompt(): string {
         "4. 不许与「最近已经用过的方向」重复或近义。",
         "5. 只输出结构化卡片，不写解释、不写客套、不加标题之外的任何说明文字。",
         "",
+        "【必须接住现场 · 不合格率最高的一项】",
+        "- 每张卡都必须**从【最近对话】的最后一条接着往下**：地点、时间、在场人物、正在做的事都不能换。不许切场景、不许跳时间、不许闪前、不许换成「换了个地方开始聊」。",
+        "- 如果最后几条里有人正在说一句话 / 正在做一件事 / 刚被问了一个问题，卡要**回应它**，不要另起一摊。",
+        "- 【意外卡】也只能引入**现场能合理出现的人或事**（在场者的家人/同事/来电/门铃/同一个空间的第三方），不许塞与这场戏无关的新角色、新麻烦、新剧情线。",
+        "- 只能使用【在场角色】里出现的人；没列出来的人一律当不在场，不许凭印象给角色安排别的身份和关系。",
+        "- 自检：读者读完卡应该觉得「对，接下来确实可能是这个」，而不是「这是从别的剧里搬来的」。",
+        "",
+        "【现实节奏 · 不许开挂】",
+        "- **时间尺度**：一张卡 = 接下来**几分钟到一两个小时内**、在**当前这个地点**发生的事。不许出现「第二天一早」「周末」「下个月」「一周后」。",
+        "- **不许跳过程**：现实中需要时间或手续的事（报名、投递、审核、面试、缴费、签约、体检、注册、录取、入职、办证、审批、立案、开业、搬家、修复关系…），卡里最多只能写到**其中的第一步**（刚发出申请 / 刚被通知要交材料 / 刚被人叫去谈），**绝不许**出现「已经预注册好了」「手续办完了」「录取通知下来了」「人已经到楼下了」这种一步到位的跳步结果。这类事的正常耗时是几天到几周，不是一轮对话。",
+        "- **不许凭空给**角色新资格、新身份、新资源、新关系（突然是某研究院的研究员、突然很有钱、突然认识某个大人物）。除非【在场角色】或【最近对话】里已经出现过，否则一律当没有。",
+        "- **符合常识与作息**：上课时间不会出现在酒吧、凌晨不会有人上门家访、没人半夜被一个电话就叫回公司还立刻到岗（剧本明确写了这种职业除外）。",
+        "- **一张卡一件事**：不要在一张卡里塞三四件事，也不要写完事件再顺手描写结果之后的连锁反应。",
+        "",
         "【字段要求】",
         "- title：≤10 字，一眼看懂「谁要做什么」。",
         "- event：一句话，**可见的行为或事件**，具体到能拍出来。",
@@ -276,19 +306,24 @@ export function buildStoryDirectionUserPrompt(ctx: StoryDirectionContext, types:
     const blocks: string[] = [];
 
     if (ctx.scriptTitle) blocks.push(`【剧本】${ctx.scriptTitle}`);
-    if (ctx.storyTimeText) blocks.push(`【剧情内时间】${ctx.storyTimeText}`);
+    if (ctx.storyTimeText) blocks.push(`【剧情内时间】${ctx.storyTimeText}（两张卡都发生在接下来的几十分钟内，不许跳时间）`);
 
     if (ctx.cast.length > 0) {
         const castLines = ctx.cast.map(c => {
             const persona = (c.persona || "").replace(/\s+/g, " ").slice(0, 260);
             return `- ${c.name}${c.isUser ? "（用户本人）" : ""}${persona ? `：${persona}` : ""}`;
         });
-        blocks.push(`【在场角色】\n${castLines.join("\n")}`);
+        blocks.push(`【在场角色】（只有这些人存在，别的人一律不在场）\n${castLines.join("\n")}`);
     }
 
     if (ctx.worldBookText) blocks.push(ctx.worldBookText.trim());
     if (ctx.archiveText) blocks.push(ctx.archiveText.trim());
-    if (ctx.recentLines.length > 0) blocks.push(`【最近对话（从旧到新）】\n${ctx.recentLines.join("\n")}`);
+    if (ctx.recentLines.length > 0) {
+        const lines = ctx.recentLines.map((line, i) =>
+            i === ctx.recentLines.length - 1 ? `${line}\n└ 上面这条就是**现在**：两张卡都必须紧接着它发生（同一个地点、同一个人、同一件正在做的事）` : line
+        );
+        blocks.push(`【最近对话（从旧到新，最后一条 = 当前现场）】\n${lines.join("\n")}`);
+    }
 
     const recent = (ctx.recentDirections ?? []).slice(0, RECENT_MAX);
     if (recent.length > 0) {
@@ -409,7 +444,7 @@ export async function generateStoryDirectionCards(
                 { role: "system", content: buildStoryDirectionSystemPrompt() },
                 { role: "user", content: buildStoryDirectionUserPrompt(ctx, types) },
             ],
-            { temperature: options?.temperature ?? 0.95 }
+            { temperature: options?.temperature ?? 0.85 }
         );
         const content = (result.content || "").trim();
         if (!content) return { cards: [], error: result.error || "模型没有返回内容" };

@@ -1502,7 +1502,7 @@ export function EnsembleApp({
       // 走向卡生成用的上下文：只喂必要量（在场角色 + 世界书命中 + 最近 10 轮 + 归档只读 + 剧情时间）
       const storyDirectionContext = useMemo(() => {
         const turns = (currentScript?.turns ?? []).filter((t) => String(t.content || "").trim());
-        const tail = turns.slice(-10);
+        const tail = turns.slice(-14);
         const tailText = tail.map((t) => t.content).join("\n");
         return buildDirectionContext({
           scriptTitle: currentScript?.title,
@@ -4834,16 +4834,17 @@ ${lastSpeakerNote}
           <StoryDirectionSheet
             open={showStoryDirectionSheet}
             scriptId={currentScript?.id}
+            turnCount={currentScript?.turns.length}
             context={storyDirectionContext}
             onClose={() => setShowStoryDirectionSheet(false)}
             onAdopt={(card) => {
-              setActiveDirection(currentScript.id, card);
+              setActiveDirection(currentScript?.id, card);
               setActiveDirectionState(card);
               setShowStoryDirectionSheet(false);
             }}
-            onShown={(cards) => {
+            onShown={(cards, turns) => {
               // 展示过即记：不采纳也记，避免模型反复推同一批烂卡
-              rememberBatch(currentScript.id, cards);
+              rememberBatch(currentScript?.id, cards, turns);
             }}
           />
 
