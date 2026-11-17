@@ -1005,6 +1005,7 @@ export function removeApiConfigReferences(apiConfigId: string): void {
         "qaApiConfigId",
         "reasoningTranslateApiConfigId",
         "koreanSpeechApiConfigId",
+        "storyDirectionApiConfigId",
     ] as const;
     for (const field of auxFields) {
         if (next[field] === apiConfigId) {
@@ -1053,6 +1054,7 @@ export function remapApiConfigReferences(fromId: string, toId: string): void {
         "qaApiConfigId",
         "reasoningTranslateApiConfigId",
         "koreanSpeechApiConfigId",
+        "storyDirectionApiConfigId",
     ] as const;
     for (const field of auxFields) {
         if (next[field] === fromId) {
@@ -1139,7 +1141,7 @@ export function resolveBinding(
  * Falls back to global default apiConfigId if not explicitly set.
  */
 export function resolveAuxiliaryApiConfig(
-    field: "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId" | "koreanSpeechApiConfigId"
+    field: "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId" | "koreanSpeechApiConfigId" | "storyDirectionApiConfigId"
 ): ApiConfig | null {
     const config = loadBindingConfig();
     const apiConfigs = loadApiConfigs();

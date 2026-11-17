@@ -8,6 +8,7 @@ import {
   Clock,
   Activity,
   BookOpen,
+  Compass,
   Scissors,
   Image as ImageIcon,
   Music2,
@@ -44,6 +45,7 @@ export type EnsembleToolId =
   | "model"
   | "timeAwareness"
   | "statusPanel"
+  | "storyDirection"
   | "archive"
   | "worldBook"
   | "storyboard"
@@ -68,6 +70,7 @@ export interface EnsembleToolItem {
 export const ENSEMBLE_TOOLS: EnsembleToolItem[] = [
   { id: "timeAwareness", label: "时间感知", labelEn: "TIME AWARENESS", Icon: Clock, enabled: true },
   { id: "statusPanel", label: "状态面板", labelEn: "STATUS PANEL", Icon: Activity, enabled: true },
+  { id: "storyDirection", label: "下一步走向", labelEn: "STORY DIRECTION", Icon: Compass, enabled: true },
   { id: "worldBook", label: "世界书", labelEn: "WORLD BOOK", Icon: BookOpen, enabled: true },
   { id: "storyboard", label: "分镜配图", labelEn: "STORYBOARD", Icon: ImageIcon, enabled: true },
   { id: "moodMusic", label: "他的心情音乐", labelEn: "MOOD PLAYLIST", Icon: Music2, enabled: true },

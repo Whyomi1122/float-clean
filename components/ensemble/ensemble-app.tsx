@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -25,6 +25,7 @@ import {
   Type,
   Upload,
   MessageCircle,
+  X,
 } from "lucide-react";
 import type { Character } from "@/lib/character-types";
 import {
@@ -73,6 +74,16 @@ import {
   EnsembleToolsSheet,
   type EnsembleToolId,
 } from "@/components/ensemble/ensemble-tools-sheet";
+import StoryDirectionSheet from "@/components/ensemble/story-direction-sheet";
+import {
+  buildDirectionContext,
+  buildDirectionDirective,
+  buildDirectionWorldBookText,
+  loadStoryDirectionState,
+  rememberBatch,
+  setActiveDirection,
+  type StoryDirection,
+} from "@/lib/story-direction";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import {
   EnsembleScript,
@@ -1479,6 +1490,30 @@ export function EnsembleApp({
   };
   /** 他的心情音乐（2026-11-08）：只在剧情室开，弹窗写指令 → 后台生成 */
   const [showMoodMusicSheet, setShowMoodMusicSheet] = useState(false);
+      // 走向卡（2026-11-16）：入口在 TOOLS 面板第 3 位；采纳的走向只用于下一次生成
+      const [showStoryDirectionSheet, setShowStoryDirectionSheet] = useState(false);
+      const [activeDirection, setActiveDirectionState] = useState<StoryDirection | null>(null);
+
+      useEffect(() => {
+        // 切剧本 / 刷新页面后恢复「已采纳但还没用掉」的走向
+        setActiveDirectionState(loadStoryDirectionState(currentScript?.id).active ?? null);
+      }, [currentScript?.id]);
+
+      // 走向卡生成用的上下文：只喂必要量（在场角色 + 世界书命中 + 最近 10 轮 + 归档只读 + 剧情时间）
+      const storyDirectionContext = useMemo(() => {
+        const turns = (currentScript?.turns ?? []).filter((t) => String(t.content || "").trim());
+        const tail = turns.slice(-10);
+        const tailText = tail.map((t) => t.content).join("\n");
+        return buildDirectionContext({
+          scriptTitle: currentScript?.title,
+          cast: (currentScript?.cast ?? []).map((c) => ({ name: c.name, persona: c.persona })),
+          turns: tail.map((t) => ({ senderName: t.senderName, senderType: t.senderType, content: t.content })),
+          worldBookText: buildDirectionWorldBookText(currentScript?.worldBookIds, tailText),
+          archives: currentScript?.archives as { content?: string }[] | undefined,
+          timeAwareness: currentScript?.timeAwareness as never,
+          recentDirections: loadStoryDirectionState(currentScript?.id).recent,
+        });
+      }, [currentScript]);
   /** 投递：先选「用哪一句台词作为起点」，再选落点（单聊 / 群聊）。 */
   const [deliverPicker, setDeliverPicker] = useState<{
     turn: EnsembleTurn;
@@ -2639,6 +2674,10 @@ ${lastSpeakerNote}
         ? visibleTurns.filter((t) => t.id !== opts.rerollTurnId)
         : visibleTurns;
 
+      // 2026-11-16 走向卡：直接读存储里的 active（不依赖 state，避免回调依赖抖动）
+      const pendingDirection = opts?.rerollTurnId ? null : (loadStoryDirectionState(currentScript?.id).active ?? null);
+      const directionDirective = buildDirectionDirective(pendingDirection);
+
       // ── 长度复述（2026-10-11 · 治「指令只管一轮」的核心改动）──
       //
       // 病根：outputLenRule / 格式铁律等全部塞在 systemPrompt 里，而 system 是
@@ -2672,7 +2711,12 @@ ${lastSpeakerNote}
         })),
         // ⚠️ 结尾复述：必须是最后一条消息，且用 user 角色（模型对 user 的
         //   服从度高于 system 尾注；同时也避免部分中转把 system 中途消息丢弃）。
-        { role: "user", content: lengthEcho },
+        // 2026-11-16 走向卡：采纳过的走向与用户输入并列，进本轮指令（一次性，生成后清掉）。
+        // 重 roll 旧回合时不带走向，避免把已经发生过的事再演一遍。
+        {
+          role: "user",
+          content: directionDirective ? `${lengthEcho}\n\n${directionDirective}` : lengthEcho,
+        },
       ];
 
       // ── 走绑定桥：从「设置 → API 配置」取真实配置 ──
@@ -2710,6 +2754,12 @@ ${lastSpeakerNote}
           setApiError(result.error || "模型返回空内容");
         }
         return null;
+      }
+
+      // 走向卡是一次性的：这次已经演过了，立刻清掉（无论后面解析是否成功）
+      if (pendingDirection) {
+        setActiveDirection(currentScript?.id, null);
+        setActiveDirectionState(null);
       }
 
       // ── 护栏诊断落表（2026-10-11）──
@@ -4629,6 +4679,26 @@ ${lastSpeakerNote}
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
             data-ens-ui="1"
           >
+            {/* 走向卡（2026-11-16）：采纳后在输入框上方留一条可撤销的小条，用完自动消失 */}
+            {activeDirection && (
+              <div className="mb-1.5 flex items-center gap-2 rounded-xl bg-[var(--c-primary-soft)] px-2.5 py-1.5">
+                <span className="flex-1 min-w-0 truncate text-[11.5px] font-bold text-[var(--c-primary-ink)]">
+                  走向已设定：{activeDirection.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveDirection(currentScript.id, null);
+                    setActiveDirectionState(null);
+                  }}
+                  className="shrink-0 w-5 h-5 grid place-items-center rounded-full text-[var(--c-primary-ink)]/60 hover:bg-black/[0.05] active:scale-90 transition"
+                  aria-label="撤销走向"
+                  title="撤销走向"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               {/* 唯一的入口：+ 号 → 底部「功能」面板（旁白/配色/CSS/模型都收进去） */}
               <button
@@ -4754,7 +4824,26 @@ ${lastSpeakerNote}
                 setShowStoryboardSheet(true);
               } else if (id === "moodMusic") {
                 setShowMoodMusicSheet(true);
+              } else if (id === "storyDirection") {
+                setShowStoryDirectionSheet(true);
               }
+            }}
+          />
+
+          {/* ═══════════ 走向卡：下一步走向（TOOLS 面板第 3 位，2026-11-16） ═══════════ */}
+          <StoryDirectionSheet
+            open={showStoryDirectionSheet}
+            scriptId={currentScript?.id}
+            context={storyDirectionContext}
+            onClose={() => setShowStoryDirectionSheet(false)}
+            onAdopt={(card) => {
+              setActiveDirection(currentScript.id, card);
+              setActiveDirectionState(card);
+              setShowStoryDirectionSheet(false);
+            }}
+            onShown={(cards) => {
+              // 展示过即记：不采纳也记，避免模型反复推同一批烂卡
+              rememberBatch(currentScript.id, cards);
             }}
           />
 

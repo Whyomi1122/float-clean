@@ -360,6 +360,8 @@ export type BindingConfig = {
     reasoningTranslateApiConfigId?: string;
     /** Auxiliary API: used to transcribe Chinese lines into Korean for speech playback (global) */
     koreanSpeechApiConfigId?: string;
+    /** Auxiliary API: used to draft ensemble story-direction cards (global, 2026-11-16) */
+    storyDirectionApiConfigId?: string;
     // —— 二级选择：同一张卡里指定用哪个模型（2026-11-15，空 = 卡上的默认模型）——
     memorySummaryModel?: string;
     embeddingModel?: string;
@@ -367,6 +369,7 @@ export type BindingConfig = {
     qaModel?: string;
     reasoningTranslateModel?: string;
     koreanSpeechModel?: string;
+    storyDirectionModel?: string;
 };
 
 // --- Chat Toolbox ---
