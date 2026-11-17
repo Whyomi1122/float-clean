@@ -3316,6 +3316,66 @@
     50% { opacity: 1; transform: scale(1.15); }
 }
 
+/* 2026-11-17：资料可点开看内容，判断抓到的和这首歌对不对得上 */
+.mp-info-status-btn {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: calc(11px*var(--app-text-scale,1));
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mp-info-status-btn:hover {
+    opacity: 1;
+}
+
+.mp-info-view {
+    margin: 0 20px 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+    animation: modalSoftRise 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mp-info-view-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: calc(11px*var(--app-text-scale,1));
+    letter-spacing: 0.08em;
+    color: var(--c-music-text);
+    opacity: 0.7;
+    margin-bottom: 6px;
+}
+
+.mp-info-view-head button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.mp-info-view-body {
+    font-size: calc(12.5px*var(--app-text-scale,1));
+    line-height: 1.62;
+    color: var(--c-music-text);
+    opacity: 0.9;
+    max-height: 168px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 
 .mp-top-actions {
     display: flex;

@@ -16,7 +16,7 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
-import { getSongInfoStatus, getSongInfoStatusLabel, ensureSongInfo } from "@/lib/song-info-service";
+import { getSongInfo, getSongInfoStatus, getSongInfoStatusLabel, ensureSongInfo } from "@/lib/song-info-service";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -267,6 +267,13 @@ export default function MusicPlayer() {
         [player.currentTrack?.title, player.currentTrack?.artist, songInfoRevision]
     );
     const songInfoLabel = getSongInfoStatusLabel(songInfoStatus);
+    const [showSongInfo, setShowSongInfo] = useState(false);
+    const songInfoText = useMemo(
+        () => (player.currentTrack?.title ? getSongInfo(player.currentTrack.title, player.currentTrack.artist) : ""),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [player.currentTrack?.title, player.currentTrack?.artist, songInfoRevision]
+    );
+    useEffect(() => { setShowSongInfo(false); }, [player.currentTrack?.id]);
     useEffect(() => {
         let cancelled = false;
         const keyOf = (t: { title?: string; artist?: string }) => `${(t.title || "").trim().toLowerCase()}|${(t.artist || "").trim().toLowerCase()}`;
@@ -506,10 +513,24 @@ export default function MusicPlayer() {
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 5 7 7-7 7" /></svg>
                     </button>
                     {songInfoLabel && (
-                        <div className="mp-info-status" data-status={songInfoStatus}>
-                            <i className="mp-info-dot" />
-                            {songInfoLabel}
-                        </div>
+                        songInfoStatus === "ready" ? (
+                            <button
+                                type="button"
+                                className="mp-info-status mp-info-status-btn"
+                                data-status={songInfoStatus}
+                                onClick={() => setShowSongInfo(v => !v)}
+                                title="看抓到的资料"
+                            >
+                                <i className="mp-info-dot" />
+                                {songInfoLabel}
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showSongInfo ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="m6 9 6 6 6-6" /></svg>
+                            </button>
+                        ) : (
+                            <div className="mp-info-status" data-status={songInfoStatus}>
+                                <i className="mp-info-dot" />
+                                {songInfoLabel}
+                            </div>
+                        )
                     )}
                 </div>
                 <div className="mp-top-actions">
@@ -531,6 +552,19 @@ export default function MusicPlayer() {
                     </button>
                 </div>
             </div>
+
+            {/* 歌曲资料（点「资料 · 已获取」展开，看抓到的到底是什么，方便判断对不对） */}
+            {showSongInfo && songInfoText && (
+                <div className="mp-info-view" onClick={(e) => e.stopPropagation()}>
+                    <div className="mp-info-view-head">
+                        <span>歌曲资料</span>
+                        <button type="button" onClick={() => setShowSongInfo(false)} aria-label="收起">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                    <div className="mp-info-view-body">{songInfoText}</div>
+                </div>
+            )}
 
             {/* Body — cover / vinyl / glow lyrics */}
             <div className="mp-body">

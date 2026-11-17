@@ -143,30 +143,69 @@ const PLAN_SYSTEM = `你是配乐编辑,要为一个角色的「此刻心情」�
 
 要求:
 - summary 用第三人称概括剧情发生了什么、角色此刻的状态,不超过 200 字。
+- 先根据剧情定 2-4 个情绪词(mood),queries 必须由这些情绪词推导出来。
 - queries 是给网易云音乐搜索用的词,每条不超过 14 个字;
-- queries 里至少 1 条写「歌手 + 歌名」的具体歌,其余写「风格 + 语种」或「情绪 + 风格」;
-- 风格要有变化但整体贴合情绪,不要全是一个歌手的歌;
+- queries 里至少 2 条写「歌手 + 歌名」的具体歌,其余写「风格 + 语种」或「情绪 + 风格」;
+- 具体歌名必须是**真实存在**的歌,不许编;选知名度和曲风都稳的歌(抒情/独立/影视原声一类);
+- **贴的是此刻的场景与处境,不是歌词的字面主题**:海边度假就别推「离别」「被抛弃」「怀念亡者」那类苦情歌,除非剧情本身正在讲这件事;
+- 不要古风、网络热歌、DJ remix、纯音乐合集、「100首伤感情歌」这种拼盘;
+- 语种跟着剧情走:剧情主要是韩语就多给韩语歌,中文就多给中文歌,不要混成随机大杂烩;
+- 风格要有变化但整体贴合同一层情绪,不要全是一个歌手的歌;
 - 不要写"推荐""歌单"这类无意义词。`;
 
 type MoodPlan = { summary: string; mood: string; queries: string[] };
 
+/** 剧情里韩文占比高就优先韩语歌（用户的群像剧本大量是韩语语境） */
+function detectLanguageHint(plotText: string): string {
+    const hangul = (plotText.match(/[\uAC00-\uD7AF]/g) || []).length;
+    const han = (plotText.match(/[\u4E00-\u9FFF]/g) || []).length;
+    if (hangul > 0 && hangul * 2 >= han) return "韩语为主";
+    if (han > 0) return "中文为主";
+    return "";
+}
+
 function parsePlan(raw: string): MoodPlan | null {
     const text = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+    // 兼容：整体数组 / {data:{...}} / queries 写成字符串
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start < 0 || end <= start) return null;
+    const candidate = start >= 0 && end > start ? text.slice(start, end + 1) : text;
+    let obj: Record<string, unknown> | null = null;
     try {
-        const obj = JSON.parse(text.slice(start, end + 1));
-        const summary = typeof obj.summary === "string" ? obj.summary.trim() : "";
-        const mood = typeof obj.mood === "string" ? obj.mood.trim() : "";
-        const queries = Array.isArray(obj.queries)
-            ? obj.queries.map((q: unknown) => String(q ?? "").trim()).filter(Boolean).slice(0, 8)
-            : [];
-        if (!queries.length) return null;
-        return { summary: summary.slice(0, 220), mood, queries };
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            obj = parsed as Record<string, unknown>;
+            const nested = obj.data ?? obj.result ?? obj.plan;
+            if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+                obj = nested as Record<string, unknown>;
+            }
+        }
     } catch {
-        return null;
+        obj = null;
     }
+
+    const summary = obj && typeof obj.summary === "string" ? obj.summary.trim() : "";
+    const mood = obj && typeof obj.mood === "string" ? obj.mood.trim() : "";
+
+    let queries: string[] = [];
+    const rawQueries = obj?.queries ?? obj?.songs ?? obj?.keywords;
+    if (Array.isArray(rawQueries)) {
+        queries = rawQueries.map((q: unknown) => String(q ?? "").trim()).filter(Boolean);
+    } else if (typeof rawQueries === "string") {
+        // 模型有时给「A、B、C」或「A, B, C」
+        queries = rawQueries.split(/[、,，;；/\n]+/).map(s => s.trim()).filter(Boolean);
+    }
+    if (queries.length === 0) {
+        // 最后兜底：从「queries」字段之后抓所有引号内容
+        const tail = text.slice(Math.max(0, text.indexOf("queries")));
+        const quoted = tail.match(/["“]([^"”\n]{2,20})["”]/g) || [];
+        queries = quoted
+            .map(q => q.replace(/["“”]/g, "").trim())
+            .filter(q => q && q !== "queries" && !/^[:：,，]$/.test(q));
+    }
+    queries = queries.slice(0, 8);
+    if (!queries.length) return null;
+    return { summary: summary.slice(0, 220), mood, queries };
 }
 
 async function requestMoodPlan(
@@ -174,23 +213,37 @@ async function requestMoodPlan(
     plotText: string,
     instruction: string,
 ): Promise<MoodPlan | null> {
+    const langHint = detectLanguageHint(plotText);
     const userContent = [
         instruction.trim() ? `用户指令：${instruction.trim()}` : "用户指令：根据这段剧情给他配一组心情音乐",
+        langHint ? `剧情主要语言：${langHint}（选歌时跟着这个语种走）` : "",
         "",
         "剧情片段：",
         plotText || "（暂无剧情内容，请按用户指令自由发挥）",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
-    const res = await simpleLLMCall(
-        config,
-        [
-            { role: "system", content: PLAN_SYSTEM },
-            { role: "user", content: userContent },
-        ],
-        { max_tokens: 900, temperature: 0.8, label: "心情音乐" },
-    );
-    if (!res.content) return null;
-    return parsePlan(res.content);
+    // 有些模型（带思维链的）会把 max_tokens 全花在思考上，content 直接为空；
+    // 所以给足额度，并在解析失败时再要一次（明确要求「不要思考过程」）。
+    const ask = async (strict: boolean) => {
+        const res = await simpleLLMCall(
+            config,
+            [
+                { role: "system", content: strict ? `${PLAN_SYSTEM}\n\n再次强调：直接输出 JSON 本体，不要任何思考过程或说明文字。` : PLAN_SYSTEM },
+                { role: "user", content: userContent },
+            ],
+            { max_tokens: 1600, temperature: strict ? 0.6 : 0.8, label: "心情音乐" },
+        );
+        return res.content ?? "";
+    };
+
+    const first = parsePlan(await ask(false));
+    if (first) return first;
+    try {
+        return parsePlan(await ask(true));
+    } catch (err) {
+        console.warn("[MoodMusic] 重试仍失败:", err);
+        return null;
+    }
 }
 
 // ── 第二步：搜歌 ──
@@ -205,8 +258,24 @@ async function searchMoodTracks(
         if (out.length >= need) break;
         try {
             const results = await searchNetease(query, 6);
-            for (const result of results) {
-                const track = toMoodTrack(result);
+            // 搜索词里带了歌名/歌手时，别被同名翻唱或翻唱歌单骗走：
+            // 优先挑「歌名或歌手出现在搜索词里」的那条，都对不上才退回第一条。
+            const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+            const q = norm(query);
+            const scored = results
+                .map((r, idx) => {
+                    const title = norm(r.name || "");
+                    const artist = norm(r.artists || "");
+                    let score = 0;
+                    if (title && q.includes(title)) score += 3;
+                    if (artist && q.includes(artist)) score += 3;
+                    if (title && title.length >= 2 && q.includes(title.replace(/[（）()\-—]/g, ""))) score += 1;
+                    return { r, score, idx };
+                })
+                .sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
+
+            for (const candidate of scored) {
+                const track = toMoodTrack(candidate.r);
                 if (excludeIds.has(track.trackId)) continue;
                 if (out.some(item => item.trackId === track.trackId)) continue;
                 out.push(track);

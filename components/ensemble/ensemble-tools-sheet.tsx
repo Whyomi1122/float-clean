@@ -64,19 +64,26 @@ export interface EnsembleToolItem {
   active?: boolean;
 }
 
-/** 面板条目定义。顺序与目标截图一致。
+/** 面板条目定义。顺序按 2026-11-17 用户指定：
+ *  世界书 → 模型切换 → 状态面板 → 下一步走向 → 分镜配图 → 他的心情音乐 → 杀青归档 → 自定义 CSS。
  *  1006 反馈 R3：「剧本设置」已从本面板移除，改挂到工作区顶栏右上角。
- *  1006 反馈④：「场景设定」已删除，功能并入剧本设置页的开场白。 */
+ *  1006 反馈④：「场景设定」已删除，功能并入剧本设置页的开场白。
+ *  2026-11-17：①「时间感知」隐藏（与全局设置→运行时时间→剧情时间撞功能，用户要求收起来）；
+ *              ② 按「常用的放上面」重排；③ 行首彩色图标去掉，只留文字。 */
 export const ENSEMBLE_TOOLS: EnsembleToolItem[] = [
-  { id: "timeAwareness", label: "时间感知", labelEn: "TIME AWARENESS", Icon: Clock, enabled: true },
+  { id: "worldBook", label: "世界书", labelEn: "WORLD BOOK", Icon: BookOpen, enabled: true },
+  { id: "model", label: "模型切换", labelEn: "API · SESSION", Icon: Layers, enabled: true },
   { id: "statusPanel", label: "状态面板", labelEn: "STATUS PANEL", Icon: Activity, enabled: true },
   { id: "storyDirection", label: "下一步走向", labelEn: "STORY DIRECTION", Icon: Compass, enabled: true },
-  { id: "worldBook", label: "世界书", labelEn: "WORLD BOOK", Icon: BookOpen, enabled: true },
   { id: "storyboard", label: "分镜配图", labelEn: "STORYBOARD", Icon: ImageIcon, enabled: true },
   { id: "moodMusic", label: "他的心情音乐", labelEn: "MOOD PLAYLIST", Icon: Music2, enabled: true },
   { id: "archive", label: "杀青归档", labelEn: "WRAP · ARCHIVE", Icon: Scissors, enabled: true },
   { id: "customCss", label: "自定义 CSS", labelEn: "CUSTOM STYLE", Icon: Code2, enabled: true },
-  { id: "model", label: "模型切换", labelEn: "API · SESSION", Icon: Layers, enabled: true },
+];
+
+/** 时间感知：与「设置 → 运行时时间 → 剧情时间」重叠，2026-11-17 起不在面板露出（代码保留）。 */
+export const HIDDEN_ENSEMBLE_TOOLS: EnsembleToolItem[] = [
+  { id: "timeAwareness", label: "时间感知", labelEn: "TIME AWARENESS", Icon: Clock, enabled: true },
 ];
 
 function ToolRow({
@@ -86,28 +93,18 @@ function ToolRow({
   item: EnsembleToolItem;
   onClick: (id: EnsembleToolId) => void;
 }) {
-  const { Icon, label, labelEn, enabled, active } = item;
+  const { label, labelEn, enabled, active } = item;
   return (
     <button
       type="button"
       disabled={!enabled}
       onClick={() => enabled && onClick(item.id)}
-      className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-[16px] text-left transition-all duration-200 ${
+      className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-[16px] text-left transition-all duration-200 ${
         enabled
           ? "bg-white active:scale-[0.985] shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)]"
           : "bg-white/55"
       }`}
     >
-      {/* 深黑方角图标：1007b 由 44px 收到 40px（字大撑高大按键），
-          图标与其容器同步收一档，避免「图标空、文字小」的失衡。 */}
-      <span
-        className={`w-10 h-10 rounded-[12px] shrink-0 grid place-items-center ${
-          enabled ? "bg-[var(--c-primary)]" : "bg-black/20"
-        }`}
-      >
-        <Icon size={18} strokeWidth={1.9} className="text-white" />
-      </span>
-
       <span className="flex-1 min-w-0">
         <span
           className={`block font-semibold tracking-tight leading-tight ${
