@@ -362,6 +362,8 @@ export type BindingConfig = {
     koreanSpeechApiConfigId?: string;
     /** Auxiliary API: used to draft ensemble story-direction cards (global, 2026-11-16) */
     storyDirectionApiConfigId?: string;
+    /** Auxiliary API: used to pick mood-playlist songs for ensemble scenes (global, 2026-11-17) */
+    moodMusicApiConfigId?: string;
     // —— 二级选择：同一张卡里指定用哪个模型（2026-11-15，空 = 卡上的默认模型）——
     memorySummaryModel?: string;
     embeddingModel?: string;
@@ -370,6 +372,7 @@ export type BindingConfig = {
     reasoningTranslateModel?: string;
     koreanSpeechModel?: string;
     storyDirectionModel?: string;
+    moodMusicModel?: string;
 };
 
 // --- Chat Toolbox ---

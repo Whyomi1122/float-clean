@@ -13,7 +13,9 @@ import { kvGet, kvSet } from "./kv-db";
 const CACHE_KEY = "ai_phone_song_info_v1";
 const MAX_AGE = 30 * 24 * 60 * 60 * 1000;   // 资料 30 天内复用
 const FAIL_BACKOFF = 60 * 60 * 1000;        // 失败后 1 小时内不再重试
-const SUMMARY_LIMIT = 700;
+// 2026-11-17：700 → 1300。用户反馈「资料不是很全」，存的要够看；
+// 注入到聊天/一起听时另行截断（见 music-now-playing.ts），不吃太多 token。
+const SUMMARY_LIMIT = 1300;
 
 interface SongInfoRecord {
     summary: string;
@@ -96,12 +98,12 @@ function buildSummary(payload: unknown): string {
     const parts: string[] = [];
     const answer = (data.answer || "").trim();
     if (answer) parts.push(answer);
-    for (const item of (data.results || []).slice(0, 3)) {
+    for (const item of (data.results || []).slice(0, 5)) {
         const content = (item.content || "").trim();
         if (!content) continue;
         // 跳过和答案高度重复的片段
         if (answer && answer.includes(content.slice(0, 40))) continue;
-        parts.push(content.slice(0, 240));
+        parts.push(content.slice(0, 320));
     }
     const merged = parts.join("\n").trim();
     return merged.length > SUMMARY_LIMIT ? `${merged.slice(0, SUMMARY_LIMIT)}…` : merged;
@@ -125,7 +127,7 @@ export async function ensureSongInfo(title: string, artist: string, aliases: str
 
     // 别名/译名一起进检索词：韩语歌的中文资料往往挂在中/英译名下，只搜原名会搜空
     const aliasText = aliases.filter(Boolean).slice(0, 3).join(" ");
-    const query = `${artist} ${title} ${aliasText} 这首歌 歌词含义 主题 背景`.replace(/\s+/g, " ").trim();
+    const query = `${artist} ${title} ${aliasText} 这首歌 歌词含义 主题 背景（请用中文说明）`.replace(/\s+/g, " ").trim();
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
@@ -137,7 +139,7 @@ export async function ensureSongInfo(title: string, artist: string, aliases: str
                 query,
                 search_depth: "basic",
                 include_answer: true,
-                max_results: 3,
+                max_results: 5,
             }),
             signal: controller.signal,
         }).finally(() => clearTimeout(timer));

@@ -14,6 +14,7 @@ import {
     Languages,
     Layers,
     Mic,
+    Music2,
     RotateCcw,
     User,
     UserPlus,
@@ -70,7 +71,7 @@ type Level = "global" | "character" | "app";
 type SingleBindingField = "apiConfigId" | "voiceConfigId" | "presetId" | "userIdentityId";
 type MultiBindingField = "worldBookIds" | "regexIds";
 type BindingField = SingleBindingField | MultiBindingField;
-type AuxBindingField = "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId" | "koreanSpeechApiConfigId" | "storyDirectionApiConfigId";
+type AuxBindingField = "memorySummaryApiConfigId" | "embeddingApiConfigId" | "mascotApiConfigId" | "reasoningTranslateApiConfigId" | "qaApiConfigId" | "koreanSpeechApiConfigId" | "storyDirectionApiConfigId" | "moodMusicApiConfigId";
 
 const BINDING_FIELD_VISUALS: Record<BindingField, { icon: LucideIcon; color: string }> = {
     apiConfigId: { icon: Code2, color: BINDING_ACCENTS.api },
@@ -89,6 +90,7 @@ const AUX_FIELD_VISUALS: Record<AuxBindingField, { icon: LucideIcon; color: stri
     qaApiConfigId: { icon: Wrench, color: BINDING_ACCENTS.api },
     koreanSpeechApiConfigId: { icon: Volume2, color: BINDING_ACCENTS.voice },
     storyDirectionApiConfigId: { icon: Compass, color: BINDING_ACCENTS.api },
+    moodMusicApiConfigId: { icon: Music2, color: BINDING_ACCENTS.api },
 };
 
 const APP_OVERRIDE_COLORS = CONTENT_APP_ACCENTS;
@@ -258,6 +260,10 @@ export function BindingManager() {
             }
             if (prev.storyDirectionApiConfigId && !validSets.api.has(prev.storyDirectionApiConfigId)) {
                 next.storyDirectionApiConfigId = undefined;
+                dirty = true;
+            }
+            if (prev.moodMusicApiConfigId && !validSets.api.has(prev.moodMusicApiConfigId)) {
+                next.moodMusicApiConfigId = undefined;
                 dirty = true;
             }
             if (dirty) {
@@ -488,6 +494,7 @@ export function BindingManager() {
             case "qaApiConfigId": return "用于工坊答疑、诊断与内容开发";
             case "koreanSpeechApiConfigId": return "用于把中文台词转写成韩语再朗读";
             case "storyDirectionApiConfigId": return "用于生成群像的下一步走向卡";
+            case "moodMusicApiConfigId": return "用于群像按剧情挑心情音乐的歌单";
         }
     };
 
@@ -500,6 +507,7 @@ export function BindingManager() {
             case "qaApiConfigId": return "工坊 API";
             case "koreanSpeechApiConfigId": return "韩语转写 API";
             case "storyDirectionApiConfigId": return "下一步走向 API";
+            case "moodMusicApiConfigId": return "心情音乐 API";
         }
     };
 
@@ -1209,6 +1217,7 @@ export function BindingManager() {
                             {renderAuxSelect("reasoningTranslateApiConfigId", "思维链翻译 API")}
                             {renderAuxSelect("koreanSpeechApiConfigId", "韩语转写 API")}
                             {renderAuxSelect("storyDirectionApiConfigId", "下一步走向 API")}
+                            {renderAuxSelect("moodMusicApiConfigId", "心情音乐 API")}
                         </div>
                     </section>
                 </>

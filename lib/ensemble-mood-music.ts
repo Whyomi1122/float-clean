@@ -4,6 +4,7 @@
 
 import { simpleLLMCall } from "@/lib/api-helpers";
 import type { ApiConfig } from "@/lib/settings-types";
+import { loadBindingConfig, resolveAuxiliaryApiConfig } from "@/lib/settings-storage";
 import { searchNetease, type NeteaseSearchResult } from "@/lib/music-service";
 import type { MusicTrack } from "@/lib/music-storage";
 
@@ -148,6 +149,8 @@ const PLAN_SYSTEM = `你是配乐编辑,要为一个角色的「此刻心情」�
 - queries 里至少 2 条写「歌手 + 歌名」的具体歌,其余写「风格 + 语种」或「情绪 + 风格」;
 - 具体歌名必须是**真实存在**的歌,不许编;选知名度和曲风都稳的歌(抒情/独立/影视原声一类);
 - **贴的是此刻的场景与处境,不是歌词的字面主题**:海边度假就别推「离别」「被抛弃」「怀念亡者」那类苦情歌,除非剧情本身正在讲这件事;
+- **先自检一遍再交**:当下是「松弛、被守护、默契」就别出「两清」「撕心裂肺」「分手」这种情绪相反的歌,宁可换一首更平的同调歌;
+- **剧情是韩国语境时**(韩语人名、韩语台词、韩国地名)具体歌优先给**韩国歌手原曲**,不要拿中文流行歌凑;
 - 不要古风、网络热歌、DJ remix、纯音乐合集、「100首伤感情歌」这种拼盘;
 - 语种跟着剧情走:剧情主要是韩语就多给韩语歌,中文就多给中文歌,不要混成随机大杂烩;
 - 风格要有变化但整体贴合同一层情绪,不要全是一个歌手的歌;
@@ -208,11 +211,25 @@ function parsePlan(raw: string): MoodPlan | null {
     return { summary: summary.slice(0, 220), mood, queries };
 }
 
+/**
+ * 配乐用哪个模型：绑定页「心情音乐 API」配了就优先用它（可以挑便宜的），
+ * 没配就沿用群像剧本自己的模型 —— 与以前行为一致。
+ */
+function resolveMoodConfig(fallback: ApiConfig): ApiConfig {
+    try {
+        if (!loadBindingConfig().moodMusicApiConfigId) return fallback;
+        return resolveAuxiliaryApiConfig("moodMusicApiConfigId") ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
+
 async function requestMoodPlan(
     config: ApiConfig,
     plotText: string,
     instruction: string,
 ): Promise<MoodPlan | null> {
+    config = resolveMoodConfig(config);
     const langHint = detectLanguageHint(plotText);
     const userContent = [
         instruction.trim() ? `用户指令：${instruction.trim()}` : "用户指令：根据这段剧情给他配一组心情音乐",

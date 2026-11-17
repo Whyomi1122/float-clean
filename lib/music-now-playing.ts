@@ -197,7 +197,8 @@ export function buildNowPlayingPromptBlock(options?: { listenMode?: boolean }): 
         const info = getSongInfo(s.title, s.artist);
         if (info) {
             lines.push("这首歌的资料（联网检索，供你理解背景与主题，不要逐字复述）:");
-            lines.push(info);
+            // 存的长（1300）是给播放页看的，注入只取前 700，别把每轮 prompt 撑爆
+            lines.push(info.length > 700 ? `${info.slice(0, 700)}…` : info);
         }
         lines.push(
             "你们此刻正在一起听这首歌。谈歌时请以上面的真实歌词和资料为依据——歌词是什么语言就读什么语言，不要凭歌名、歌手或印象猜主题；"
