@@ -62,9 +62,12 @@ export const pad2 = (n: number) => String(n).padStart(2, "0");
 export const fmtClock = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 export const fmtDate = (d: Date) => `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
 
-/** 归档头行：和群像归档同一套写法（带星期与时刻）。 */
-export function buildArchiveHeader(now: Date): string {
-    return `─────  归档 · 普通模式 · 至 ${fmtDate(now)} ${WEEKDAY_CN[now.getDay()]} ${fmtClock(now)}  ─────`;
+/** 归档头行：和群像归档同一套写法（带星期与时刻）。
+ *  2026-11-17：时刻取**本轮最后一条消息**的剧情时间，不再取生成时刻——
+ *  「至 15:22」配正文「14:22 - 15:03」这种 19 分钟的差会被当成漏了一段（用户实机反馈）。 */
+export function buildArchiveHeader(storyNow: Date, lastMsg?: Date): string {
+    const at = lastMsg ?? storyNow;
+    return `─────  归档 · 普通模式 · 至 ${fmtDate(at)} ${WEEKDAY_CN[at.getDay()]} ${fmtClock(at)}  ─────`;
 }
 
 /**
@@ -356,16 +359,37 @@ export async function collectListenFootnote(params: { characterId: string; chara
         if (session && (session.tracks?.length || 0) > 0) {
             const start = toStoryDate(new Date(session.startedAt));
             const end = getStoryNow();
-            return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首】`;
+            // 2026-11-17：只写「8 首」不够，之后角色想提「那天放的某首歌」缺细节（用户实机反馈），把歌名列上
+            const songs = session.tracks.map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title)).filter(Boolean);
+            return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${session.tracks.length} 首` +
+                (songs.length ? `：${songs.join("、")}` : "") + `】`;
         }
         const last = getLastListenSession();
         if (!last || (last.characterId && last.characterId !== characterId && last.characterName !== characterName)) return "";
         if (!last.tracks?.length) return "";
         const start = toStoryDate(new Date(last.startedAt));
         const end = toStoryDate(new Date(last.endedAt));
-        return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${last.tracks.length} 首】`;
+        const songs = last.tracks.map(t => (t.artist ? `${t.title} - ${t.artist}` : t.title)).filter(Boolean);
+        return `【一起听：${start.getMonth() + 1}月${start.getDate()}日 ${fmtClock(start)}–${fmtClock(end)}，${last.tracks.length} 首` +
+            (songs.length ? `：${songs.join("、")}` : "") + `】`;
     } catch {
         return "";
+    }
+}
+
+/** 头行用的「本轮最后一条普通消息」的剧情时间：拿不到（无记录/读库失败）返回 undefined，由调用方退回当前时刻。 */
+async function buildLastMsgAt(params: { characterId: string; sessionId?: string; since?: string }): Promise<Date | undefined> {
+    try {
+        const msgs = await loadChatMessages(params.sessionId || params.characterId);
+        const normal = msgs
+            .filter(m => !m.deliverySessionId && !m.isRetracted && (m.role === "user" || m.role === "assistant"))
+            .filter(m => !params.since || (m.createdAt || "") > params.since);
+        const times = normal.map(m => m.createdAt).filter(Boolean)
+            .sort((a, b) => String(a).localeCompare(String(b)));
+        if (times.length === 0) return undefined;
+        return toStoryDate(new Date(times[times.length - 1]));
+    } catch {
+        return undefined;
     }
 }
 
@@ -397,7 +421,9 @@ export async function generateChatArchiveDraft(params: {
     const storyScope = getStoryScopeForCharacter(characterId);
     setActiveStoryScope(storyScope);
     const now = getStoryNow(storyScope);
-    const header = buildArchiveHeader(now);
+    // 头行时刻 = 本轮最后一条普通消息的剧情时间；拿不到（无记录）才退回当前剧情时刻
+    const lastMsgAt = await buildLastMsgAt(params);
+    const header = buildArchiveHeader(now, lastMsgAt);
 
     const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
         Promise.race([
