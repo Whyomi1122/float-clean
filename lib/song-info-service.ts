@@ -9,6 +9,8 @@
 
 import { loadRestTools } from "./tool-storage";
 import { kvGet, kvSet } from "./kv-db";
+import { resolveAuxiliaryApiConfig } from "./settings-storage";
+import { simpleLLMCall } from "./api-helpers";
 
 const CACHE_KEY = "ai_phone_song_info_v1";
 const MAX_AGE = 30 * 24 * 60 * 60 * 1000;   // 资料 30 天内复用
@@ -110,6 +112,38 @@ function buildSummary(payload: unknown): string {
 }
 
 /**
+ * Tavily 的 answer 会跟着检索词的语言走，韩语歌常常只搜到英文 wiki 摘要，
+ * 落进缓存后中文用户看到的就是一坨英文（用户 11-17 反馈）。
+ * 这里做一次「不中文就翻成中文」：优先走绑定的思维链翻译 API，失败就保留原文。
+ */
+async function toChinese(text: string): Promise<string> {
+    const han = (text.match(/[\u4E00-\u9FFF]/g) || []).length;
+    const letters = text.replace(/\s+/g, "").length || 1;
+    if (han / letters >= 0.15) return text;   // 已经够中文了，别多花一次钱
+
+    try {
+        const apiConfig = resolveAuxiliaryApiConfig("reasoningTranslateApiConfigId")
+            || resolveAuxiliaryApiConfig("memorySummaryApiConfigId");
+        if (!apiConfig) return text;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30_000);
+        const res = await simpleLLMCall(
+            apiConfig,
+            [
+                { role: "system", content: "你是翻译。把用户给的歌曲资料翻成简体中文：保留歌名、歌手、专辑名的原文，不要解释、不要加评论、不要 markdown 标记，只输出译文。" },
+                { role: "user", content: text.slice(0, 2400) },
+            ],
+            { temperature: 0.2, max_tokens: 1200, signal: controller.signal },
+        ).finally(() => clearTimeout(timer));
+        const out = (res.content || "").trim();
+        if (!out) return text;
+        return out.length > SUMMARY_LIMIT ? `${out.slice(0, SUMMARY_LIMIT)}…` : out;
+    } catch {
+        return text;
+    }
+}
+
+/**
  * 确保这首歌的资料已缓存（有缓存直接返回；没有就联网搜一次）。
  * 返回资料摘要，拿不到就返回空串。
  */
@@ -145,7 +179,7 @@ export async function ensureSongInfo(title: string, artist: string, aliases: str
         }).finally(() => clearTimeout(timer));
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
-        const summary = buildSummary(data);
+        const summary = await toChinese(buildSummary(data));
         if (!summary) throw new Error("empty summary");
         cache[key] = { summary, fetchedAt: now };
         writeCache(cache);
