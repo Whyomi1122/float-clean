@@ -1182,72 +1182,50 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                         const enabledGenerationParameters = resolveEnabledGenerationParameters(preset);
                         return (
                             <div key={preset.id} className="flex flex-col gap-4 pb-[24px]">
-                                <div className="flex justify-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => duplicatePreset(preset)}
-                                        className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-gray-800 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95"
-                                    >
-                                        <Copy size={15} strokeWidth={1.8} />
-                                        <span>复制预设</span>
+                                {/* 2026-11-17 详情页重拍：顶部四颗按钮收进「基础信息」块的行里（复制/导出/重置），
+                                    删除按四铁律放页面最底（红字、白底）。 */}
+                                <h2 className="mx-2 mb-0 mt-1 ts-20 font-bold leading-none text-black">预设信息</h2>
+                                <div className="prefs-block">
+                                    <span className="prefs-block-label">基础信息</span>
+                                    <div className="prefs-row flex-col !items-stretch !gap-2">
+                                        <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">预设名称</span>
+                                        <input
+                                            type="text"
+                                            value={preset.name}
+                                            onChange={(e) => updatePreset(preset.id, { name: e.target.value })}
+                                            placeholder="预设名称..."
+                                            className="ui-input font-medium"
+                                        />
+                                    </div>
+                                    <div className="prefs-row flex-col !items-stretch !gap-2">
+                                        <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">简介描述</span>
+                                        <textarea
+                                            value={preset.description || ""}
+                                            onChange={(e) => updatePreset(preset.id, { description: e.target.value })}
+                                            placeholder="在这个预设的描述..."
+                                            rows={2}
+                                            className="ui-textarea resize-none"
+                                        />
+                                    </div>
+                                    <button type="button" className="prefs-row" onClick={() => duplicatePreset(preset)}>
+                                        <span className="prefs-row-label">复制预设</span>
+                                        <Copy size={15} strokeWidth={1.8} className="text-[var(--c-icon)] opacity-60" />
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setConfirmExportId(preset.id)}
-                                        className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95"
-                                    >
-                                        <Download size={15} strokeWidth={1.8} />
-                                        <span>导出预设</span>
+                                    <button type="button" className="prefs-row" onClick={() => setConfirmExportId(preset.id)}>
+                                        <span className="prefs-row-label">导出预设</span>
+                                        <Download size={15} strokeWidth={1.8} className="text-[var(--c-icon)] opacity-60" />
                                     </button>
-                                    {preset.builtIn ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => setConfirmResetId(preset.id)}
-                                            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-gray-800 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95"
-                                            title="重置为默认"
-                                        >
-                                            <RotateCcw size={15} strokeWidth={1.8} />
-                                            <span>重置默认</span>
+                                    {preset.builtIn && (
+                                        <button type="button" className="prefs-row" onClick={() => setConfirmResetId(preset.id)} title="重置为默认">
+                                            <span className="prefs-row-label">重置默认</span>
+                                            <RotateCcw size={15} strokeWidth={1.8} className="text-[var(--c-icon)] opacity-60" />
                                         </button>
-                                    ) : (
-                                        <>
-                                            <button
-                                                type="button"
-                                                onClick={() => setConfirmDeleteId(preset.id)}
-                                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-[var(--c-danger)] shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95"
-                                            >
-                                                <Trash2 size={15} strokeWidth={1.8} />
-                                                <span>删除预设</span>
-                                            </button>
-                                        </>
                                     )}
                                 </div>
-                                <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">Preset Info</h2>
-                                <div className="ui-entry-card" style={{ cursor: "default" }}>
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex justify-between items-center">
-                                                <label className="menu-label ts-13 font-semibold ml-1">预设名称</label>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                value={preset.name}
-                                                onChange={(e) => updatePreset(preset.id, { name: e.target.value })}
-                                                placeholder="预设名称..."
-                                                className="ui-input font-medium"
-                                            />
-                                        </div>
 
-                                        <div className="flex flex-col gap-2">
-                                            <label className="menu-label ts-13 font-semibold ml-1">简介描述</label>
-                                            <textarea
-                                                value={preset.description || ""}
-                                                onChange={(e) => updatePreset(preset.id, { description: e.target.value })}
-                                                placeholder="在这个预设的描述..."
-                                                rows={2}
-                                                className="ui-textarea resize-none"
-                                            />
-                                        </div>
-
+                                {/* 高级配置：收进 prefs-block（与设置内页同款） */}
+                                <div className="prefs-block">
+                                    <span className="prefs-block-label">高级配置</span>
                                         {/* Collapsible: 生成参数 */}
                                         <div className="ui-collapsible">
                                             <div
@@ -1473,7 +1451,7 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                                 <div className="flex flex-col gap-4 mt-3">
                                     <div className="mx-2 mb-0 mt-2 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <h2 className="ts-20 font-bold leading-none text-black">Prompt Entries ({preset.prompts?.length || 0})</h2>
+                                            <h2 className="ts-20 font-bold leading-none text-black">设定条目（{preset.prompts?.length || 0}）</h2>
                                             <button
                                                 type="button"
                                                 onClick={() => setAppFilterOpen(true)}
@@ -1966,6 +1944,17 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                                         <Plus size={15} strokeWidth={1.8} />
                                         添加条目
                                     </button>
+
+                                    {/* 删除进二级页底部：红字、白底细边（四铁律）；内置预设没有删除 */}
+                                    {!preset.builtIn && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmDeleteId(preset.id)}
+                                            className="inline-flex h-10 w-full items-center justify-center rounded-[20px] border border-black/10 bg-white px-4 ts-12 font-semibold text-[var(--c-danger)] transition-all hover:bg-gray-50 active:scale-95 focus:outline-none"
+                                        >
+                                            删除预设
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )

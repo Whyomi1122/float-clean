@@ -586,29 +586,12 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                 <>
                     {activeGroup && (
                         <div className="flex flex-col gap-4 pb-6">
-                            <div className="flex justify-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => handleExport(activeGroup)}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95"
-                                >
-                                    <Download size={15} strokeWidth={1.8} />
-                                    <span>导出正则</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteTarget({ type: 'group', id: activeGroup.id })}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-[var(--c-danger)] shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95"
-                                >
-                                    <Trash2 size={15} strokeWidth={1.8} />
-                                    <span>删除正则</span>
-                                </button>
-                            </div>
-
-                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">Regex Info</h2>
-                            <div className="ui-entry-card" style={{ cursor: "default" }}>
-                                <div className="flex flex-col gap-2">
-                                    <label className="menu-label ts-13 font-semibold ml-1">正则组名称</label>
+                            {/* 2026-11-17 详情页重拍：导出收进「基础信息」块的行里，删除按四铁律放页面最底。 */}
+                            <h2 className="mx-2 mb-0 mt-1 ts-20 font-bold leading-none text-black">正则组信息</h2>
+                            <div className="prefs-block">
+                                <span className="prefs-block-label">基础信息</span>
+                                <div className="prefs-row flex-col !items-stretch !gap-2">
+                                    <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">正则组名称</span>
                                     <input
                                         type="text"
                                         value={activeGroup.name}
@@ -617,9 +600,8 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                                         className="ui-input font-medium"
                                     />
                                 </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <label className="menu-label ts-13 font-semibold ml-1">简介描述</label>
+                                <div className="prefs-row flex-col !items-stretch !gap-2">
+                                    <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">简介描述</span>
                                     <textarea
                                         value={activeGroup.description || ""}
                                         onChange={(e) => updateGroup(activeGroup.id, { description: e.target.value })}
@@ -628,10 +610,14 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                                         className="ui-textarea resize-none"
                                     />
                                 </div>
+                                <button type="button" className="prefs-row" onClick={() => handleExport(activeGroup)}>
+                                    <span className="prefs-row-label">导出正则组</span>
+                                    <Download size={15} strokeWidth={1.8} className="text-[var(--c-icon)] opacity-60" />
+                                </button>
                             </div>
 
                             <div className="flex flex-col gap-4 mt-2">
-                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">Regex Rules ({activeGroup.rules?.length || 0})</h2>
+                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">规则（{activeGroup.rules?.length || 0}）</h2>
 
                             <button
                                 className="ui-btn ui-btn-outline w-full ts-13"
@@ -1080,6 +1066,15 @@ export function RegexManager({ isActive = true }: { isActive?: boolean } = {}) {
                             >
                                 <Plus size={15} strokeWidth={1.8} />
                                 添加条目
+                            </button>
+
+                            {/* 删除进二级页底部：红字、白底细边（四铁律），不放顶部 */}
+                            <button
+                                type="button"
+                                onClick={() => setConfirmDeleteTarget({ type: 'group', id: activeGroup.id })}
+                                className="inline-flex h-10 w-full items-center justify-center rounded-[20px] border border-black/10 bg-white px-4 ts-12 font-semibold text-[var(--c-danger)] transition-all hover:bg-gray-50 active:scale-95 focus:outline-none"
+                            >
+                                删除正则组
                             </button>
                             </div>
                         </div>

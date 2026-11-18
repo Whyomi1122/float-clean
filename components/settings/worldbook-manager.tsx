@@ -707,29 +707,13 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                     {/* Detail View — matches preset-manager layout */}
                     {activeBook && (
                         <div className="flex flex-col gap-4 pb-6">
-                            <div className="flex justify-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => handleExport(activeBook)}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--c-primary)] px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-[var(--c-primary-ink)] hover:shadow-md active:scale-95"
-                                >
-                                    <Download size={15} strokeWidth={1.8} />
-                                    <span>导出世界书</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteTarget({ type: 'book', id: activeBook.id })}
-                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[20px] border border-black/10 bg-white px-4 text-xs font-bold text-[var(--c-danger)] shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95"
-                                >
-                                    <Trash2 size={15} strokeWidth={1.8} />
-                                    <span>删除世界书</span>
-                                </button>
-                            </div>
-
-                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">Worldbook Info</h2>
-                            <div className="ui-entry-card" style={{ cursor: "default" }}>
-                                <div className="flex flex-col gap-2">
-                                    <label className="menu-label ts-13 font-semibold ml-1">世界书名称</label>
+                            {/* 2026-11-17 详情页重拍：导出/删除不再是顶部按钮。
+                                导出收进「基础信息」块的一行；删除按四铁律放页面最底（红字、白底）。 */}
+                            <h2 className="mx-2 mb-0 mt-1 ts-20 font-bold leading-none text-black">世界书信息</h2>
+                            <div className="prefs-block">
+                                <span className="prefs-block-label">基础信息</span>
+                                <div className="prefs-row flex-col !items-stretch !gap-2">
+                                    <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">世界书名称</span>
                                     <input
                                         type="text"
                                         value={activeBook.name}
@@ -738,9 +722,8 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                         className="ui-input font-medium"
                                     />
                                 </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <label className="menu-label ts-13 font-semibold ml-1">简介描述</label>
+                                <div className="prefs-row flex-col !items-stretch !gap-2">
+                                    <span className="prefs-block-label !text-[11px] !font-semibold !opacity-80">简介描述</span>
                                     <textarea
                                         value={activeBook.description || ""}
                                         onChange={(e) => updateBook(activeBook.id, { description: e.target.value })}
@@ -749,11 +732,17 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                                         className="ui-textarea resize-none"
                                     />
                                 </div>
+                                <button type="button" className="prefs-row" onClick={() => handleExport(activeBook)}>
+                                    <span className="prefs-row-label">导出世界书</span>
+                                    <span className="flex items-center gap-1 ts-12 text-[var(--c-primary)]">
+                                        <Download size={14} strokeWidth={1.8} />
+                                    </span>
+                                </button>
                             </div>
 
                             {/* Entries Section */}
                             <div className="flex flex-col gap-4 mt-2">
-                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">Worldbook Entries ({activeBook.entries?.length || 0})</h2>
+                            <h2 className="mx-2 mb-0 mt-2 ts-20 font-bold leading-none text-black">条目（{activeBook.entries?.length || 0}）</h2>
 
                             {/* Entry Cards */}
                             <div className="flex flex-col gap-2">
@@ -1019,6 +1008,15 @@ export function WorldBookManager({ isActive = true }: { isActive?: boolean } = {
                             >
                                 <Plus size={15} strokeWidth={1.8} />
                                 添加条目
+                            </button>
+
+                            {/* 删除进二级页底部：红字、白底细边，不放顶部（四铁律） */}
+                            <button
+                                type="button"
+                                onClick={() => setConfirmDeleteTarget({ type: 'book', id: activeBook.id })}
+                                className="inline-flex h-10 w-full items-center justify-center rounded-[20px] border border-black/10 bg-white px-4 ts-12 font-semibold text-[var(--c-danger)] transition-all hover:bg-gray-50 active:scale-95 focus:outline-none"
+                            >
+                                删除世界书
                             </button>
                             </div>
                         </div>
