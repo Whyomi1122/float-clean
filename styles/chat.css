@@ -8115,12 +8115,21 @@
   max-width: 100%;
   margin: 2px 0 4px;
   padding: 0 4px;
+  /* 旁白没有背景（2026-11-19 实机：用户不接受半透明卡片） */
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   text-align: center;
   white-space: pre-wrap;
   font-style: italic;
   font-size: calc(13px * var(--app-text-scale, 1));
   line-height: 1.75;
   color: color-mix(in srgb, var(--c-text) 62%, transparent);
+}
+.chat-narration-text {
+  display: inline;
 }
 .chat-msg-content-wrap-narration {
   max-width: 100% !important;

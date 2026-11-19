@@ -6198,7 +6198,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 },
                                                 onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openMessageContextMenu(msg.id, { x: e.clientX, y: e.clientY }); },
                                             } : {})}
-                                            className={`chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${isNarrationOnlyBubble ? "chat-bubble-narration-only" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
+                                            className={isNarrationOnlyBubble
+                                                /* 旁白不套任何气泡皮（自带背景/玻璃拟态/九宫格图都会跟上来） */
+                                                ? "chat-narration-block relative cursor-pointer select-none"
+                                                : `chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
                                             style={isStandaloneHtmlPreview ? STANDALONE_CARD_BUBBLE_STYLE : undefined}
                                             data-ui={msg.role === "user" ? "bubble-user" : "bubble-bot"}
                                             data-msg-id={msg.id}
@@ -6209,7 +6212,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
                                             {isNarrationOnlyBubble ? (
                                                 /* 旁白独立成段：不带头像、不署名、不套对白气泡 */
-                                                <div className="chat-narration-block">{bubbleNarrationText || stripNarrationMarker(renderMsg.content || "")}</div>
+                                                <span className="chat-narration-text">{bubbleNarrationText || stripNarrationMarker(renderMsg.content || "")}</span>
                                             ) : (
                                             <MessageBubble
                                                 msg={renderMsg}

@@ -88,7 +88,7 @@ export function isNarrationOnlyContent(text: string): boolean {
  * ① 先认行首旁白暗号（正向识别，最可靠）；② 剩下的再走旧启发式。
  */
 export function splitNarration(text: string): { dialogue: string; narration?: string } {
-    text = normalizeNarrationMarker(stripChatMarkers(stripVoiceNoteWrapper(text)));
+    text = normalizeParenthesisNarration(normalizeNarrationMarker(stripChatMarkers(stripVoiceNoteWrapper(text))));
     const marked: string[] = [];
     const kept: string[] = [];
     for (const line of text.split("\n")) {
@@ -155,6 +155,58 @@ function normalizeNarrationMarker(text: string): string {
 }
 
 /**
+ * 括号动作兜底（2026-11-19 实机）：模型不写 `[旁白]` 时爱把动作塞进 `（…）`，
+ * 结果整段留在气泡里（「动作还是没分开」）。这里把括号块转成 `[旁白]` 行：
+ *   · 整行被括号包住：`（他关掉投影，走过走廊。）`
+ *   · 括号单独起行、跨行到 `）` 收尾
+ * 例外：紧跟在韩语/日语/英语台词后面的 `（中文）` 是**译文**，不能当旁白。
+ */
+const PAREN_SINGLE_LINE = /^[（(]\s*([^（()）]*?)\s*[）)]$/;
+const PAREN_OPEN_LINE = /^[（(]\s*$/;
+const PAREN_CLOSE_END = /[）)]\s*$/;
+const FOREIGN_SCRIPT = /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F\u3040-\u30FF\uFF66-\uFF9F]|[A-Za-z]{2,}/;
+const CJK_CHAR = /[\u4E00-\u9FFF]/;
+
+function normalizeParenthesisNarration(text: string): string {
+    const src = String(text || "");
+    if (!/[（(]/.test(src)) return src;
+    const lines = src.split("\n");
+    const out: string[] = [];
+    let pending: string[] | null = null;
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) {
+            if (!pending) out.push(raw);
+            continue;
+        }
+        if (pending) {
+            pending.push(line);
+            if (PAREN_CLOSE_END.test(line)) {
+                const merged = pending.join(" ").replace(/^[（(]\s*/, "").replace(/[）)]\s*$/, "").trim();
+                if (merged) out.push(`[旁白] ${merged}`);
+                pending = null;
+            }
+            continue;
+        }
+        if (PAREN_OPEN_LINE.test(line)) { pending = [line]; continue; }
+        const m = line.match(PAREN_SINGLE_LINE);
+        if (m) {
+            const inner = (m[1] || "").trim();
+            const prev = [...out].reverse().find(l => l.trim()) || "";
+            const isTranslation = !!inner && CJK_CHAR.test(inner) && FOREIGN_SCRIPT.test(prev);
+            if (inner && !isTranslation) {
+                out.push(`[旁白] ${inner}`);
+                continue;
+            }
+        }
+        out.push(raw);
+    }
+    // 括号没收到尾就结束了：原样吐回去，别把台词吞掉
+    if (pending) out.push(...pending);
+    return out.join("\n");
+}
+
+/**
  * 引号兜底（2026-11-15）：一段里既有带引号的台词、又有不带引号的部分 → 那些裸文字判旁白。
  * 支持两种写法：
  *   · 分行的：第一行旁白、第二行「台词」
@@ -210,6 +262,7 @@ export const CHAT_NARRATION_INSTRUCTION = [
     "「没有说出口」的内容——动作、表情、环境、心理、你人物的小动作——**必须单独起一行、行首写 [旁白]**，例如：",
     "[旁白] 他把伞往你那边偏了偏，半边肩膀露在雨里。",
     "禁止用别的写法代替：不许用 *星号*、不许用（括号动作）、不许把动作直接混进台词里描述。",
+    "括号（…）只用来放台词的中文译文，里面不准写动作、神态、心理。",
     "只有真正说出口的台词才不加标记。整条回复全是旁白（比如你人物在安静做事、没说话）也照这个规则写。",
     "每条回复至少检查一遍：凡是没说出口的描写，行首都要有 [旁白]。",
 ].join("\n");
