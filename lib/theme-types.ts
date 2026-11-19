@@ -80,6 +80,8 @@ export type ThemeProfile = {
    .chat-html-inline     — inline HTML iframe container
    .chat-html-inline-frame — inline HTML iframe
    .chat-html-inline-expand — fullscreen button for inline HTML
+   .chat-narration-group — 整条都是旁白/心理时的容器（100% 宽，不套气泡）
+   .chat-narration-block — 旁白/心理行（无气泡外壳，默认居中灰斜体）
 
    ── 核心 16 色（通过 cssOverrides 或 globalCustomCSS 覆盖） ──
    --c-header-bg     : 标题栏底色 (#FFFFFF)

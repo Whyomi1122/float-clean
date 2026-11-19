@@ -11,6 +11,7 @@ import { resolveUserIdentity } from "./settings-storage";
 import { loadMemoryConfig } from "./memory-storage";
 import type { MemoryConfig } from "./memory-types";
 import { estimateTokens } from "./token-counter";
+import { stripChatMarkers, stripNarrationMarker } from "./call-text";
 import { loadStoryProjectionEntries } from "./story-storage";
 import { buildTwoLevelMomentThreads } from "./moments-comment-threading";
 import { loadVnProjectionEntries } from "./vn-storage";
@@ -1582,11 +1583,15 @@ export function formatTimelineForSummarization(
 
     const timeAware = resolvePromptTimeAware(options?.timeAware);
     const eventsText = entries
-        .map(e => `- ${timeAware ? e.content : formatStoredPromptEventContent(e.content, {
-            label: "事件",
-            timestamp: e.timestamp,
-            timeAware,
-        })}`)
+        .map(e => {
+            const body = timeAware ? e.content : formatStoredPromptEventContent(e.content, {
+                label: "事件",
+                timestamp: e.timestamp,
+                timeAware,
+            });
+            // 2026-11-19：聊天来源的事件先摘掉 [旁白]/[心理]/[对白] 暗号，别让暗号进记忆总结
+            return `- ${e.sourceApp === "chat" ? stripChatMarkers(stripNarrationMarker(body)) : body}`;
+        })
         .join("\n");
     return {
         eventsText,

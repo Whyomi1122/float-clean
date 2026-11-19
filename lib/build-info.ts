@@ -18,9 +18,18 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.19-65",
+    version: "2026.11.19-66",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.19-66",
+            title: "归档与记忆不再吃到旁白暗号",
+            items: [
+                "归档转写先摘掉 `[旁白]/[心理]/[叙述]/[动作]/[对白]` 与情绪标签，只留正文（旁白里的事实保留）",
+                "记忆库自动总结的时间线里，聊天来源事件同样清洗，暗号不会混进总结",
+                "自定义 CSS 文档里补上 `.chat-narration-block` / `.chat-narration-group`，方便改旁白样式",
+            ],
+        },
         {
             version: "2026.11.19-65",
             title: "聊天室吃掉对白类暗号",

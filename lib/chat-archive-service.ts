@@ -16,13 +16,28 @@ import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-s
 import { buildArchiveContextPack } from "@/lib/archive-context-pack";
 import { getStoryNow, setActiveStoryScope, toStoryDate } from "@/lib/story-clock";
 import { getStoryScopeForCharacter } from "@/lib/story-scope";
+import { stripChatMarkers, stripNarrationMarker } from "@/lib/call-text";
 
 // ── 记录转写 ────────────────────────────────────────────────────────────
 
+/**
+ * 归档用文本清洗（2026-11-19）：摘掉 `[旁白]/[心理]/[叙述]/[动作]/[对白]` 等暗号和情绪标签，
+ * 只留正文——暗号一旦进归档草稿，模型会当成正文抄下去。
+ * 旁白里的事实（动作、环境）保留，只是去掉标记。
+ */
+function cleanArchiveText(raw?: string): string {
+    const src = (raw || "").trim();
+    if (!src) return "";
+    return stripNarrationMarker(stripChatMarkers(src))
+        .replace(/[ \t]+\n/g, "\n")
+        .trim();
+}
+
 /** 归档提炼用的一条消息文本：语音条/图片/音乐分享的文字在 mediaData.label 里，content 常为空。 */
 export function messageTranscriptText(m: ChatMessage): string {
-    const text = (m.content || "").trim();
-    const label = (m.mediaData?.label || "").trim();
+    // 2026-11-19：旁白/心理/对白这些暗号不许进归档（模型会当成内容抄进去），只留正文
+    const text = cleanArchiveText(m.content);
+    const label = cleanArchiveText(m.mediaData?.label);
     if (m.mediaType === "audio") {
         const spoken = label || text;
         return spoken ? `[语音] ${spoken}` : "[语音]";
