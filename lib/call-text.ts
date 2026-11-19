@@ -61,6 +61,8 @@ export function isNarrationLine(line: string): boolean {
  * 注意只剥标签本身，标签后面的内容保留。
  */
 const CHAT_LABEL_MARKER = /[[【]\s*(?:韩语|中文|英语|日语|日文|内心)\s*[\]】][:：]?\s*/g;
+/** 对白类暗号（群像剧本常带 `[对白]`）：聊天室里没有意义，直接摘掉，别让暗号上屏（2026-11-19 对照测试发现） */
+const CHAT_DIALOGUE_MARKER = /[[【]\s*(?:对白|台词|对话|独白)\s*[\]】][:：]?\s*/g;
 /** 情绪标签（`[情绪:happy]`）只给 TTS 用，任何地方都不该上屏（2026-11-15 实机） */
 const EMOTION_LABEL_MARKER = /[[【]\s*(?:情绪|语气|emotion)\s*[:：][^\]】\r\n]*[\]】]?/gi;
 
@@ -69,6 +71,7 @@ export function stripChatMarkers(text: string): string {
     return String(text)
         .replace(EMOTION_LABEL_MARKER, "")
         .replace(CHAT_LABEL_MARKER, "")
+        .replace(CHAT_DIALOGUE_MARKER, "")
         .replace(/[ \t]{2,}/g, " ")
         .replace(/^[ \t]+/gm, "")
         .trim();
