@@ -5956,6 +5956,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const bubbleNarrationText = narrationSplit?.narration?.trim()
                         || (isNarrationOnlyBubble ? splitNarration(renderMsg.content || "").narration?.trim() : "")
                         || "";
+                    // 旁白 / 心理各占一块：一条消息里有多段旁白就拆成多块，不挤成一坨
+                    const bubbleNarrationBlocks = (narrationSplit?.narrationBlocks?.length
+                        ? narrationSplit.narrationBlocks
+                        : (isNarrationOnlyBubble ? splitNarration(renderMsg.content || "").narrationBlocks : undefined))
+                        || (bubbleNarrationText ? [bubbleNarrationText] : []);
                     const bubbleDialogueText = narrationSplit?.narration?.trim() ? narrationSplit.dialogue : undefined;
                     const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview;
                     // Empty bubble: no visible content AND no visual media AND no folded panel.
@@ -6200,10 +6205,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             } : {})}
                                             className={isNarrationOnlyBubble
                                                 /* 旁白不套任何气泡皮（自带背景/玻璃拟态/九宫格图都会跟上来） */
-                                                ? "chat-narration-block relative cursor-pointer select-none"
+                                                ? "chat-narration-group relative cursor-pointer select-none"
                                                 : `chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
                                             style={isStandaloneHtmlPreview ? STANDALONE_CARD_BUBBLE_STYLE : undefined}
-                                            data-ui={msg.role === "user" ? "bubble-user" : "bubble-bot"}
+                                            data-ui={isNarrationOnlyBubble ? "narration" : (msg.role === "user" ? "bubble-user" : "bubble-bot")}
                                             data-msg-id={msg.id}
                                             {...(activeMessageId === msg.id ? { "data-active": "" } : {})}
                                             >
@@ -6211,8 +6216,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             {activeMessageId === msg.id && renderBubbleContextMenu(msg)}
 
                                             {isNarrationOnlyBubble ? (
-                                                /* 旁白独立成段：不带头像、不署名、不套对白气泡 */
-                                                <span className="chat-narration-text">{bubbleNarrationText || stripNarrationMarker(renderMsg.content || "")}</span>
+                                                /* 旁白/心理独立成段：不带头像、不署名、不套对白气泡，灰斜体、每句一块 */
+                                                bubbleNarrationBlocks.length ? bubbleNarrationBlocks.map((text, i) => (
+                                                    <div key={`narration-${i}`} className="chat-narration-block">{text}</div>
+                                                )) : (
+                                                    <div className="chat-narration-block">{stripNarrationMarker(renderMsg.content || "")}</div>
+                                                )
                                             ) : (
                                             <MessageBubble
                                                 msg={renderMsg}
@@ -6237,9 +6246,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             />
                                             )}
                                         </div>
-                                        {!isNarrationOnlyBubble && bubbleNarrationText && (
-                                            <div className="chat-narration-block">{bubbleNarrationText}</div>
-                                        )}
+                                        {!isNarrationOnlyBubble && bubbleNarrationBlocks.length > 0 && bubbleNarrationBlocks.map((text, i) => (
+                                            <div key={`narration-${i}`} className="chat-narration-block">{text}</div>
+                                        ))}
                                         </div>}
                                         {msg.role !== "user" && !isSilentThought && !isEmptyBubble && hasFoldedPanel && (
                                             <button

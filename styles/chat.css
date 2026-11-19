@@ -8110,10 +8110,17 @@
 /* ===== 独立旁白块（2026-11-19 用户口径：旁白独立于任何人的对白）=====
    整条旁白 → 不带头像、不署名、不套气泡，独占一行；
    台词+旁白混排 → 旁白行从气泡里摘出来，落在气泡下方的这块里。 */
+.chat-narration-group {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .chat-narration-block {
   width: 100%;
   max-width: 100%;
-  margin: 2px 0 4px;
+  margin: 0;
   padding: 0 4px;
   /* 旁白没有背景（2026-11-19 实机：用户不接受半透明卡片） */
   background: none !important;
@@ -8128,8 +8135,8 @@
   line-height: 1.75;
   color: color-mix(in srgb, var(--c-text) 62%, transparent);
 }
-.chat-narration-text {
-  display: inline;
+.chat-narration-block + .chat-narration-block {
+  margin-top: 2px;
 }
 .chat-msg-content-wrap-narration {
   max-width: 100% !important;

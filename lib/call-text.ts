@@ -87,7 +87,7 @@ export function isNarrationOnlyContent(text: string): boolean {
  * 把一段内容拆成「台词」与「旁白」。
  * ① 先认行首旁白暗号（正向识别，最可靠）；② 剩下的再走旧启发式。
  */
-export function splitNarration(text: string): { dialogue: string; narration?: string } {
+export function splitNarration(text: string): { dialogue: string; narration?: string; narrationBlocks?: string[] } {
     text = normalizeParenthesisNarration(normalizeNarrationMarker(stripChatMarkers(stripVoiceNoteWrapper(text))));
     const marked: string[] = [];
     const kept: string[] = [];
@@ -103,10 +103,18 @@ export function splitNarration(text: string): { dialogue: string; narration?: st
     const restText = kept.join("\n").trim();
     // 整段全是旁白：台词留空、旁白照实带出去，由调用方用「居中淡字」渲染。
     // （2026-11-15 实机：以前这里把原文塞回 dialogue，结果气泡里直接露出「[旁白] 门一开…」）
-    if (!restText) return { dialogue: "", narration: marked.join("\n") };
+    if (!restText) return { dialogue: "", narration: marked.join("\n"), narrationBlocks: marked };
     const rest = splitNarrationHeuristic(restText);
     const narrationText = [rest.narration, ...marked].filter(Boolean).join("\n").trim();
-    return { dialogue: rest.dialogue, ...(narrationText ? { narration: narrationText } : {}) };
+    return { dialogue: rest.dialogue, ...(narrationText ? { narration: narrationText, narrationBlocks: toNarrationBlocks(narrationText) } : {}) };
+}
+
+/** 旁白按行切成独立的小块（2026-11-19：旁白 / 心理各占一句，不挤成一段） */
+function toNarrationBlocks(narrationText: string): string[] {
+    return String(narrationText || "")
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean);
 }
 
 /**
@@ -258,13 +266,17 @@ export function stripNarrationMarker(text: string): string {
  * 只要求「标记」，不规定语气和篇幅，尽量不动人设。
  */
 export const CHAT_NARRATION_INSTRUCTION = [
-    "【旁白标记 · 必须遵守】",
-    "「没有说出口」的内容——动作、表情、环境、心理、你人物的小动作——**必须单独起一行、行首写 [旁白]**，例如：",
-    "[旁白] 他把伞往你那边偏了偏，半边肩膀露在雨里。",
-    "禁止用别的写法代替：不许用 *星号*、不许用（括号动作）、不许把动作直接混进台词里描述。",
-    "括号（…）只用来放台词的中文译文，里面不准写动作、神态、心理。",
-    "只有真正说出口的台词才不加标记。整条回复全是旁白（比如你人物在安静做事、没说话）也照这个规则写。",
-    "每条回复至少检查一遍：凡是没说出口的描写，行首都要有 [旁白]。",
+    "【旁白与心理 · 写法与比例】",
+    "聊天室以「说话」为主，旁白只是点缀，不是主戏。写多了就变成剧情小说，必须克制。",
+    "① 没说出口的内容要单独起一行、行首打暗号：",
+    "   动作 / 神态 / 环境 → [旁白] 他把伞往你那边偏了偏，半边肩膀露在雨里。",
+    "   角色心里的念头 → [心理] 她到底什么时候才肯说。",
+    "② 比例：一条回复里旁白 + 心理合计最多 2 行、总数不超过 40 字，并且明显少于台词字数；能不放就不放。",
+    "③ 心理只写一句当下的真念头（20 字以内），不许复述台词、不许长篇抒情；旁白和心理各占一行，不许挤在同一行。",
+    "④ 连续两条回复不要都带旁白。如果你上一条已经写过，这一条就只说话。",
+    "⑤ 只有「你在做事 / 说不出话」时，才允许整条都是旁白，且一次最多 2 行，下一条必须回到台词。",
+    "⑥ 禁止用别的写法代替：不许用 *星号*、不许用（括号动作）、不许把动作混进台词里描述。括号（…）只放台词的中文译文。",
+    "⑦ 每条回复发出去前自查一遍：旁白是不是太多？能不能删掉一半？能删就删。",
 ].join("\n");
 
 /** 去掉双语译本，只留原文（TTS 用） */
