@@ -2,7 +2,7 @@
 
 import { forwardRef, Fragment, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled } from "@/lib/chat-storage";
-import { isNarrationOnlyContent } from "@/lib/call-text";
+import { isNarrationOnlyContent, splitNarration, stripNarrationMarker } from "@/lib/call-text";
 import { cleanStreamText, splitStreamPreviewSegments, stripLiteralTexts, stripXmlTagBlocks } from "@/lib/stream-preview";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
@@ -5948,6 +5948,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     // 整条都是旁白：不套气泡，走居中灰色斜体（2026-11-15 用户口径）
                     // 注意用原始 content 判断：bubbleDisplayContent 过了一遍用户正则，[旁白] 暗号可能已被清掉
                     const isNarrationOnlyBubble = !renderMsg.mediaType && !isStandaloneHtmlPreview && isNarrationOnlyContent(renderMsg.content || bubbleDisplayContent || "");
+                    // 旁白独立成段（2026-11-19 用户口径：旁白不属于任何人的对白）
+                    // 混排时把旁白行从气泡里摘出来，放到气泡外的独立旁白块，避免「动作跟着台词一起变成气泡」。
+                    const narrationSplit = !renderMsg.mediaType && !isStandaloneHtmlPreview && msg.role !== "user" && !isSilentThought
+                        ? splitNarration((msg.displayProjected ? renderMsg.content : bubbleDisplayContent) || "")
+                        : null;
+                    const bubbleNarrationText = narrationSplit?.narration?.trim()
+                        || (isNarrationOnlyBubble ? splitNarration(renderMsg.content || "").narration?.trim() : "")
+                        || "";
+                    const bubbleDialogueText = narrationSplit?.narration?.trim() ? narrationSplit.dialogue : undefined;
                     const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview;
                     // Empty bubble: no visible content AND no visual media AND no folded panel.
                     const isEmptyBubble = !isVisualMedia && !visibleContent && uiRole(msg) !== "system" && !hasFoldedPanel;
@@ -6112,7 +6121,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     </div>
                                 ) : (
                                     <>
-                                        {msg.role !== "user" && !isEmptyBubble && (
+                                        {msg.role !== "user" && !isEmptyBubble && !isNarrationOnlyBubble && (
                                             isSilentThought ? (
                                                 /* Silent + inner monologue: no avatar, just heart */
                                                 <div
@@ -6168,10 +6177,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             )
                                         )}
                                         {!isSilentThought && !isEmptyBubble && <div
-                                            className={`chat-msg-content-wrap flex flex-col min-w-0 max-w-[70%] ${isStandaloneHtmlPreview ? "chat-msg-content-wrap-html" : ""}`}
+                                            className={`chat-msg-content-wrap flex flex-col min-w-0 max-w-[70%] ${isStandaloneHtmlPreview ? "chat-msg-content-wrap-html" : ""} ${isNarrationOnlyBubble ? "chat-msg-content-wrap-narration" : ""}`}
                                             {...(isStandaloneHtmlPreview ? { "data-html": "true" } : {})}
                                         >
-                                            {session.isGroup && msg.role !== "user" && (
+                                            {session.isGroup && msg.role !== "user" && !isNarrationOnlyBubble && (
                                                 <span className="chat-group-sender-name">{msg.senderName || ""}{renderGroupRoleBadge(msg.senderCharacterId)}</span>
                                             )}
                                             <div
@@ -6198,9 +6207,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             {/* Message Actions Popup */}
                                             {activeMessageId === msg.id && renderBubbleContextMenu(msg)}
 
+                                            {isNarrationOnlyBubble ? (
+                                                /* 旁白独立成段：不带头像、不署名、不套对白气泡 */
+                                                <div className="chat-narration-block">{bubbleNarrationText || stripNarrationMarker(renderMsg.content || "")}</div>
+                                            ) : (
                                             <MessageBubble
                                                 msg={renderMsg}
-                                                displayContent={msg.displayProjected ? undefined : bubbleDisplayContent}
+                                                displayContent={bubbleDialogueText ?? (msg.displayProjected ? undefined : bubbleDisplayContent)}
                                                 charName={character?.name}
                                                 userName={userIdentity?.name || "你"}
                                                 groupSize={session.isGroup ? (session.participantIds?.length || 0) + (session.isSpectator ? 0 : 1) : undefined}
@@ -6219,7 +6232,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 onActionSelect={(text) => chatTextInputRef.current?.appendText(text)}
                                                 defaultTranslationExpanded={session.collapseBilingualTranslation !== false ? false : true}
                                             />
+                                            )}
                                         </div>
+                                        {!isNarrationOnlyBubble && bubbleNarrationText && (
+                                            <div className="chat-narration-block">{bubbleNarrationText}</div>
+                                        )}
                                         </div>}
                                         {msg.role !== "user" && !isSilentThought && !isEmptyBubble && hasFoldedPanel && (
                                             <button

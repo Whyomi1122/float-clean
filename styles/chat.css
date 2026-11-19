@@ -8107,6 +8107,30 @@
   color: color-mix(in srgb, var(--c-text) 62%, transparent);
 }
 
+/* ===== 独立旁白块（2026-11-19 用户口径：旁白独立于任何人的对白）=====
+   整条旁白 → 不带头像、不署名、不套气泡，独占一行；
+   台词+旁白混排 → 旁白行从气泡里摘出来，落在气泡下方的这块里。 */
+.chat-narration-block {
+  width: 100%;
+  max-width: 100%;
+  margin: 2px 0 4px;
+  padding: 0 4px;
+  text-align: center;
+  white-space: pre-wrap;
+  font-style: italic;
+  font-size: calc(13px * var(--app-text-scale, 1));
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--c-text) 62%, transparent);
+}
+.chat-msg-content-wrap-narration {
+  max-width: 100% !important;
+  width: 100%;
+}
+.chat-bubble-role-assistant.chat-bubble-narration-only {
+  padding: 0 !important;
+  min-height: 0 !important;
+}
+
 /* ===== 回放页：与通话页同款（只读），复用 call-subtitle 气泡 ===== */
 .call-subtitle-play {
   position: absolute;
