@@ -234,7 +234,18 @@ function splitNarrationByQuotes(text: string): { dialogue: string; narration?: s
     const narration: string[] = [];
 
     for (const line of lines) {
+        // 括号行＝译文本体（括号包着的动作已经在 normalizeParenthesisNarration 里转成 [旁白] 了）。
+        // 2026-11-19 实机：「「어, 바로 갈게.」+（嗯，马上来。）」的译文被当成旁白摘出气泡，折叠中文没了。
+        if (/^[（(]/.test(line)) {
+            dialogue.push(line);
+            continue;
+        }
         if (!QUOTE.test(line)) {
+            // 含韩文/日文的裸行＝台词（译文行不会带原文），别当旁白
+            if (HANGUL_CHAR.test(line) || /[\u3040-\u30FF]/.test(line)) {
+                dialogue.push(line);
+                continue;
+            }
             narration.push(line);
             continue;
         }
