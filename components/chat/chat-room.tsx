@@ -6250,7 +6250,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             <div key={`narration-${i}`} className="chat-narration-block">{text}</div>
                                         ))}
                                         </div>}
-                                        {msg.role !== "user" && !isSilentThought && !isEmptyBubble && hasFoldedPanel && (
+                                        {msg.role !== "user" && !isSilentThought && !isEmptyBubble && !isNarrationOnlyBubble && hasFoldedPanel && (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setExpandedThinkingId(prev => prev === msg.id ? null : msg.id); }}
                                                 className="chat-monologue-heart bg-none border-none cursor-pointer p-1 ts-14 leading-none self-end shrink-0 -ml-2"
