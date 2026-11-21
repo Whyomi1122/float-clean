@@ -75,6 +75,17 @@ import {
   type EnsembleToolId,
 } from "@/components/ensemble/ensemble-tools-sheet";
 import StoryDirectionSheet from "@/components/ensemble/story-direction-sheet";
+import { EnsembleComicSheet } from "./ensemble-comic-sheet";
+
+function ComicTool({ script }: { script: EnsembleScript }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("ensemble-open-comic", show);
+    return () => window.removeEventListener("ensemble-open-comic", show);
+  }, []);
+  return <EnsembleComicSheet script={script} open={open} onClose={() => setOpen(false)} />;
+}
 import {
   buildDirectionContext,
   buildDirectionDirective,
@@ -4826,6 +4837,8 @@ ${lastSpeakerNote}
                 // 杀青归档（2026-10-10）：打开面板即刷新统计
                 refreshArchivePanel();
                 setShowArchiveSheet(true);
+              } else if (id === "comic") {
+                window.dispatchEvent(new Event("ensemble-open-comic"));
               } else if (id === "storyboard") {
                 setShowStoryboardSheet(true);
               } else if (id === "moodMusic") {
@@ -4837,6 +4850,7 @@ ${lastSpeakerNote}
           />
 
           {/* ═══════════ 走向卡：下一步走向（TOOLS 面板第 3 位，2026-11-16） ═══════════ */}
+          <ComicTool key={currentScript.id} script={currentScript} />
           <StoryDirectionSheet
             open={showStoryDirectionSheet}
             scriptId={currentScript?.id}
