@@ -1,9 +1,27 @@
 "use client";
 import { useRef, useState } from "react";
+import { comicImagePresets, loadComicImageOptions, saveComicImageOptions } from "@/lib/ensemble-comic";
+import { exportComic } from "@/lib/ensemble-comic-export";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import { comicSource, drawComicPanel, loadComicBooks, planComic, saveComicBook, type ComicBook } from "@/lib/ensemble-comic";
 
 export function EnsembleComicSheet({ script, open, onClose }: { script: EnsembleScript; open: boolean; onClose: () => void }) {
+  const [imageOptions, setImageOptions] = useState(loadComicImageOptions);
+  const [exporting, setExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const presets = comicImagePresets();
+  async function downloadComic() {
+    if (!book || exporting) return;
+    setExporting(true); setError("");
+    try {
+      const blob = await exportComic(book);
+      const url = URL.createObjectURL(blob);
+      if (exportUrl) URL.revokeObjectURL(exportUrl);
+      setExportUrl(url);
+      const link = document.createElement('a'); link.href = url; link.download = `${book.title}.png`; link.click();
+    } catch (e) { setError(e instanceof Error ? e.message : '导出失败'); }
+    finally { setExporting(false); }
+  }
   const [count, setCount] = useState("6");
   const [request, setRequest] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -34,7 +52,11 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
         catch (e) { next.panels[index].error = e instanceof Error ? e.message : "生图失败"; }
         persist(next);
       }
-    } finally { running.current = false; setBusy(false); }
+    } finally {
+      running.current = false; setBusy(false);
+      const failed = next.panels.filter(p => !p.url).length;
+      window.dispatchEvent(new CustomEvent('ensemble-comic-complete', { detail: failed ? `漫画制作结束，${failed}格待重试` : '四格漫画已完成' }));
+    }
   }
   if (!open) return null;
   const button = "rounded-full px-4 py-2 text-sm bg-[#5B8FB9] text-white disabled:opacity-40";
@@ -43,6 +65,7 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
       <header className="flex items-center justify-between"><h2 className="text-lg font-medium">漫画分镜</h2><button onClick={onClose}>收起</button></header>
       {busy && <p className="text-xs text-black/50">正在制作，可收起后继续聊天。请保持页面开启。</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      <details className="text-sm"><summary>漫画生图配置</summary><div className="py-3 space-y-3">{(['primary', 'fallback'] as const).map(field => <label key={field} className="flex items-center gap-3">{field === 'primary' ? '主用' : '备用'}<select className="min-w-0 flex-1 rounded-lg bg-white p-2" disabled={busy} value={imageOptions[field]} onChange={e => { const value = { ...imageOptions, [field]: e.target.value }; setImageOptions(value); saveComicImageOptions(value); }}><option value="">{field === 'primary' ? '沿用全局生图' : '不使用备用'}</option>{presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>)}<p className="text-xs text-black/45">选择生图设置中已有的配置；失败后重试一次，再尝试备用。请求失败也可能产生费用，以服务商账单为准。</p></div></details>
       {!book ? <>
         <label className="flex items-center gap-3 text-sm">最近 <input type="number" min="1" max={script.turns.length} value={count} onChange={e => { setCount(e.target.value); setSelected([]); }} className="w-20 bg-white rounded-lg p-2" /> 轮 / 幕</label>
         <textarea placeholder="想画哪段剧情？留空由模型选择" value={request} onChange={e => setRequest(e.target.value)} className="w-full min-h-20 bg-white rounded-xl p-3 text-sm" />
@@ -52,6 +75,7 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
         {books.length > 0 && <div className="space-y-2"><p className="text-xs text-black/40">我的漫画</p>{books.map(b => <button key={b.id} onClick={() => setBook(b)} className="block w-full text-left rounded-xl bg-white p-3 text-sm">{b.title}</button>)}</div>}
       </> : <>
         <div className="flex items-center justify-between"><h3>{book.title}</h3><button disabled={busy} className="text-xs text-black/50" onClick={() => setBook(null)}>返回</button></div>
+        {book.panels.every(p => p.url) && <div><button className={button} disabled={exporting} onClick={downloadComic}>{exporting ? '正在导出…' : '导出带对白长图'}</button>{exportUrl && <a className="block text-sm py-2" href={exportUrl} download={`${book.title}.png`}>再次保存长图</a>}</div>}
         {book.panels.map((p, i) => <article key={i} className="bg-white overflow-hidden rounded-lg">
           {p.url ? <button className="block w-full" onClick={() => setPreview(p.url!)}><img src={p.url} alt={`第${i + 1}格`} className="w-full h-auto" /></button> : <textarea aria-label={`第${i + 1}格画面`} value={p.description} disabled={busy} onChange={e => setBook({ ...book, panels: book.panels.map((v, j) => j === i ? { ...v, description: e.target.value } : v) })} className="w-full min-h-28 p-4 bg-white text-sm leading-relaxed" />}
           <div className="px-5 py-4 space-y-3">{p.quoteIds.map(id => { const q = book.quotes.find(q => q.id === id); return q && <div key={id} className="rounded-[45%] border border-black/15 px-5 py-3 text-center bg-white" style={{ fontFamily: "'ComicDeYi',sans-serif", fontSize: "18px", lineHeight: 1.7 }}><span className="block text-[10px] text-black/40" style={{ fontFamily: "sans-serif" }}>{q.speaker}</span>{q.text}</div>; })}</div>

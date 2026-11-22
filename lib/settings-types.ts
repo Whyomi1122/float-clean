@@ -364,7 +364,9 @@ export type BindingConfig = {
     storyDirectionApiConfigId?: string;
     /** Auxiliary API: used to pick mood-playlist songs for ensemble scenes (global, 2026-11-17) */
     moodMusicApiConfigId?: string;
-    // —— 二级选择：同一张卡里指定用哪个模型（2026-11-15，空 = 卡上的默认模型）——
+    /** Auxiliary API: used to plan ensemble four-panel comic scripts (global, 2026-11-21) */
+    comicApiConfigId?: string;
+    /** 同一张卡里指定用哪个模型（2026-11-15，空 = 卡上的默认模型）—— */
     memorySummaryModel?: string;
     embeddingModel?: string;
     mascotModel?: string;
@@ -373,6 +375,8 @@ export type BindingConfig = {
     koreanSpeechModel?: string;
     storyDirectionModel?: string;
     moodMusicModel?: string;
+    /** 漫画分镜脚本模型（2026-11-21，空 = 卡上的默认模型） */
+    comicModel?: string;
 };
 
 // --- Chat Toolbox ---

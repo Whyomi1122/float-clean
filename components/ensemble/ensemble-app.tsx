@@ -79,12 +79,15 @@ import { EnsembleComicSheet } from "./ensemble-comic-sheet";
 
 function ComicTool({ script }: { script: EnsembleScript }) {
   const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = () => { setOpen(true); setNotice(""); };
+    const complete = (event: Event) => setNotice(String((event as CustomEvent).detail));
     window.addEventListener("ensemble-open-comic", show);
-    return () => window.removeEventListener("ensemble-open-comic", show);
+    window.addEventListener("ensemble-comic-complete", complete);
+    return () => { window.removeEventListener("ensemble-open-comic", show); window.removeEventListener("ensemble-comic-complete", complete); };
   }, []);
-  return <EnsembleComicSheet script={script} open={open} onClose={() => setOpen(false)} />;
+  return <><EnsembleComicSheet script={script} open={open} onClose={() => setOpen(false)} />{notice && !open && <button className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] rounded-full bg-white shadow-lg px-5 py-3 text-sm" onClick={() => { setOpen(true); setNotice(""); }}>{notice} · 查看</button>}</>;
 }
 import {
   buildDirectionContext,

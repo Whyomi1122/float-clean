@@ -1,9 +1,9 @@
 import type { EnsembleScript } from "./ensemble-storage";
 import { parseEnsembleReply } from "./ensemble-parser";
 import { simpleLLMCall } from "./api-helpers";
-import { resolveAuxiliaryApiConfig } from "./settings-storage";
+import type { ApiConfig, ImageGenerationSettings } from "./settings-types";
+import { loadBindingConfig, loadImageGenerationSettings, resolveAuxiliaryApiConfig } from "./settings-storage";
 import { generateImageFromConfiguredApi } from "./image-generation-service";
-import { loadImageGenerationSettings } from "./settings-storage";
 import { kvGet, kvSet } from "./kv-db";
 
 export type ComicQuote = { id: string; speaker: string; text: string };
@@ -32,8 +32,31 @@ export function saveComicBook(scriptId: string, book: ComicBook) {
   if (index >= 0) books[index] = book; else books.unshift(book);
   kvSet(key(scriptId), JSON.stringify(books));
 }
+/**
+ * 漫画分镜脚本用哪个模型：绑定页「漫画分镜 API」配了就优先用它，
+ * 没配沿用「下一步走向 API」，再没有就回落全局 —— 与心情音乐同口径。
+ */
+function resolvePlanConfig(): ApiConfig | undefined {
+    try {
+        if (loadBindingConfig().comicApiConfigId) {
+            const comic = resolveAuxiliaryApiConfig("comicApiConfigId");
+            if (comic) return comic;
+        }
+        if (loadBindingConfig().storyDirectionApiConfigId) {
+            const story = resolveAuxiliaryApiConfig("storyDirectionApiConfigId");
+            if (story) return story;
+        }
+    } catch { /* fallthrough */ }
+    return resolveAuxiliaryApiConfig("comicApiConfigId") ?? undefined;
+}
+export type ComicImageOptions = { primary: string; fallback: string };
+export function loadComicImageOptions(): ComicImageOptions {
+  try { return { primary: "", fallback: "", ...JSON.parse(kvGet("ensemble-comic-image-options") || "{}") }; } catch { return { primary: "", fallback: "" }; }
+}
+export function saveComicImageOptions(value: ComicImageOptions) { kvSet("ensemble-comic-image-options", JSON.stringify(value)); }
+export function comicImagePresets() { return loadImageGenerationSettings().openaiPresets ?? []; }
 export async function planComic(script: EnsembleScript, count: number, request: string, quotes: ComicQuote[]): Promise<ComicBook> {
-  const config = resolveAuxiliaryApiConfig("storyDirectionApiConfigId");
+  const config = resolvePlanConfig();
   if (!config) throw new Error("请先配置可用的文字 API");
   const result = await simpleLLMCall(config, [
     { role: "system", content: `你是精细彩色韩漫分镜导演。只改编用户提供的已发生剧情，不续写、不新增事件，不替用户作决定。输出严格 JSON：{"title":"标题","panels":[{"description":"单格画面描述","subjectId":"画面主角ID或空","quoteIds":["选中对白ID"]}]}。恰好4格，组成适合手机竖向阅读的连贯短篇。远景交代→动作互动→表情特写→余韵，景别有变化，服饰、场景、人物外貌保持连续。每格只画一个瞬间，描述必须含人物名字、动作、表情、景别和光线，不要排版文字，不要将4格拼成一张。用户勾选的每句对白必须分配且只用一次，只能引用提供的ID，不改台词；没有台词的格子quoteIds为空。不要把韩国背景一律改成首尔或校园，以原剧情为准。` },
@@ -57,14 +80,28 @@ export async function planComic(script: EnsembleScript, count: number, request: 
 export async function drawComicPanel(script: EnsembleScript, book: ComicBook, index: number): Promise<string> {
   const settings = loadImageGenerationSettings();
   // 漫画独立画风：不继承真人分镜附加词或全局摄影提示词。
-  const comicSettings = { ...settings, extraPrompt: "", extraPromptNegative: "", openaiPresets: settings.openaiPresets?.map(p => ({ ...p, extraPrompt: "", extraPromptNegative: "" })) };
+  const options = loadComicImageOptions();
+  const comicSettings = { ...settings, provider: options.primary ? "openai" as const : settings.provider, extraPrompt: "", extraPromptNegative: "", activeOpenAiPresetId: options.primary || settings.activeOpenAiPresetId, openaiPresets: settings.openaiPresets?.map(p => ({ ...p, extraPrompt: "", extraPromptNegative: "" })) };
+  const fallback = comicSettings.openaiPresets?.find(p => p.id === options.fallback);
+  const attempts = [comicSettings, comicSettings, ...(fallback ? [{ ...comicSettings, provider: "openai" as const, activeOpenAiPresetId: fallback.id }] : [])];
   const panel = book.panels[index];
-  const result = await generateImageFromConfiguredApi({
-    settings: comicSettings,
-    description: `Premium full-color Korean webtoon illustration, refined line art, expressive drawn faces, sophisticated cel shading, detailed environments, consistent character design. NOT a photograph, NOT live action, no photorealistic skin. Single portrait comic panel, no text, no letters, no speech bubbles, no collage.\n连续性设定：${book.panels.map(p => p.description).join("\n")}\n只画第${index + 1}格：${panel.description}\n参考照片仅用于识别人物五官、发型和特征，必须转绘为精细韩漫人物，不继承摄影风格。`,
-    app: "ensemble-comic", characterId: panel.subjectId,
-    useReferenceImage: Boolean(panel.subjectId && settings.characterReferences?.[panel.subjectId]?.assetId),
-  });
-  if (!result) throw new Error("未返回图片，请检查生图配置");
-  return result.dataUrl;
+  const description = `Premium full-color Korean webtoon illustration, refined line art, expressive drawn faces, sophisticated cel shading, detailed environments, consistent character design. NOT a photograph, NOT live action, no photorealistic skin. Single portrait comic panel, no text, no letters, no speech bubbles, no collage.\n连续性设定：${book.panels.map(p => p.description).join("\n")}\n只画第${index + 1}格：${panel.description}\n参考照片仅用于识别人物五官、发型和特征，必须转绘为精细韩漫人物，不继承摄影风格。`;
+  let lastError = "";
+  // 自动重试一次：中转偶发超时/限流时不让整组漫画废掉。
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 1500));
+    try {
+      const result = await generateImageFromConfiguredApi({
+        settings: attempts[attempt],
+        description,
+        app: "ensemble-comic", characterId: panel.subjectId,
+        useReferenceImage: Boolean(panel.subjectId && settings.characterReferences?.[panel.subjectId]?.assetId),
+      });
+      if (!result) throw new Error("未返回图片，请检查生图配置");
+      return result.dataUrl;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "生图失败";
+    }
+  }
+  throw new Error(lastError);
 }
