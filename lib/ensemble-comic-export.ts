@@ -1,8 +1,9 @@
-import type { ComicBook } from './ensemble-comic';
+import { bubbleSlot, type ComicBook } from './ensemble-comic';
 
+/** 导出竖版长图：四格满版上下相接，对白气泡像例图那样叠在画面里。 */
 export async function exportComic(book: ComicBook): Promise<Blob> {
-  await document.fonts.load('28px ComicDeYi');
-  const width = 1080, pad = 48;
+  await document.fonts.load('30px ComicDeYi');
+  const width = 1080;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('当前浏览器无法导出图片');
@@ -12,37 +13,53 @@ export async function exportComic(book: ComicBook): Promise<Blob> {
     image.onload = () => resolve(image); image.onerror = () => reject(new Error('图片读取失败，请重试'));
     image.src = panel.url;
   })));
-  ctx.font = '32px ComicDeYi, sans-serif';
-  function wrap(text: string) {
+  const font = '30px ComicDeYi, sans-serif';
+  ctx.font = font;
+  const bubbleMax = Math.round(width * 0.58) - 64;
+  function wrap(text: string, max: number) {
     const lines: string[] = []; let line = '';
     for (const char of text) {
       if (char === '\n') { lines.push(line); line = ''; continue; }
-      if (ctx!.measureText(line + char).width > width - pad * 4) { lines.push(line); line = char; } else line += char;
+      if (ctx!.measureText(line + char).width > max) { lines.push(line); line = char; } else line += char;
     }
     if (line) lines.push(line);
     return lines;
   }
   const blocks = book.panels.map((panel, i) => ({
-    image: images[i], height: Math.round(images[i].naturalHeight * width / images[i].naturalWidth),
-    quotes: panel.quoteIds.map(id => book.quotes.find(q => q.id === id)).filter(q => q !== undefined).map(q => ({ speaker: q.speaker, lines: wrap(q.text) })),
+    image: images[i],
+    height: Math.round(images[i].naturalHeight * width / images[i].naturalWidth),
+    quotes: panel.quoteIds
+      .map(id => book.quotes.find(q => q.id === id))
+      .filter(q => q !== undefined)
+      .map(q => ({ lines: wrap(q.text, bubbleMax) })),
   }));
   canvas.width = width;
-  canvas.height = blocks.reduce((sum, b) => sum + b.height + b.quotes.reduce((s, q) => s + 88 + q.lines.length * 48, 0) + 48, 0);
+  canvas.height = blocks.reduce((sum, b) => sum + b.height, 0);
   if (canvas.height > 32000) throw new Error('长图过长，请减少对白后导出');
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, canvas.height);
   let y = 0;
   for (const block of blocks) {
-    ctx.drawImage(block.image, 0, y, width, block.height); y += block.height + 24;
-    for (const quote of block.quotes) {
-      const h = 64 + quote.lines.length * 48;
-      ctx.strokeStyle = '#d0d0d0'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(pad, y, width - pad * 2, h, 32); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.fillStyle = '#777'; ctx.font = '22px sans-serif'; ctx.fillText(quote.speaker, width / 2, y + 30);
-      ctx.fillStyle = '#222'; ctx.font = '32px ComicDeYi, sans-serif';
-      quote.lines.forEach((line, i) => ctx.fillText(line, width / 2, y + 76 + i * 48));
-      y += h + 24;
-    }
-    y += 24;
+    ctx.drawImage(block.image, 0, y, width, block.height);
+    block.quotes.forEach((quote, qi) => {
+      const slot = bubbleSlot(qi, block.quotes.length);
+      const lineH = 48;
+      const textW = Math.max(...quote.lines.map(line => ctx.measureText(line).width), 120);
+      const bw = Math.min(width * 0.62, textW + 76);
+      const bh = quote.lines.length * lineH + 58;
+      const cx = slot.side === 'right' ? width - width * 0.06 - bw / 2 : width * 0.06 + bw / 2;
+      const minCy = y + bh / 2 + 14;
+      const maxCy = y + block.height - bh / 2 - 14;
+      const rawCy = y + block.height * slot.top / 100 + bh / 2;
+      const cy = maxCy <= minCy ? y + block.height / 2 : Math.min(maxCy, Math.max(minCy, rawCy));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, bw / 2, bh / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.fill();
+      ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.fillStyle = '#1c1c1c'; ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const startY = cy - (quote.lines.length - 1) * lineH / 2;
+      quote.lines.forEach((line, li) => ctx.fillText(line, cx, startY + li * lineH));
+    });
+    y += block.height;
   }
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('长图导出失败')), 'image/png'));
 }

@@ -22,7 +22,20 @@ export function comicSource(script: EnsembleScript, count: number) {
   }
   return { text: turns.map(t => `${t.senderName}：${t.content}`).join("\n\n"), quotes };
 }
+/** 对白气泡在画面内的落点：数量少时散开，左右交替，避开正中人物脸。 */
+export function bubbleSlot(index: number, total: number): { top: number; side: "left" | "right" } {
+  const count = Math.max(1, total);
+  const top = count === 1 ? 8 : 4 + (index * 68) / (count - 1);
+  return { top, side: index % 2 === 0 ? "right" : "left" };
+}
 const key = (id: string) => `ensemble-comic:${id}`;
+
+/** 例图那种竖版长图：把横图/方图尺寸换成 2:3 竖图，已是竖图的保持原样。 */
+function portraitSize(size?: string): string {
+  const m = /^(\d+)\s*[x×]\s*(\d+)$/i.exec((size ?? "").trim());
+  if (!m) return size ?? "";
+  return Number(m[1]) >= Number(m[2]) ? "1024x1536" : size!;
+}
 export function loadComicBooks(id: string): ComicBook[] {
   try { const value = JSON.parse(kvGet(key(id)) || "[]"); return Array.isArray(value) ? value : []; } catch { return []; }
 }
@@ -87,15 +100,15 @@ export async function drawComicPanel(script: EnsembleScript, book: ComicBook, in
   const settings = loadImageGenerationSettings();
   // 漫画独立画风：不继承真人分镜附加词或全局摄影提示词。
   const options = loadComicImageOptions();
-  const comicSettings = { ...settings, provider: options.primary ? "openai" as const : settings.provider, extraPrompt: "", extraPromptNegative: "", activeOpenAiPresetId: options.primary || settings.activeOpenAiPresetId, openaiPresets: settings.openaiPresets?.map(p => ({ ...p, extraPrompt: "", extraPromptNegative: "" })) };
+  const comicSettings = { ...settings, provider: options.primary ? "openai" as const : settings.provider, extraPrompt: "", extraPromptNegative: "", activeOpenAiPresetId: options.primary || settings.activeOpenAiPresetId, openaiPresets: settings.openaiPresets?.map(p => ({ ...p, extraPrompt: "", extraPromptNegative: "", size: portraitSize(p.size) })) };
   const fallback = comicSettings.openaiPresets?.find(p => p.id === options.fallback);
   const attempts = [comicSettings, comicSettings, ...(fallback ? [{ ...comicSettings, provider: "openai" as const, activeOpenAiPresetId: fallback.id }] : [])];
   const panel = book.panels[index];
-  const style = "韩式条漫插画，webtoon manhwa art style, 赛璐璐平涂上色 cel shading, 干净黑色线稿 clean ink outlines, 柔和粉彩配色 soft pastel palette, 韩漫美型人物 stylized manhwa faces, 二次元插画 2D illustration, 竖版单格 portrait single panel, 无文字 no text";
+  const style = "韩国网络漫画 style，semi-realistic Korean manhwa / webtoon art style，半写实画风（不是萌系二次元、不是3D、不是真人照片），成熟成年人脸型与体态 mature adult proportions，细线勾勒 clean thin ink lineart，厚涂与柔和渐变着色 painterly soft shading with subtle gradients，低饱和灰调配色 muted desaturated colors，韩漫标志性的冷白皮肤与深色头发 pale skin dark hair，电影感侧逆光 cinematic rim lighting，轻微胶片颗粒 subtle film grain，竖版满版构图 full-bleed vertical panel，主体占画面大部分，画面铺满不留白边，不要画任何对话框、文字、字幕、水印 no text no speech bubble no watermark";
   const continuity = book.panels.map((p, i) => `第${i + 1}格：${p.description}`).join("\n");
   const reference = options.useReference
-    ? "可参考所给照片中的人物五官与发型，但必须转绘成韩漫插画脸，禁止保留真实皮肤质感和照片光影。"
-    : "不要参考任何真实照片，人物按韩漫插画风格绘制。";
+    ? "可参考所给照片中人物的五官、发型、年龄感与体态，但要转绘成半写实韩漫人物（保留像本人的感觉，同时换成韩漫的线条、肤色与光影），禁止照搬真实皮肤质感、毛孔与照片光影。"
+    : "不要参考任何真实照片，人物一律按半写实韩漫风格绘制。";
   const description = `${style}。\n整体四格连续性设定：\n${continuity}\n本次只画第${index + 1}格：${panel.description}\n${reference}`;
   let lastError = "";
   // 自动重试一次：中转偶发超时/限流时不让整组漫画废掉。

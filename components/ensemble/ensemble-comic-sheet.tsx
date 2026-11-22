@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
-import { comicImagePresets, comicSource, drawComicPanel, loadComicBooks, loadComicImageOptions, planComic, saveComicBook, saveComicImageOptions, type ComicBook } from "@/lib/ensemble-comic";
+import { bubbleSlot, comicImagePresets, comicSource, drawComicPanel, loadComicBooks, loadComicImageOptions, planComic, saveComicBook, saveComicImageOptions, type ComicBook } from "@/lib/ensemble-comic";
 import { exportComic } from "@/lib/ensemble-comic-export";
 
 export function EnsembleComicSheet({ script, open, onClose }: { script: EnsembleScript; open: boolean; onClose: () => void }) {
@@ -130,15 +130,29 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
           <div className="comic-book-head"><h3>{book.title}</h3><button type="button" onClick={() => setBook(null)}>返回</button></div>
           {book.panels.map((p, i) => (
             <article key={i} className="comic-panel">
-              {p.url
-                ? <button type="button" className="comic-panel-img" onClick={() => setPreview(p.url!)}><img src={p.url} alt={`第${i + 1}格`} /></button>
-                : <textarea className="comic-panel-desc" aria-label={`第${i + 1}格画面`} value={p.description} disabled={busy} onChange={e => setBook({ ...book, panels: book.panels.map((v, j) => j === i ? { ...v, description: e.target.value } : v) })} />}
-              <div className="comic-bubbles">
-                {p.quoteIds.map(id => {
-                  const q = book.quotes.find(q => q.id === id);
-                  return q ? <div key={id} className="comic-bubble"><span>{q.speaker}</span><p>{q.text}</p></div> : null;
-                })}
-              </div>
+              {p.url ? (
+                <div className="comic-frame">
+                  <button type="button" className="comic-panel-img" onClick={() => setPreview(p.url!)}><img src={p.url} alt={`第${i + 1}格`} /></button>
+                  <div className="comic-overlay">
+                    {p.quoteIds.map((id, qi) => {
+                      const q = book.quotes.find(v => v.id === id);
+                      if (!q) return null;
+                      const slot = bubbleSlot(qi, p.quoteIds.length);
+                      return <div key={id} className={`comic-bubble is-${slot.side}`} style={{ top: `${slot.top}%` }}><p>{q.text}</p></div>;
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <textarea className="comic-panel-desc" aria-label={`第${i + 1}格画面`} value={p.description} disabled={busy} onChange={e => setBook({ ...book, panels: book.panels.map((v, j) => j === i ? { ...v, description: e.target.value } : v) })} />
+                  <div className="comic-bubbles">
+                    {p.quoteIds.map(id => {
+                      const q = book.quotes.find(v => v.id === id);
+                      return q ? <div key={id} className="comic-bubble is-script"><span>{q.speaker}</span><p>{q.text}</p></div> : null;
+                    })}
+                  </div>
+                </>
+              )}
               {p.error && <p className="comic-error">{p.error}</p>}
               {(p.url || p.error) && <button type="button" className="comic-link" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }}>{p.url ? "重画这一格" : "重试这一格"}</button>}
             </article>
@@ -196,13 +210,19 @@ const COMIC_CSS = `
 .comic-book-head h3{margin:0;font-size:15px;font-weight:600}
 .comic-book-head button{border:none;background:none;color:var(--c-secondary-text,#8a8a8a);font-size:13px;padding:6px 2px}
 .comic-panel{display:flex;flex-direction:column;gap:0;border-radius:14px;overflow:hidden;background:var(--c-card,#fff)}
+.comic-frame{position:relative;display:block}
 .comic-panel-img{display:block;padding:0;border:none;background:none;width:100%}
 .comic-panel-img img{display:block;width:100%;height:auto}
+.comic-overlay{position:absolute;inset:0;pointer-events:none}
 .comic-panel-desc{width:100%;min-height:104px;padding:12px;border:none;background:transparent;font-size:13px;line-height:1.7;color:var(--c-text,#222);resize:vertical;box-sizing:border-box}
-.comic-bubbles{display:flex;flex-direction:column;gap:8px;padding:0 16px 4px}
-.comic-bubble{margin:0 auto;width:100%;padding:10px 18px 12px;border-radius:45%/34%;border:1px solid color-mix(in srgb,var(--c-text,#222) 14%,transparent);text-align:center}
+.comic-bubbles{display:flex;flex-direction:column;gap:8px;padding:0 16px 6px}
+.comic-bubble{background:#fff;border:1.5px solid #1c1c1c;border-radius:48%/40%;box-shadow:0 2px 6px rgba(0,0,0,.14);text-align:center;box-sizing:border-box}
+.comic-overlay .comic-bubble{position:absolute;max-width:60%;padding:10px 16px 11px;background:rgba(255,255,255,.97)}
+.comic-overlay .comic-bubble.is-left{left:6%}
+.comic-overlay .comic-bubble.is-right{right:6%}
+.comic-bubbles .comic-bubble{width:100%;padding:10px 18px 12px}
 .comic-bubble span{display:block;font-size:10px;color:var(--c-secondary-text,#8a8a8a);margin-bottom:2px;font-family:system-ui,sans-serif}
-.comic-bubble p{margin:0;font-family:ComicDeYi,sans-serif;font-size:17px;line-height:1.7;word-break:break-word}
+.comic-bubble p{margin:0;font-family:ComicDeYi,sans-serif;font-size:16px;line-height:1.6;word-break:break-word;color:#1c1c1c}
 .comic-link{align-self:flex-start;margin:0 16px 12px;padding:6px 0;border:none;background:none;font-size:12px;color:var(--c-secondary-text,#8a8a8a)}
 .comic-export{display:flex;flex-direction:column;gap:8px}
 .comic-export a{text-align:center;font-size:13px;color:#5B8FB9}
