@@ -137,17 +137,17 @@ export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], widt
     const halfX = w / 2 / width; const halfY = h / 2 / height;
     const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, rawX)) * width;
     const cy = Math.min(1 - halfY - 0.01, Math.max(halfY + 0.01, rawY)) * height;
-    const tail = manual ? manual.tail : auto.tail;
+    const tail = -1;
     return { quoteId: id, speaker: quote?.speaker ?? "", lines, fontSize, lineHeight, cx, cy, w, h, tail };
   });
 }
 
-/** 自动落点的比例值（没手工拖过时用它）。 */
+/** 自动落点的比例值（没手工拖过时用它）。气泡不带尾巴，例图那种干净的椭圆。 */
 export function autoBubbleRatios(panel: ComicPanel): ComicBubble[] {
   return panel.quoteIds.map((quoteId, index) => {
     const slot = bubbleSlot(index, panel.quoteIds.length);
     const x = slot.side === "right" ? 0.76 : 0.24;
-    return { quoteId, x, y: 0.1 + (slot.top / 100) * 0.8, tail: x < 0.5 ? 3 : 5 };
+    return { quoteId, x, y: 0.1 + (slot.top / 100) * 0.8, tail: -1 };
   });
 }
 
@@ -156,17 +156,7 @@ export function moveComicBubble(panel: ComicPanel, quoteId: string, x: number, y
   const auto = autoBubbleRatios(panel);
   const base = panel.bubbles?.length ? panel.bubbles : auto;
   const merged = base.some(b => b.quoteId === quoteId) ? base : [...base, ...auto.filter(b => b.quoteId === quoteId)];
-  return merged.map(b => (b.quoteId === quoteId ? { ...b, x, y } : b));
-}
-
-/** 双击气泡：尾巴方向 0→7 循环，再过一圈变成无尾巴。 */
-export function cycleBubbleTail(panel: ComicPanel, quoteId: string): ComicBubble[] {
-  const auto = autoBubbleRatios(panel);
-  const base = panel.bubbles?.length ? panel.bubbles : auto;
-  const merged = base.some(b => b.quoteId === quoteId) ? base : [...base, ...auto.filter(b => b.quoteId === quoteId)];
-  const current = merged.find(b => b.quoteId === quoteId);
-  const next = current && current.tail >= 7 ? -1 : (current?.tail ?? -1) + 1;
-  return merged.map(b => (b.quoteId === quoteId ? { ...b, tail: next } : b));
+  return merged.map(b => (b.quoteId === quoteId ? { ...b, x, y, tail: -1 } : b));
 }
 
 /**

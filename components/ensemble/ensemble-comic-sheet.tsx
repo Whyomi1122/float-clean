@@ -1,13 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import localFont from "next/font/local";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import {
-  bubbleTailPoints,
   comicImagePresets,
   comicSource,
-  cycleBubbleTail,
   drawComicPanel,
   layoutComicBubbles,
   loadComicBooks,
@@ -21,6 +20,9 @@ import {
   type ComicQuote,
 } from "@/lib/ensemble-comic";
 import { exportComic } from "@/lib/ensemble-comic-export";
+
+/** 得意黑（Smiley Sans）—— 气泡专用字体。走 next/font 官方管线，避免手写 @font-face 加载失败。 */
+const comicFont = localFont({ src: "../../public/fonts/comic-deyi.otf", display: "swap", fallback: ["sans-serif"] });
 
 // ══════════════════════════════════════════════════════════
 // 漫画分镜（内容组件）
@@ -49,14 +51,12 @@ function Bubbles({
   quotes,
   url,
   onMove,
-  onTail,
   onOpen,
 }: {
   panel: ComicPanel;
   quotes: ComicQuote[];
   url: string;
   onMove: (quoteId: string, x: number, y: number) => void;
-  onTail: (quoteId: string) => void;
   onOpen: () => void;
 }) {
   const { ref, size } = useFrameSize();
@@ -95,7 +95,6 @@ function Bubbles({
     <div ref={ref} className="relative" onClick={onOpen}>
       <img src={url} alt="" className="block w-full h-auto" />
       {boxes.map(box => {
-        const tail = bubbleTailPoints(box.w, box.h, box.tail);
         const shift = offset && offset.quoteId === box.quoteId ? offset : null;
         const left = box.cx - box.w / 2 + (shift?.dx ?? 0);
         const top = box.cy - box.h / 2 + (shift?.dy ?? 0);
@@ -109,23 +108,13 @@ function Bubbles({
             onPointerUp={handleUp}
             onPointerCancel={handleUp}
             onClick={event => event.stopPropagation()}
-            onDoubleClick={event => { event.stopPropagation(); onTail(box.quoteId); }}
           >
-            <svg className="absolute inset-0 overflow-visible" width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`}>
+            <svg className="absolute inset-0" width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`}>
               <ellipse cx={box.w / 2} cy={box.h / 2} rx={box.w / 2 - 1} ry={box.h / 2 - 1} fill="#fff" stroke="#1c1c1c" strokeWidth={Math.max(1.2, box.fontSize * 0.09)} />
-              {tail && (
-                <polygon
-                  points={tail.map(([x, y]) => `${box.w / 2 + x},${box.h / 2 + y}`).join(" ")}
-                  fill="#fff"
-                  stroke="#1c1c1c"
-                  strokeWidth={Math.max(1.2, box.fontSize * 0.09)}
-                  strokeLinejoin="round"
-                />
-              )}
             </svg>
             <div
               className="absolute inset-0 grid place-items-center px-1 text-center text-[#1c1c1c]"
-              style={{ fontFamily: "ComicDeYi, sans-serif", fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
+              style={{ fontFamily: comicFont.style.fontFamily, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
             >
               <div>
                 {box.lines.map((line, i) => <div key={i}>{line}</div>)}
@@ -151,7 +140,6 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [imageOptions, setImageOptions] = useState(loadComicImageOptions);
   const [exporting, setExporting] = useState(false);
-  const [exportUrl, setExportUrl] = useState<string | null>(null);
   const running = useRef(false);
   const presets = comicImagePresets();
   const n = Number(count);
@@ -199,11 +187,10 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
     if (!book || exporting) return;
     setExporting(true); setError("");
     try {
-      const blob = await exportComic(book);
+      const blob = await exportComic(book, comicFont.style.fontFamily);
       const url = URL.createObjectURL(blob);
-      if (exportUrl) URL.revokeObjectURL(exportUrl);
-      setExportUrl(url);
       const link = document.createElement("a"); link.href = url; link.download = `${book.title}.png`; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { setError(e instanceof Error ? e.message : "导出失败"); }
     finally { setExporting(false); }
   }
@@ -213,8 +200,6 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
 
   return (
     <div>
-      <style>{`@font-face{font-family:ComicDeYi;src:url('/fonts/comic-deyi.otf') format('opentype');font-display:swap}`}</style>
-
       <details className="bg-white rounded-[16px] p-3 mb-3">
         <summary className="text-[12px] text-[#111111] cursor-pointer list-none flex items-center justify-between">
           <span>漫画生图配置</span>
@@ -319,7 +304,6 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
                     url={p.url}
                     onOpen={() => setPreview(p.url!)}
                     onMove={(quoteId, x, y) => patchPanel(i, { bubbles: moveComicBubble(p, quoteId, x, y) })}
-                    onTail={quoteId => patchPanel(i, { bubbles: cycleBubbleTail(p, quoteId) })}
                   />
                 ) : (
                   <textarea value={p.description} disabled={busy} onChange={e => patchPanel(i, { description: e.target.value })} aria-label={`第${i + 1}格画面`} className="w-full min-h-[92px] p-3 bg-transparent text-[12px] leading-[1.7] text-[#111111] outline-none resize-y" />
@@ -351,14 +335,12 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
           </div>
 
           {book.panels.some(p => p.url) && (
-            <div className="mt-3 flex items-center justify-between gap-3 bg-white rounded-[16px] p-3">
-              <span className="text-[10px] leading-relaxed text-black/35">拖气泡调位置，双击换尾巴朝向</span>
-              <button type="button" disabled={exporting || !book.panels.every(p => p.url)} onClick={downloadComic} className={buttonClass(!exporting && book.panels.every(p => p.url))}>
-                {exporting ? "导出中" : "导出长图"}
+            <div className="mt-3">
+              <button type="button" disabled={exporting || !book.panels.every(p => p.url)} onClick={downloadComic} className={`w-full ${buttonClass(!exporting && book.panels.every(p => p.url))}`}>
+                {exporting ? "导出中…" : "导出长图"}
               </button>
             </div>
           )}
-          {exportUrl && <a href={exportUrl} download={`${book.title}.png`} className="block text-center text-[11px] text-black/45 mt-2">再次保存长图</a>}
 
           {!book.panels.some(p => p.url) && (
             <div className="mt-3">
@@ -369,10 +351,14 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
       )}
 
       {preview && (
-        <div className="fixed inset-0 z-[120] flex flex-col items-center gap-3 p-4 bg-black/90 overflow-auto" onClick={() => setPreview(null)}>
-          <button type="button" onClick={() => setPreview(null)} className="self-end text-[12px] text-white/70">关闭</button>
-          <img src={preview} alt="漫画大图" className="max-w-full h-auto" onClick={e => e.stopPropagation()} />
-          <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="text-[12px] text-white/70 pb-6">保存图片</a>
+        <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col" onClick={() => setPreview(null)}>
+          <div className="shrink-0 flex items-center justify-between px-4 py-3">
+            <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="text-[12px] text-white/80">保存图片</a>
+            <button type="button" onClick={() => setPreview(null)} className="text-[12px] text-white/80">关闭</button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center px-3 pb-4">
+            <img src={preview} alt="漫画大图" className="max-w-full h-auto" onClick={e => e.stopPropagation()} />
+          </div>
         </div>
       )}
     </div>

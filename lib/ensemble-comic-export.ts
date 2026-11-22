@@ -1,8 +1,8 @@
-import { bubbleTailPoints, layoutComicBubbles, type ComicBook } from './ensemble-comic';
+import { layoutComicBubbles, type ComicBook } from './ensemble-comic';
 
 /** 导出竖版长图：四格满版上下相接（或纸漫白缝），对白气泡与预览用同一套排版。 */
-export async function exportComic(book: ComicBook): Promise<Blob> {
-  await document.fonts.load('30px ComicDeYi');
+export async function exportComic(book: ComicBook, family = 'ComicDeYi'): Promise<Blob> {
+  await document.fonts.load(`30px ${family}`);
   await document.fonts.ready;
   const width = 1080;
   const canvas = document.createElement('canvas');
@@ -23,7 +23,7 @@ export async function exportComic(book: ComicBook): Promise<Blob> {
   canvas.height = blocks.reduce((sum, b) => sum + b.height, 0) + gap * (blocks.length - 1);
   if (canvas.height > 32000) throw new Error('长图过长，请减少对白后导出');
   // 设完尺寸后 context 状态会被重置，字体必须重新声明，否则量字与画字不同步（气泡文字会溢出）。
-  const font = (size: number) => `${size}px ComicDeYi, sans-serif`;
+  const font = (size: number) => `${size}px ${family}, sans-serif`;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, canvas.height);
   let y = 0;
   for (const block of blocks) {
@@ -36,26 +36,10 @@ export async function exportComic(book: ComicBook): Promise<Blob> {
       ctx.font = font(box.fontSize);
       ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
       const cx = box.cx; const cy = y + box.cy;
-      const tail = bubbleTailPoints(box.w, box.h, box.tail);
-      // 先填气泡本体与尾巴，再统一描边，避免接缝处出现内框线
+      // 例图那种干净的椭圆气泡：白底、黑边、没有尾巴。
       ctx.beginPath(); ctx.ellipse(cx, cy, box.w / 2, box.h / 2, 0, 0, Math.PI * 2);
       ctx.fillStyle = '#fff'; ctx.fill();
-      if (tail) {
-        ctx.beginPath();
-        ctx.moveTo(cx + tail[0][0], cy + tail[0][1]);
-        ctx.lineTo(cx + tail[1][0], cy + tail[1][1]);
-        ctx.lineTo(cx + tail[2][0], cy + tail[2][1]);
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = Math.max(2, box.fontSize * 0.09);
-      ctx.beginPath(); ctx.ellipse(cx, cy, box.w / 2, box.h / 2, 0, 0, Math.PI * 2); ctx.stroke();
-      if (tail) {
-        ctx.beginPath();
-        ctx.moveTo(cx + tail[0][0], cy + tail[0][1]);
-        ctx.lineTo(cx + tail[1][0], cy + tail[1][1]);
-        ctx.lineTo(cx + tail[2][0], cy + tail[2][1]);
-        ctx.stroke();
-      }
+      ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = Math.max(2, box.fontSize * 0.09); ctx.stroke();
       ctx.fillStyle = '#1c1c1c';
       const startY = cy - ((box.lines.length - 1) * box.lineHeight) / 2;
       box.lines.forEach((line, li) => ctx.fillText(line, cx, startY + li * box.lineHeight));
