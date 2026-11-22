@@ -7,8 +7,10 @@ import { generateImageFromConfiguredApi } from "./image-generation-service";
 import { kvGet, kvSet } from "./kv-db";
 
 export type ComicQuote = { id: string; speaker: string; text: string };
-export type ComicPanel = { description: string; subjectId?: string; quoteIds: string[]; url?: string; error?: string };
-export type ComicBook = { id: string; title: string; quotes: ComicQuote[]; panels: ComicPanel[]; createdAt: string };
+/** 气泡手工位置：x/y 是相对画面的中心比例，tail 是尾巴方向（0=上，顺时针，-1=无尾巴）。 */
+export type ComicBubble = { quoteId: string; x: number; y: number; tail: number };
+export type ComicPanel = { description: string; subjectId?: string; quoteIds: string[]; url?: string; error?: string; bubbles?: ComicBubble[] };
+export type ComicBook = { id: string; title: string; quotes: ComicQuote[]; panels: ComicPanel[]; createdAt: string; paperMode?: boolean };
 export function comicSource(script: EnsembleScript, count: number) {
   const turns = script.turns.slice(-Math.max(1, Math.floor(count)));
   const quotes: ComicQuote[] = [];
@@ -22,7 +24,7 @@ export function comicSource(script: EnsembleScript, count: number) {
   }
   return { text: turns.map(t => `${t.senderName}：${t.content}`).join("\n\n"), quotes };
 }
-/** 对白气泡在画面内的落点：数量少时散开，左右交替，避开正中人物脸。 */
+/** 没有手工位置时的自动落点：数量少时散开，左右交替。 */
 export function bubbleSlot(index: number, total: number): { top: number; side: "left" | "right" } {
   const count = Math.max(1, total);
   const top = count === 1 ? 8 : 4 + (index * 68) / (count - 1);
@@ -45,6 +47,128 @@ export function saveComicBook(scriptId: string, book: ComicBook) {
   if (index >= 0) books[index] = book; else books.unshift(book);
   kvSet(key(scriptId), JSON.stringify(books));
 }
+
+// ══════════════════════════════════════════════════════════
+// 气泡排版：预览（DOM/SVG）与导出（canvas）共用同一份几何计算，
+// 保证「拖到哪儿，长图里就在哪儿」。
+// ══════════════════════════════════════════════════════════
+export type ComicBubbleBox = {
+  quoteId: string;
+  speaker: string;
+  lines: string[];
+  fontSize: number;
+  lineHeight: number;
+  /** 中心点（px，相对格子左上角） */
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  tail: number;
+};
+
+/** 双语句式「「韩语」（中文）」只留中文译文进气泡。 */
+export function bubbleText(raw: string): string {
+  let text = (raw || "").trim();
+  const tail = /[（(]([^（()）]+)[）)]\s*$/.exec(text);
+  if (tail && /[「『]/.test(text)) text = tail[1];
+  text = text.replace(/^[「『]+|[」』]+$/g, "").replace(/（[^）]*）/g, "").trim();
+  return text || raw.trim();
+}
+
+const CJK = /[\u2e80-\u9fff\uac00-\ud7af\uff00-\uffef]/;
+function charWidth(char: string, fontSize: number): number {
+  if (CJK.test(char)) return fontSize;
+  if (char === " ") return fontSize * 0.3;
+  return fontSize * 0.56;
+}
+function measure(text: string, fontSize: number): number {
+  let width = 0;
+  for (const char of text) width += charWidth(char, fontSize);
+  return width;
+}
+function wrapLines(text: string, maxWidth: number, fontSize: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const char of text) {
+    if (char === "\n") { lines.push(line); line = ""; continue; }
+    if (measure(line + char, fontSize) > maxWidth && line) { lines.push(line); line = char; } else line += char;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+
+/** 尾巴三角的顶点（相对气泡中心）。返回 [底边1, 尖端, 底边2]。 */
+export function bubbleTailPoints(w: number, h: number, tail: number): [number, number][] | null {
+  if (tail < 0) return null;
+  const deg = tail * 45;
+  const rx = w / 2; const ry = h / 2;
+  const at = (angle: number): [number, number] => {
+    const rad = (angle * Math.PI) / 180;
+    return [rx * Math.sin(rad), -ry * Math.cos(rad)];
+  };
+  const p1 = at(deg - 22); const p2 = at(deg + 22); const edge = at(deg);
+  const len = Math.max(rx, ry) * 0.5;
+  const norm = Math.hypot(edge[0], edge[1]) || 1;
+  const tip: [number, number] = [edge[0] + (edge[0] / norm) * len, edge[1] + (edge[1] / norm) * len];
+  return [p1, tip, p2];
+}
+
+/** 按格子实际像素尺寸排版：preview 传渲染尺寸，导出传 1080 宽。 */
+export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], width: number, height: number): ComicBubbleBox[] {
+  const ids = panel.quoteIds;
+  return ids.map((id, index) => {
+    const quote = quotes.find(q => q.id === id);
+    const text = bubbleText(quote?.text ?? "");
+    const length = [...text].length;
+    const ratio = length <= 10 ? 0.048 : length <= 20 ? 0.04 : length <= 34 ? 0.034 : 0.029;
+    const fontSize = Math.max(9, Math.min(width * 0.1, width * ratio));
+    const lineHeight = fontSize * 1.5;
+    const padX = fontSize * 0.95;
+    const padY = fontSize * 0.75;
+    const maxTextWidth = width * 0.62 - padX * 2;
+    const lines = wrapLines(text, maxTextWidth, fontSize);
+    const textWidth = Math.max(...lines.map(line => measure(line, fontSize)), fontSize * 1.2);
+    const w = Math.min(width * 0.62, textWidth + padX * 2);
+    const h = lines.length * lineHeight + padY * 2;
+    const manual = panel.bubbles?.find(b => b.quoteId === id);
+    const auto = autoBubbleRatios(panel)[index];
+    const rawX = manual ? manual.x : auto.x;
+    const rawY = manual ? manual.y : auto.y;
+    const halfX = w / 2 / width; const halfY = h / 2 / height;
+    const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, rawX)) * width;
+    const cy = Math.min(1 - halfY - 0.01, Math.max(halfY + 0.01, rawY)) * height;
+    const tail = manual ? manual.tail : auto.tail;
+    return { quoteId: id, speaker: quote?.speaker ?? "", lines, fontSize, lineHeight, cx, cy, w, h, tail };
+  });
+}
+
+/** 自动落点的比例值（没手工拖过时用它）。 */
+export function autoBubbleRatios(panel: ComicPanel): ComicBubble[] {
+  return panel.quoteIds.map((quoteId, index) => {
+    const slot = bubbleSlot(index, panel.quoteIds.length);
+    const x = slot.side === "right" ? 0.76 : 0.24;
+    return { quoteId, x, y: 0.1 + (slot.top / 100) * 0.8, tail: x < 0.5 ? 3 : 5 };
+  });
+}
+
+/** 拖动结束后写回画面坐标（比例值）；同一格其它气泡补上自动位置。 */
+export function moveComicBubble(panel: ComicPanel, quoteId: string, x: number, y: number): ComicBubble[] {
+  const auto = autoBubbleRatios(panel);
+  const base = panel.bubbles?.length ? panel.bubbles : auto;
+  const merged = base.some(b => b.quoteId === quoteId) ? base : [...base, ...auto.filter(b => b.quoteId === quoteId)];
+  return merged.map(b => (b.quoteId === quoteId ? { ...b, x, y } : b));
+}
+
+/** 双击气泡：尾巴方向 0→7 循环，再过一圈变成无尾巴。 */
+export function cycleBubbleTail(panel: ComicPanel, quoteId: string): ComicBubble[] {
+  const auto = autoBubbleRatios(panel);
+  const base = panel.bubbles?.length ? panel.bubbles : auto;
+  const merged = base.some(b => b.quoteId === quoteId) ? base : [...base, ...auto.filter(b => b.quoteId === quoteId)];
+  const current = merged.find(b => b.quoteId === quoteId);
+  const next = current && current.tail >= 7 ? -1 : (current?.tail ?? -1) + 1;
+  return merged.map(b => (b.quoteId === quoteId ? { ...b, tail: next } : b));
+}
+
 /**
  * 漫画分镜脚本用哪个模型：绑定页「漫画分镜 API」配了就优先用它，
  * 没配沿用「下一步走向 API」，再没有就回落全局 —— 与心情音乐同口径。
@@ -96,6 +220,35 @@ export async function planComic(script: EnsembleScript, count: number, request: 
   });
   return { id: crypto.randomUUID(), title: String(data.title || "漫画分镜"), quotes, panels, createdAt: new Date().toISOString() };
 }
+
+/**
+ * 画风：按用户提供的小红书资料组装（10.3 韩漫软赛璐璐配方 + 表 7 韩漫本体特征），
+ * 再加一句题材方言（表 8），避免每次都画成同一个调子。
+ */
+function manhwaStyle(description: string): string {
+  const dialect = /学校|教室|校服|操场|图书馆|走廊/.test(description)
+    ? "school romance webtoon, classroom, uniform, blush"
+    : /豪宅|宴会|晚宴|别墅|豪车|会议室|西装|会长/.test(description)
+      ? "chaebol drama, luxury interior, tailored suit, cold gaze"
+      : /家|厨房|客厅|卧室|餐桌|沙发|母亲|父亲|冰箱/.test(description)
+        ? "family drama webtoon, muted palette, natural light"
+        : "modern romance webtoon, city life, muted palette, natural light";
+  return [
+    "Style: Korean manhwa, Korean webtoon illustration, full color, vertical tall panel, full-bleed composition, character fills most of the frame",
+    `Genre: ${dialect}`,
+    "Character: semi-realistic proportions, 8-head figure, elongated slim limbs, mature adult faces",
+    "Skin: smooth skin gradient, soft shadow plane, luminous skin, peach-blush skin tone",
+    "Eyes: multi-layer iris, two-point eye catchlight, heavy lash detail",
+    "Hair: detailed hair strands, glossy hair highlight, glass-shine overlay",
+    "Lineart: clean thin ink outline in warm dark tone, not pure black",
+    "Shading: soft cel with airbrushed gradients, no hard shadow edges, subtle inner glow",
+    "Palette: low-saturation muted palette, cinematic warm light, rose-gold highlight, deep navy shadow",
+    "Light: cinematic side light, rim light, halo light, subtle film grain, slight paper texture",
+    "Negative: no text, no letters, no speech bubble, no caption, no watermark, no 3D render, no photorealistic skin, no chibi",
+    "中文要求：半写实韩式条漫、成年人体型、低饱和冷灰调、细腻皮肤渐变、发丝分组、细墨线勾边、竖版满版构图；不要萌系大眼、不要 3D 渲染、不要真人照片感；画面里不要出现任何文字、字母或对话框。",
+  ].join("\n");
+}
+
 export async function drawComicPanel(script: EnsembleScript, book: ComicBook, index: number): Promise<string> {
   const settings = loadImageGenerationSettings();
   // 漫画独立画风：不继承真人分镜附加词或全局摄影提示词。
@@ -104,12 +257,12 @@ export async function drawComicPanel(script: EnsembleScript, book: ComicBook, in
   const fallback = comicSettings.openaiPresets?.find(p => p.id === options.fallback);
   const attempts = [comicSettings, comicSettings, ...(fallback ? [{ ...comicSettings, provider: "openai" as const, activeOpenAiPresetId: fallback.id }] : [])];
   const panel = book.panels[index];
-  const style = "韩国网络漫画 style，semi-realistic Korean manhwa / webtoon art style，半写实画风（不是萌系二次元、不是3D、不是真人照片），成熟成年人脸型与体态 mature adult proportions，细线勾勒 clean thin ink lineart，厚涂与柔和渐变着色 painterly soft shading with subtle gradients，低饱和灰调配色 muted desaturated colors，韩漫标志性的冷白皮肤与深色头发 pale skin dark hair，电影感侧逆光 cinematic rim lighting，轻微胶片颗粒 subtle film grain，竖版满版构图 full-bleed vertical panel，主体占画面大部分，画面铺满不留白边，不要画任何对话框、文字、字幕、水印 no text no speech bubble no watermark";
+  const style = manhwaStyle(panel.description);
   const continuity = book.panels.map((p, i) => `第${i + 1}格：${p.description}`).join("\n");
   const reference = options.useReference
-    ? "可参考所给照片中人物的五官、发型、年龄感与体态，但要转绘成半写实韩漫人物（保留像本人的感觉，同时换成韩漫的线条、肤色与光影），禁止照搬真实皮肤质感、毛孔与照片光影。"
+    ? "可参考所给照片中人物的五官、发型、年龄感与体态，但要转绘成半写实韩漫人物（保留像本人的感觉，线条、肤色与光影全部换成韩漫的），禁止照搬真实皮肤质感、毛孔与照片光影。"
     : "不要参考任何真实照片，人物一律按半写实韩漫风格绘制。";
-  const description = `${style}。\n整体四格连续性设定：\n${continuity}\n本次只画第${index + 1}格：${panel.description}\n${reference}`;
+  const description = `${style}\n整体四格连续性设定：\n${continuity}\n本次只画第${index + 1}格：${panel.description}\n${reference}`;
   let lastError = "";
   // 自动重试一次：中转偶发超时/限流时不让整组漫画废掉。
   for (let attempt = 0; attempt < attempts.length; attempt++) {

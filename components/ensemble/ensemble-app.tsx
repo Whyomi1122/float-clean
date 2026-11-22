@@ -87,7 +87,17 @@ function ComicTool({ script }: { script: EnsembleScript }) {
     window.addEventListener("ensemble-comic-complete", complete);
     return () => { window.removeEventListener("ensemble-open-comic", show); window.removeEventListener("ensemble-comic-complete", complete); };
   }, []);
-  return <><EnsembleComicSheet script={script} open={open} onClose={() => setOpen(false)} />{notice && !open && <button className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] rounded-full bg-white shadow-lg px-5 py-3 text-sm" onClick={() => { setOpen(true); setNotice(""); }}>{notice} · 查看</button>}</>;
+  return (
+    <>
+      {/* 收起只是 display:none，组件不卸载 —— 生图能在后台继续。 */}
+      <div className={open ? "" : "hidden"}>
+        <MiniSheet title="漫画分镜" subtitle="WEBTOON" onClose={() => setOpen(false)}>
+          <EnsembleComicSheet script={script} />
+        </MiniSheet>
+      </div>
+      {notice && !open && <button className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] rounded-full bg-white shadow-lg px-5 py-3 text-sm" onClick={() => { setOpen(true); setNotice(""); }}>{notice} · 查看</button>}
+    </>
+  );
 }
 import {
   buildDirectionContext,

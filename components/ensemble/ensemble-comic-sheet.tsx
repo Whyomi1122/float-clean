@@ -1,10 +1,143 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, RotateCcw } from "lucide-react";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
-import { bubbleSlot, comicImagePresets, comicSource, drawComicPanel, loadComicBooks, loadComicImageOptions, planComic, saveComicBook, saveComicImageOptions, type ComicBook } from "@/lib/ensemble-comic";
+import {
+  bubbleTailPoints,
+  comicImagePresets,
+  comicSource,
+  cycleBubbleTail,
+  drawComicPanel,
+  layoutComicBubbles,
+  loadComicBooks,
+  loadComicImageOptions,
+  moveComicBubble,
+  planComic,
+  saveComicBook,
+  saveComicImageOptions,
+  type ComicBook,
+  type ComicPanel,
+  type ComicQuote,
+} from "@/lib/ensemble-comic";
 import { exportComic } from "@/lib/ensemble-comic-export";
 
-export function EnsembleComicSheet({ script, open, onClose }: { script: EnsembleScript; open: boolean; onClose: () => void }) {
+// ══════════════════════════════════════════════════════════
+// 漫画分镜（内容组件）
+// 只负责内容，外壳（标题 / 遮罩 / 关闭）交给 ensemble-app 的 MiniSheet，
+// 所以样式统一用工具页那一套：白卡 rounded-[16px]、12px 正文、主色按钮。
+// ══════════════════════════════════════════════════════════
+
+/** 量出格子实际渲染尺寸，气泡排版按真实像素算（导出按 1080 宽算，比例一致）。 */
+function useFrameSize() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const sync = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, size };
+}
+
+function Bubbles({
+  panel,
+  quotes,
+  url,
+  onMove,
+  onTail,
+  onOpen,
+}: {
+  panel: ComicPanel;
+  quotes: ComicQuote[];
+  url: string;
+  onMove: (quoteId: string, x: number, y: number) => void;
+  onTail: (quoteId: string) => void;
+  onOpen: () => void;
+}) {
+  const { ref, size } = useFrameSize();
+  const drag = useRef<{ quoteId: string; startX: number; startY: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const [offset, setOffset] = useState<{ quoteId: string; dx: number; dy: number } | null>(null);
+  const boxes = size.w > 0 && size.h > 0 ? layoutComicBubbles(panel, quotes, size.w, size.h) : [];
+
+  const handleDown = (event: React.PointerEvent<HTMLDivElement>, quoteId: string, cx: number, cy: number) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { quoteId, startX: event.clientX, startY: event.clientY, cx, cy, moved: false };
+  };
+  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current) return;
+    const dx = event.clientX - current.startX;
+    const dy = event.clientY - current.startY;
+    if (!current.moved && Math.hypot(dx, dy) < 5) return;
+    current.moved = true;
+    setOffset({ quoteId: current.quoteId, dx, dy });
+  };
+  const handleUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    drag.current = null;
+    setOffset(null);
+    if (!current) return;
+    if (!current.moved) return;
+    onMove(
+      current.quoteId,
+      Math.min(0.97, Math.max(0.03, (current.cx + event.clientX - current.startX) / size.w)),
+      Math.min(0.97, Math.max(0.03, (current.cy + event.clientY - current.startY) / size.h)),
+    );
+  };
+
+  return (
+    <div ref={ref} className="relative" onClick={onOpen}>
+      <img src={url} alt="" className="block w-full h-auto" />
+      {boxes.map(box => {
+        const tail = bubbleTailPoints(box.w, box.h, box.tail);
+        const shift = offset && offset.quoteId === box.quoteId ? offset : null;
+        const left = box.cx - box.w / 2 + (shift?.dx ?? 0);
+        const top = box.cy - box.h / 2 + (shift?.dy ?? 0);
+        return (
+          <div
+            key={box.quoteId}
+            className="absolute touch-none select-none"
+            style={{ left, top, width: box.w, height: box.h }}
+            onPointerDown={event => handleDown(event, box.quoteId, box.cx, box.cy)}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleUp}
+            onClick={event => event.stopPropagation()}
+            onDoubleClick={event => { event.stopPropagation(); onTail(box.quoteId); }}
+          >
+            <svg className="absolute inset-0 overflow-visible" width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`}>
+              <ellipse cx={box.w / 2} cy={box.h / 2} rx={box.w / 2 - 1} ry={box.h / 2 - 1} fill="#fff" stroke="#1c1c1c" strokeWidth={Math.max(1.2, box.fontSize * 0.09)} />
+              {tail && (
+                <polygon
+                  points={tail.map(([x, y]) => `${box.w / 2 + x},${box.h / 2 + y}`).join(" ")}
+                  fill="#fff"
+                  stroke="#1c1c1c"
+                  strokeWidth={Math.max(1.2, box.fontSize * 0.09)}
+                  strokeLinejoin="round"
+                />
+              )}
+            </svg>
+            <div
+              className="absolute inset-0 grid place-items-center px-1 text-center text-[#1c1c1c]"
+              style={{ fontFamily: "ComicDeYi, sans-serif", fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
+            >
+              <div>
+                {box.lines.map((line, i) => <div key={i}>{line}</div>)}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
   const [count, setCount] = useState("6");
   const [request, setRequest] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -30,6 +163,10 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
   }
   function persist(next: ComicBook) {
     saveComicBook(script.id, next); setBook({ ...next, panels: [...next.panels] }); setBooks(loadComicBooks(script.id));
+  }
+  function patchPanel(index: number, patch: Partial<ComicPanel>) {
+    if (!book) return;
+    persist({ ...book, panels: book.panels.map((p, i) => i === index ? { ...p, ...patch } : p) });
   }
   async function plan() {
     if (!valid || running.current) return;
@@ -69,165 +206,166 @@ export function EnsembleComicSheet({ script, open, onClose }: { script: Ensemble
     } catch (e) { setError(e instanceof Error ? e.message : "导出失败"); }
     finally { setExporting(false); }
   }
-  if (!open) return null;
+
+  const rowClass = "flex items-center gap-2 text-[12px] text-[#111111]";
+  const buttonClass = (active: boolean) => `shrink-0 px-3.5 py-2 rounded-[11px] text-[12px] font-medium transition-all ${active ? "bg-[var(--c-primary)] text-white active:scale-[0.97]" : "bg-black/[0.06] text-black/25"}`;
+
   return (
-    <div className="comic-mask" onClick={onClose}>
-      <style>{COMIC_CSS}</style>
-      <section className="comic-sheet" onClick={e => e.stopPropagation()}>
-        <header className="comic-head">
-          <h2>漫画分镜</h2>
-          <button type="button" onClick={onClose}>收起</button>
-        </header>
+    <div>
+      <style>{`@font-face{font-family:ComicDeYi;src:url('/fonts/comic-deyi.otf') format('opentype');font-display:swap}`}</style>
 
-        <details className="comic-config">
-          <summary>漫画生图配置</summary>
-          <div className="comic-config-body">
-            <label className="comic-row"><span>主用</span>
-              <select value={imageOptions.primary} disabled={busy} onChange={e => updateOptions({ primary: e.target.value })}>
-                <option value="">沿用全局生图</option>
-                {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="comic-row"><span>备用</span>
-              <select value={imageOptions.fallback} disabled={busy} onChange={e => updateOptions({ fallback: e.target.value })}>
-                <option value="">不使用备用</option>
-                {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="comic-row"><span>锁脸参考图</span>
-              <input type="checkbox" className="comic-switch" checked={imageOptions.useReference} disabled={busy} onChange={e => updateOptions({ useReference: e.target.checked })} />
-            </label>
-            <p className="comic-hint">参考照片会把画风拉向真人，建议关闭后对比一次。失败会重试一次再试备用；请求可能计费。</p>
-          </div>
-        </details>
-
-        {busy && <p className="comic-hint">正在制作，可收起后继续聊天。请保持页面开启。</p>}
-        {notice && <p className="comic-notice">{notice}</p>}
-        {error && <p className="comic-error" role="alert">{error}</p>}
-
-        {!book ? <>
-          <label className="comic-row"><span>最近</span>
-            <input className="comic-input" type="number" min="1" max={script.turns.length} value={count} onChange={e => { setCount(e.target.value); setSelected([]); }} />
-            <span>轮 / 幕</span>
+      <details className="bg-white rounded-[16px] p-3 mb-3">
+        <summary className="text-[12px] text-[#111111] cursor-pointer list-none flex items-center justify-between">
+          <span>漫画生图配置</span>
+          <span className="text-[10px] text-black/30">主用 / 备用 / 锁脸</span>
+        </summary>
+        <div className="space-y-2 pt-3">
+          <label className={rowClass}>
+            <span className="w-14 shrink-0 text-black/45">主用</span>
+            <select value={imageOptions.primary} disabled={busy} onChange={e => updateOptions({ primary: e.target.value })} className="flex-1 min-w-0 h-9 px-2 rounded-[10px] bg-black/[0.04] text-[12px] outline-none">
+              <option value="">沿用全局生图</option>
+              {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
           </label>
-          <textarea className="comic-textarea" placeholder="想画哪段剧情？留空由模型选择" value={request} onChange={e => setRequest(e.target.value)} />
-          <p className="comic-hint">选择想留下的对白，也可以不选</p>
-          <div className="comic-quotes">
-            {source.quotes.length === 0 && <p className="comic-hint">这段剧情里没有可用的对白，可直接生成纯画面四格。</p>}
+          <label className={rowClass}>
+            <span className="w-14 shrink-0 text-black/45">备用</span>
+            <select value={imageOptions.fallback} disabled={busy} onChange={e => updateOptions({ fallback: e.target.value })} className="flex-1 min-w-0 h-9 px-2 rounded-[10px] bg-black/[0.04] text-[12px] outline-none">
+              <option value="">不使用备用</option>
+              {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className={`${rowClass} justify-between`}>
+            <span className="text-black/45">锁脸参考图</span>
+            <input type="checkbox" checked={imageOptions.useReference} disabled={busy} onChange={e => updateOptions({ useReference: e.target.checked })} className="w-9 h-5 accent-[var(--c-primary)]" />
+          </label>
+          <p className="text-[10px] leading-relaxed text-black/30">参考照片会把画风拉向真人，建议关闭后对比一次。失败会重试一次再试备用；请求可能计费。</p>
+        </div>
+      </details>
+
+      {busy && <div className="flex items-center gap-2 text-[11.5px] text-black/40 py-2"><Loader2 size={13} className="animate-spin" />正在制作，可收起后继续聊天，请保持页面开启</div>}
+      {notice && <div className="text-[11px] leading-relaxed text-black/40 mb-2">{notice}</div>}
+      {error && <div className="text-[11.5px] leading-relaxed text-[#c0392b] bg-[#c0392b]/[0.06] rounded-[10px] px-2.5 py-2 mb-2">{error}</div>}
+
+      {!book ? (
+        <>
+          <div className="bg-white rounded-[16px] p-3 mb-3">
+            <div className={`${rowClass} mb-2`}>
+              <span className="text-black/45">最近</span>
+              <input type="number" min="1" max={script.turns.length} value={count} onChange={e => { setCount(e.target.value); setSelected([]); }} className="w-14 h-8 text-center rounded-[9px] bg-black/[0.04] text-[12px] outline-none" />
+              <span className="text-black/35">轮剧情</span>
+              <button type="button" onClick={plan} disabled={!valid || busy} className={`ml-auto ${buttonClass(valid && !busy)}`}>生成四格脚本</button>
+            </div>
+            <textarea value={request} onChange={e => setRequest(e.target.value)} placeholder="想画哪一段？例如「超市选果酱」，留空由模型自选" className="w-full h-[54px] bg-transparent text-[12px] leading-relaxed text-[#111111] placeholder:text-black/25 outline-none resize-none" />
+          </div>
+
+          <div className="text-[10px] text-black/30 px-1 mb-2">勾选要进画面的对白，可以不选</div>
+          <div className="space-y-1.5 mb-3 max-h-[34vh] overflow-y-auto">
+            {source.quotes.length === 0 && <div className="text-center text-[11px] text-black/30 py-6">这段剧情里没有对白，可以直接生成纯画面四格</div>}
             {source.quotes.map(q => (
-              <label key={q.id} className={selected.includes(q.id) ? "comic-quote is-on" : "comic-quote"}>
-                <input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(s => e.target.checked ? [...s, q.id] : s.filter(id => id !== q.id))} />
-                <span><span className="comic-quote-name">{q.speaker}</span>{q.text}</span>
+              <label key={q.id} className={`flex gap-2.5 bg-white rounded-[12px] p-2.5 transition-transform active:scale-[0.995] ${selected.includes(q.id) ? "ring-[1.5px] ring-[var(--c-primary)]" : ""}`}>
+                <input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(s => e.target.checked ? [...s, q.id] : s.filter(id => id !== q.id))} className="mt-0.5 w-4 h-4 shrink-0 accent-[var(--c-primary)]" />
+                <span className="min-w-0">
+                  <span className="block text-[10px] text-black/30 mb-0.5">{q.speaker}</span>
+                  <span className="block text-[12px] leading-[1.6] text-[#111111] break-words">{q.text}</span>
+                </span>
               </label>
             ))}
           </div>
-          <button type="button" className="comic-primary" disabled={!valid || busy} onClick={plan}>生成四格脚本</button>
-          {books.length > 0 && <div className="comic-history">
-            <p className="comic-hint">我的漫画</p>
-            {books.map(b => <button type="button" key={b.id} onClick={() => setBook(b)}>{b.title}<span>{b.panels.filter(p => p.url).length}/4</span></button>)}
-          </div>}
-        </> : <>
-          <div className="comic-book-head"><h3>{book.title}</h3><button type="button" onClick={() => setBook(null)}>返回</button></div>
-          {book.panels.map((p, i) => (
-            <article key={i} className="comic-panel">
-              {p.url ? (
-                <div className="comic-frame">
-                  <button type="button" className="comic-panel-img" onClick={() => setPreview(p.url!)}><img src={p.url} alt={`第${i + 1}格`} /></button>
-                  <div className="comic-overlay">
-                    {p.quoteIds.map((id, qi) => {
-                      const q = book.quotes.find(v => v.id === id);
-                      if (!q) return null;
-                      const slot = bubbleSlot(qi, p.quoteIds.length);
-                      return <div key={id} className={`comic-bubble is-${slot.side}`} style={{ top: `${slot.top}%` }}><p>{q.text}</p></div>;
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <textarea className="comic-panel-desc" aria-label={`第${i + 1}格画面`} value={p.description} disabled={busy} onChange={e => setBook({ ...book, panels: book.panels.map((v, j) => j === i ? { ...v, description: e.target.value } : v) })} />
-                  <div className="comic-bubbles">
+
+          {books.length > 0 && (
+            <>
+              <div className="text-[10px] text-black/30 px-1 mb-2">我的漫画</div>
+              <div className="space-y-1.5">
+                {books.map(item => (
+                  <button key={item.id} type="button" onClick={() => setBook(item)} className="w-full flex items-center justify-between gap-3 bg-white rounded-[12px] px-3 py-2.5 text-left active:scale-[0.995] transition-transform">
+                    <span className="min-w-0 text-[12px] text-[#111111] truncate">{item.title}</span>
+                    <span className="shrink-0 text-[10px] text-black/30">{item.panels.filter(p => p.url).length}/4</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="min-w-0 text-[12px] text-[#111111] truncate">{book.title}</span>
+            <button type="button" onClick={() => setBook(null)} className="shrink-0 text-[11px] text-black/45">← 新的一本</button>
+          </div>
+
+          <label className="flex items-center justify-between bg-white rounded-[12px] px-3 py-2 mb-2">
+            <span className="text-[11px] text-black/45">纸漫白缝（格与格之间留白边）</span>
+            <input type="checkbox" checked={Boolean(book.paperMode)} onChange={e => persist({ ...book, paperMode: e.target.checked })} className="w-9 h-5 accent-[var(--c-primary)]" />
+          </label>
+
+          <div className={book.paperMode ? "space-y-2.5" : "space-y-0"}>
+            {book.panels.map((p, i) => (
+              <article key={i} className={`bg-white overflow-hidden ${book.paperMode ? "rounded-[12px] border border-black/70" : i === 0 ? "rounded-t-[16px]" : i === book.panels.length - 1 ? "rounded-b-[16px]" : ""}`}>
+                {p.url ? (
+                  <Bubbles
+                    panel={p}
+                    quotes={book.quotes}
+                    url={p.url}
+                    onOpen={() => setPreview(p.url!)}
+                    onMove={(quoteId, x, y) => patchPanel(i, { bubbles: moveComicBubble(p, quoteId, x, y) })}
+                    onTail={quoteId => patchPanel(i, { bubbles: cycleBubbleTail(p, quoteId) })}
+                  />
+                ) : (
+                  <textarea value={p.description} disabled={busy} onChange={e => patchPanel(i, { description: e.target.value })} aria-label={`第${i + 1}格画面`} className="w-full min-h-[92px] p-3 bg-transparent text-[12px] leading-[1.7] text-[#111111] outline-none resize-y" />
+                )}
+                {!p.url && p.quoteIds.length > 0 && (
+                  <div className="px-3 pb-2 space-y-1">
                     {p.quoteIds.map(id => {
                       const q = book.quotes.find(v => v.id === id);
-                      return q ? <div key={id} className="comic-bubble is-script"><span>{q.speaker}</span><p>{q.text}</p></div> : null;
+                      return q ? <div key={id} className="text-[11px] text-black/45"><span className="text-black/25 mr-1">{q.speaker}</span>{q.text}</div> : null;
                     })}
+                    <div className="text-[10px] text-black/25">出图后气泡会叠在画面里，可拖动位置</div>
                   </div>
-                </>
-              )}
-              {p.error && <p className="comic-error">{p.error}</p>}
-              {(p.url || p.error) && <button type="button" className="comic-link" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }}>{p.url ? "重画这一格" : "重试这一格"}</button>}
-            </article>
-          ))}
-          {book.panels.every(p => p.url) && <div className="comic-export">
-            <button type="button" className="comic-primary" disabled={exporting} onClick={downloadComic}>{exporting ? "正在导出…" : "导出带对白长图"}</button>
-            {exportUrl && <a href={exportUrl} download={`${book.title}.png`}>再次保存长图</a>}
-          </div>}
-          {!book.panels.some(p => p.url) && <button type="button" className="comic-primary" disabled={busy} onClick={() => void draw([0, 1, 2, 3])}>确认脚本 · 生成四格漫画</button>}
-        </>}
-      </section>
-      {preview && <div className="comic-preview" onClick={() => setPreview(null)}>
-        <button type="button" onClick={() => setPreview(null)}>关闭</button>
-        <img src={preview} alt="漫画大图" onClick={e => e.stopPropagation()} />
-        <a href={preview} download="comic.png" onClick={e => e.stopPropagation()}>保存图片</a>
-      </div>}
+                )}
+                {p.error && <div className="px-3 pb-2 text-[11px] text-[#c0392b] leading-relaxed">{p.error}</div>}
+                {(p.url || p.error) && (
+                  <div className="flex items-center justify-end gap-3 px-3 pb-2">
+                    {p.url && p.bubbles && (
+                      <button type="button" onClick={() => patchPanel(i, { bubbles: undefined })} className="flex items-center gap-1 text-[10px] text-black/35 active:opacity-60">
+                        <RotateCcw size={10} />复位气泡
+                      </button>
+                    )}
+                    <button type="button" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }} className="text-[10px] text-black/40 active:opacity-60">
+                      {p.url ? "重画这一格" : "重试这一格"}
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+
+          {book.panels.some(p => p.url) && (
+            <div className="mt-3 flex items-center justify-between gap-3 bg-white rounded-[16px] p-3">
+              <span className="text-[10px] leading-relaxed text-black/35">拖气泡调位置，双击换尾巴朝向</span>
+              <button type="button" disabled={exporting || !book.panels.every(p => p.url)} onClick={downloadComic} className={buttonClass(!exporting && book.panels.every(p => p.url))}>
+                {exporting ? "导出中" : "导出长图"}
+              </button>
+            </div>
+          )}
+          {exportUrl && <a href={exportUrl} download={`${book.title}.png`} className="block text-center text-[11px] text-black/45 mt-2">再次保存长图</a>}
+
+          {!book.panels.some(p => p.url) && (
+            <div className="mt-3">
+              <button type="button" disabled={busy} onClick={() => void draw([0, 1, 2, 3])} className={`w-full ${buttonClass(!busy)}`}>确认脚本 · 生成四格漫画</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {preview && (
+        <div className="fixed inset-0 z-[120] flex flex-col items-center gap-3 p-4 bg-black/90 overflow-auto" onClick={() => setPreview(null)}>
+          <button type="button" onClick={() => setPreview(null)} className="self-end text-[12px] text-white/70">关闭</button>
+          <img src={preview} alt="漫画大图" className="max-w-full h-auto" onClick={e => e.stopPropagation()} />
+          <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="text-[12px] text-white/70 pb-6">保存图片</a>
+        </div>
+      )}
     </div>
   );
 }
 
-const COMIC_CSS = `
-@font-face{font-family:ComicDeYi;src:url('/fonts/comic-deyi.otf') format('opentype');font-display:swap}
-.comic-mask{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.35)}
-.comic-sheet{width:100%;max-width:440px;max-height:88dvh;overflow-y:auto;padding:18px 16px 22px;border-radius:24px;background:var(--c-card,#f7f7f8);box-shadow:0 18px 48px rgba(0,0,0,.16);animation:modalSoftRise .24s ease;color:var(--c-text,#222);display:flex;flex-direction:column;gap:10px}
-.comic-head{display:flex;align-items:center;justify-content:space-between;padding:0 2px 2px}
-.comic-head h2{margin:0;font-size:17px;font-weight:600}
-.comic-head button{border:none;background:none;color:var(--c-secondary-text,#8a8a8a);font-size:13px;padding:6px 2px}
-.comic-config{border-radius:14px;background:color-mix(in srgb,var(--c-text,#222) 4%,transparent);padding:10px 12px}
-.comic-config summary{font-size:13px;color:var(--c-secondary-text,#8a8a8a);list-style:none;cursor:pointer}
-.comic-config summary::-webkit-details-marker{display:none}
-.comic-config-body{display:flex;flex-direction:column;gap:8px;padding-top:8px}
-.comic-row{display:flex;align-items:center;gap:8px;font-size:14px;min-height:40px}
-.comic-row>span:first-child{flex:0 0 auto;min-width:64px}
-.comic-row select,.comic-row .comic-input{flex:1 1 auto;min-width:0;height:40px;padding:0 10px;border-radius:10px;border:1px solid transparent;background:var(--c-card,#fff);color:var(--c-text,#222);font-size:14px;appearance:none}
-.comic-input{flex:0 0 88px!important;text-align:center}
-.comic-switch{width:44px;height:26px;appearance:none;border-radius:13px;background:color-mix(in srgb,var(--c-text,#222) 14%,transparent);position:relative;transition:background .2s;margin-left:auto}
-.comic-switch:checked{background:#5B8FB9}
-.comic-switch:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.comic-switch:checked:after{transform:translateX(18px)}
-.comic-textarea{width:100%;min-height:84px;padding:12px;border-radius:12px;border:none;background:var(--c-card,#fff);font-size:14px;line-height:1.6;color:var(--c-text,#222);resize:vertical;box-sizing:border-box}
-.comic-hint{margin:0;padding:0 2px;font-size:12px;line-height:1.5;color:var(--c-secondary-text,#8a8a8a)}
-.comic-notice{margin:0;padding:8px 10px;border-radius:10px;background:#5B8FB918;color:#3d6c92;font-size:12px}
-.comic-error{margin:0;padding:8px 10px;border-radius:10px;background:#ef444414;color:#c0392b;font-size:12px;line-height:1.5}
-.comic-quotes{display:flex;flex-direction:column;gap:8px;max-height:38vh;overflow-y:auto;padding-right:2px}
-.comic-quote{display:flex;gap:10px;padding:10px 12px;border-radius:12px;background:var(--c-card,#fff);font-size:14px;line-height:1.55;word-break:break-word}
-.comic-quote.is-on{box-shadow:inset 0 0 0 1.5px #5B8FB9}
-.comic-quote input{margin-top:4px;width:18px;height:18px;accent-color:#5B8FB9;flex:0 0 auto}
-.comic-quote-name{display:block;font-size:12px;color:var(--c-secondary-text,#8a8a8a);margin-bottom:2px}
-.comic-primary{width:100%;height:46px;border:none;border-radius:14px;background:#5B8FB9;color:#fff;font-size:15px;font-weight:500}
-.comic-primary:disabled{opacity:.45}
-.comic-history{display:flex;flex-direction:column;gap:8px}
-.comic-history button{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:none;border-radius:12px;background:var(--c-card,#fff);font-size:14px;color:var(--c-text,#222);text-align:left}
-.comic-history button span{font-size:12px;color:var(--c-secondary-text,#8a8a8a)}
-.comic-book-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px}
-.comic-book-head h3{margin:0;font-size:15px;font-weight:600}
-.comic-book-head button{border:none;background:none;color:var(--c-secondary-text,#8a8a8a);font-size:13px;padding:6px 2px}
-.comic-panel{display:flex;flex-direction:column;gap:0;border-radius:14px;overflow:hidden;background:var(--c-card,#fff)}
-.comic-frame{position:relative;display:block}
-.comic-panel-img{display:block;padding:0;border:none;background:none;width:100%}
-.comic-panel-img img{display:block;width:100%;height:auto}
-.comic-overlay{position:absolute;inset:0;pointer-events:none}
-.comic-panel-desc{width:100%;min-height:104px;padding:12px;border:none;background:transparent;font-size:13px;line-height:1.7;color:var(--c-text,#222);resize:vertical;box-sizing:border-box}
-.comic-bubbles{display:flex;flex-direction:column;gap:8px;padding:0 16px 6px}
-.comic-bubble{background:#fff;border:1.5px solid #1c1c1c;border-radius:48%/40%;box-shadow:0 2px 6px rgba(0,0,0,.14);text-align:center;box-sizing:border-box}
-.comic-overlay .comic-bubble{position:absolute;max-width:60%;padding:10px 16px 11px;background:rgba(255,255,255,.97)}
-.comic-overlay .comic-bubble.is-left{left:6%}
-.comic-overlay .comic-bubble.is-right{right:6%}
-.comic-bubbles .comic-bubble{width:100%;padding:10px 18px 12px}
-.comic-bubble span{display:block;font-size:10px;color:var(--c-secondary-text,#8a8a8a);margin-bottom:2px;font-family:system-ui,sans-serif}
-.comic-bubble p{margin:0;font-family:ComicDeYi,sans-serif;font-size:16px;line-height:1.6;word-break:break-word;color:#1c1c1c}
-.comic-link{align-self:flex-start;margin:0 16px 12px;padding:6px 0;border:none;background:none;font-size:12px;color:var(--c-secondary-text,#8a8a8a)}
-.comic-export{display:flex;flex-direction:column;gap:8px}
-.comic-export a{text-align:center;font-size:13px;color:#5B8FB9}
-.comic-preview{position:fixed;inset:0;z-index:110;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;background:rgba(0,0,0,.94);overflow:auto}
-.comic-preview button{align-self:flex-end;border:none;background:none;color:#fff;font-size:14px;padding:8px}
-.comic-preview img{max-width:100%;height:auto}
-.comic-preview a{color:#fff;font-size:14px;padding:8px 0 24px}
-`;
+export default EnsembleComicSheet;
