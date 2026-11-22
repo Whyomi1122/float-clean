@@ -49,9 +49,9 @@ function resolvePlanConfig(): ApiConfig | undefined {
     } catch { /* fallthrough */ }
     return resolveAuxiliaryApiConfig("comicApiConfigId") ?? undefined;
 }
-export type ComicImageOptions = { primary: string; fallback: string };
+export type ComicImageOptions = { primary: string; fallback: string; useReference: boolean };
 export function loadComicImageOptions(): ComicImageOptions {
-  try { return { primary: "", fallback: "", ...JSON.parse(kvGet("ensemble-comic-image-options") || "{}") }; } catch { return { primary: "", fallback: "" }; }
+  try { return { primary: "", fallback: "", useReference: false, ...JSON.parse(kvGet("ensemble-comic-image-options") || "{}") }; } catch { return { primary: "", fallback: "", useReference: false }; }
 }
 export function saveComicImageOptions(value: ComicImageOptions) { kvSet("ensemble-comic-image-options", JSON.stringify(value)); }
 export function comicImagePresets() { return loadImageGenerationSettings().openaiPresets ?? []; }
@@ -74,7 +74,13 @@ export async function planComic(script: EnsembleScript, count: number, request: 
     ids.forEach(id => used.add(id));
     return { description: p.description, subjectId: typeof p.subjectId === "string" && script.cast.some(c => c.id === p.subjectId) ? p.subjectId : undefined, quoteIds: ids };
   });
-  if (used.size !== allowed.size) throw new Error("脚本漏掉了选中的对白，请减少对白或重新生成");
+  // 模型偶尔会漏分配台词：不报错，按顺序补进已有台词最少的格子里。
+  const leftover = quotes.filter(q => !used.has(q.id)).map(q => q.id);
+  leftover.forEach(id => {
+    let target = 0;
+    panels.forEach((panel, i) => { if (panel.quoteIds.length < panels[target].quoteIds.length) target = i; });
+    panels[target].quoteIds.push(id); used.add(id);
+  });
   return { id: crypto.randomUUID(), title: String(data.title || "漫画分镜"), quotes, panels, createdAt: new Date().toISOString() };
 }
 export async function drawComicPanel(script: EnsembleScript, book: ComicBook, index: number): Promise<string> {
@@ -85,7 +91,12 @@ export async function drawComicPanel(script: EnsembleScript, book: ComicBook, in
   const fallback = comicSettings.openaiPresets?.find(p => p.id === options.fallback);
   const attempts = [comicSettings, comicSettings, ...(fallback ? [{ ...comicSettings, provider: "openai" as const, activeOpenAiPresetId: fallback.id }] : [])];
   const panel = book.panels[index];
-  const description = `Premium full-color Korean webtoon illustration, refined line art, expressive drawn faces, sophisticated cel shading, detailed environments, consistent character design. NOT a photograph, NOT live action, no photorealistic skin. Single portrait comic panel, no text, no letters, no speech bubbles, no collage.\n连续性设定：${book.panels.map(p => p.description).join("\n")}\n只画第${index + 1}格：${panel.description}\n参考照片仅用于识别人物五官、发型和特征，必须转绘为精细韩漫人物，不继承摄影风格。`;
+  const style = "韩式条漫插画，webtoon manhwa art style, 赛璐璐平涂上色 cel shading, 干净黑色线稿 clean ink outlines, 柔和粉彩配色 soft pastel palette, 韩漫美型人物 stylized manhwa faces, 二次元插画 2D illustration, 竖版单格 portrait single panel, 无文字 no text";
+  const continuity = book.panels.map((p, i) => `第${i + 1}格：${p.description}`).join("\n");
+  const reference = options.useReference
+    ? "可参考所给照片中的人物五官与发型，但必须转绘成韩漫插画脸，禁止保留真实皮肤质感和照片光影。"
+    : "不要参考任何真实照片，人物按韩漫插画风格绘制。";
+  const description = `${style}。\n整体四格连续性设定：\n${continuity}\n本次只画第${index + 1}格：${panel.description}\n${reference}`;
   let lastError = "";
   // 自动重试一次：中转偶发超时/限流时不让整组漫画废掉。
   for (let attempt = 0; attempt < attempts.length; attempt++) {
@@ -95,7 +106,7 @@ export async function drawComicPanel(script: EnsembleScript, book: ComicBook, in
         settings: attempts[attempt],
         description,
         app: "ensemble-comic", characterId: panel.subjectId,
-        useReferenceImage: Boolean(panel.subjectId && settings.characterReferences?.[panel.subjectId]?.assetId),
+        useReferenceImage: Boolean(options.useReference && panel.subjectId && settings.characterReferences?.[panel.subjectId]?.assetId),
       });
       if (!result) throw new Error("未返回图片，请检查生图配置");
       return result.dataUrl;
