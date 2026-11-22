@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Check, Loader2, RotateCcw } from "lucide-react";
+import { Toggle } from "@/components/ui/form";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import {
   bubbleTailPoints,
@@ -236,7 +237,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
           </label>
           <label className={`${rowClass} justify-between`}>
             <span className="text-black/45">锁脸参考图</span>
-            <input type="checkbox" checked={imageOptions.useReference} disabled={busy} onChange={e => updateOptions({ useReference: e.target.checked })} className="w-9 h-5 accent-[var(--c-primary)]" />
+            <Toggle checked={imageOptions.useReference} disabled={busy} onChange={next => updateOptions({ useReference: next })} />
           </label>
           <p className="text-[10px] leading-relaxed text-black/30">参考照片会把画风拉向真人，建议关闭后对比一次。失败会重试一次再试备用；请求可能计费。</p>
         </div>
@@ -261,15 +262,25 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
           <div className="text-[10px] text-black/30 px-1 mb-2">勾选要进画面的对白，可以不选</div>
           <div className="space-y-1.5 mb-3 max-h-[34vh] overflow-y-auto">
             {source.quotes.length === 0 && <div className="text-center text-[11px] text-black/30 py-6">这段剧情里没有对白，可以直接生成纯画面四格</div>}
-            {source.quotes.map(q => (
-              <label key={q.id} className={`flex gap-2.5 bg-white rounded-[12px] p-2.5 transition-transform active:scale-[0.995] ${selected.includes(q.id) ? "ring-[1.5px] ring-[var(--c-primary)]" : ""}`}>
-                <input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(s => e.target.checked ? [...s, q.id] : s.filter(id => id !== q.id))} className="mt-0.5 w-4 h-4 shrink-0 accent-[var(--c-primary)]" />
-                <span className="min-w-0">
-                  <span className="block text-[10px] text-black/30 mb-0.5">{q.speaker}</span>
-                  <span className="block text-[12px] leading-[1.6] text-[#111111] break-words">{q.text}</span>
-                </span>
-              </label>
-            ))}
+            {source.quotes.map(q => {
+              const checked = selected.includes(q.id);
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => setSelected(s => checked ? s.filter(id => id !== q.id) : [...s, q.id])}
+                  className="w-full flex gap-2.5 bg-white rounded-[12px] p-2.5 text-left transition-transform active:scale-[0.995]"
+                >
+                  <span className={`mt-0.5 grid place-items-center w-[18px] h-[18px] rounded-full shrink-0 transition-colors ${checked ? "bg-[var(--c-primary)] text-white" : "border border-black/[0.14] text-transparent"}`}>
+                    <Check size={11} strokeWidth={3.2} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block text-[10px] mb-0.5 ${checked ? "text-black/35" : "text-black/25"}`}>{q.speaker}</span>
+                    <span className={`block text-[12px] leading-[1.6] break-words ${checked ? "text-[#111111]" : "text-black/45"}`}>{q.text}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {books.length > 0 && (
@@ -295,7 +306,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
 
           <label className="flex items-center justify-between bg-white rounded-[12px] px-3 py-2 mb-2">
             <span className="text-[11px] text-black/45">纸漫白缝（格与格之间留白边）</span>
-            <input type="checkbox" checked={Boolean(book.paperMode)} onChange={e => persist({ ...book, paperMode: e.target.checked })} className="w-9 h-5 accent-[var(--c-primary)]" />
+            <Toggle checked={Boolean(book.paperMode)} onChange={next => persist({ ...book, paperMode: next })} />
           </label>
 
           <div className={book.paperMode ? "space-y-2.5" : "space-y-0"}>
