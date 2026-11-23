@@ -190,7 +190,10 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
     try {
       const blob = await exportComic(book, comicFont.style.fontFamily);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a"); link.href = url; link.download = `${book.title}.png`; link.click();
+      const link = document.createElement("a");
+      link.href = url; link.download = `${book.title}.png`; link.rel = "noopener";
+      // Safari 要 a 真的挂在文档里才会触发下载，没挂载就表现为「点导出没反应」
+      document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { setError(e instanceof Error ? e.message : "导出失败"); }
     finally { setExporting(false); }

@@ -92,7 +92,7 @@ function ComicTool({ script }: { script: EnsembleScript }) {
     <>
       {/* 收起只是 display:none，组件不卸载 —— 生图能在后台继续。 */}
       <div className={open ? "" : "hidden"}>
-        <MiniSheet title="漫画分镜" subtitle="WEBTOON" onClose={() => setOpen(false)}>
+        <MiniSheet title="漫画分镜" subtitle="WEBTOON" onClose={() => { setOpen(false); window.dispatchEvent(new Event("ensemble-comic-closed")); }}>
           <EnsembleComicSheet script={script} />
         </MiniSheet>
       </div>
@@ -1455,6 +1455,14 @@ export function EnsembleApp({
   /** 世界书绑定子弹窗（2026-10-09 M2-b） */
   const [showWorldBookSheet, setShowWorldBookSheet] = useState(false);
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
+  /** 「分镜配图」面板顶部的两个 tab（2026-11-23 -79）：分镜配图 / 漫画分镜合并入口 */
+  const [storyboardTab, setStoryboardTab] = useState<"storyboard" | "comic">("storyboard");
+  // 漫画分镜关掉后，底下那层面板回到「分镜配图」tab，避免高亮和内容对不上
+  useEffect(() => {
+    const reset = () => setStoryboardTab("storyboard");
+    window.addEventListener("ensemble-comic-closed", reset);
+    return () => window.removeEventListener("ensemble-comic-closed", reset);
+  }, []);
   /** 分镜大图预览（2026-11-13）：点一下图 → 全屏看 + 保存 */
   const [storyboardPreview, setStoryboardPreview] = useState<{ url: string; name: string; turnId: string } | null>(
     null
@@ -4856,6 +4864,7 @@ ${lastSpeakerNote}
               } else if (id === "comic") {
                 window.dispatchEvent(new Event("ensemble-open-comic"));
               } else if (id === "storyboard") {
+                setStoryboardTab("storyboard");
                 setShowStoryboardSheet(true);
               } else if (id === "moodMusic") {
                 setShowMoodMusicSheet(true);
@@ -4866,7 +4875,6 @@ ${lastSpeakerNote}
           />
 
           {/* ═══════════ 走向卡：下一步走向（TOOLS 面板第 3 位，2026-11-16） ═══════════ */}
-          <ComicTool key={currentScript.id} script={currentScript} />
           <StoryDirectionSheet
             open={showStoryDirectionSheet}
             scriptId={currentScript?.id}
@@ -5625,6 +5633,33 @@ ${lastSpeakerNote}
                 setShowToolsSheet(true);
               }}
             >
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStoryboardTab("storyboard")}
+                  className={`flex-1 py-2 rounded-[11px] text-[12px] font-medium transition-all ${
+                    storyboardTab === "storyboard"
+                      ? "bg-[var(--c-primary)] text-white active:scale-[0.97]"
+                      : "bg-black/[0.06] text-black/40"
+                  }`}
+                >
+                  分镜配图
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStoryboardTab("comic");
+                    window.dispatchEvent(new Event("ensemble-open-comic"));
+                  }}
+                  className={`flex-1 py-2 rounded-[11px] text-[12px] font-medium transition-all ${
+                    storyboardTab === "comic"
+                      ? "bg-[var(--c-primary)] text-white active:scale-[0.97]"
+                      : "bg-black/[0.06] text-black/40"
+                  }`}
+                >
+                  漫画分镜
+                </button>
+              </div>
               <div className="bg-white rounded-[16px] p-4">
                 <div className="text-[11px] leading-relaxed text-black/45">
                   开启后，<span className="text-black/70 font-medium">下一轮</span>剧情开始，每轮自动生成一张横版场景图。
@@ -5712,6 +5747,9 @@ ${lastSpeakerNote}
               </div>
             </MiniSheet>
           )}
+
+          {/* 漫画分镜：常驻挂载（后台生图不断），放最后 → 从「分镜配图」tab 打开时压在上面 */}
+          <ComicTool key={currentScript.id} script={currentScript} />
 
           {showMoodMusicSheet && currentScript && (
             <MiniSheet

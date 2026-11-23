@@ -77,7 +77,6 @@ export const ENSEMBLE_TOOLS: EnsembleToolItem[] = [
   { id: "statusPanel", label: "状态面板", labelEn: "STATUS PANEL", Icon: Activity, enabled: true },
   { id: "storyDirection", label: "下一步走向", labelEn: "STORY DIRECTION", Icon: Compass, enabled: true },
   { id: "storyboard", label: "分镜配图", labelEn: "STORYBOARD", Icon: ImageIcon, enabled: true },
-  { id: "comic", label: "漫画分镜", labelEn: "WEBTOON", Icon: ImageIcon, enabled: true },
   { id: "moodMusic", label: "他的心情音乐", labelEn: "MOOD PLAYLIST", Icon: Music2, enabled: true },
   { id: "archive", label: "杀青归档", labelEn: "WRAP · ARCHIVE", Icon: Scissors, enabled: true },
   { id: "customCss", label: "自定义 CSS", labelEn: "CUSTOM STYLE", Icon: Code2, enabled: true },

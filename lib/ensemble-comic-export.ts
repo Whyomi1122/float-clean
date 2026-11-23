@@ -2,8 +2,11 @@ import { layoutComicBubbles, type ComicBook } from './ensemble-comic';
 
 /** 导出竖版长图：四格满版上下相接（或纸漫白缝），对白气泡与预览用同一套排版。 */
 export async function exportComic(book: ComicBook, family = 'ComicDeYi'): Promise<Blob> {
-  await document.fonts.load(`30px ${family}`);
-  await document.fonts.ready;
+  // 2026-11-23：字体请求失败时 Safari 会抛 NetworkError（"A network error occurred."），
+  // 以前这句会把整次导出中断 → 表现为「点导出长图没反应」。现在最多等 4 秒，拉不到就退回系统字体继续导。
+  const fontReady = document.fonts.load(`30px ${family}`).then(() => undefined, () => undefined);
+  await Promise.race([fontReady, new Promise<void>(resolve => setTimeout(resolve, 4000))]);
+  await document.fonts.ready.catch(() => undefined);
   const width = 1080;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
