@@ -320,13 +320,13 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
                 )}
                 {p.error && <div className="px-3 pb-2 text-[11px] text-[#c0392b] leading-relaxed">{p.error}</div>}
                 {(p.url || p.error) && (
-                  <div className="flex items-center justify-end gap-3 px-3 pb-2">
+                  <div className="flex items-center justify-center gap-2 px-3 pb-2.5">
                     {p.url && p.bubbles && (
-                      <button type="button" onClick={() => patchPanel(i, { bubbles: undefined })} className="flex items-center gap-1 text-[10px] text-black/35 active:opacity-60">
-                        <RotateCcw size={10} />复位气泡
+                      <button type="button" onClick={() => patchPanel(i, { bubbles: undefined })} className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-black/[0.05] text-[11px] text-black/55 active:scale-[0.97]">
+                        <RotateCcw size={11} />复位气泡
                       </button>
                     )}
-                    <button type="button" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }} className="text-[10px] text-black/40 active:opacity-60">
+                    <button type="button" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }} className="px-3 py-1.5 rounded-full bg-black/[0.05] text-[11px] text-black/55 active:scale-[0.97]">
                       {p.url ? "重画这一格" : "重试这一格"}
                     </button>
                   </div>
@@ -353,13 +353,14 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
 
       {preview && typeof document !== "undefined" && createPortal(
         // 用 portal 挂到 body，避免被弹窗的 transform/overflow 裁掉或半透明叠色。
+        // 按钮放在图片下方，和分镜配图一致。
         <div className="fixed inset-0 z-[200] flex flex-col" style={{ backgroundColor: "#000" }} onClick={() => setPreview(null)}>
-          <div className="shrink-0 flex items-center justify-between px-4 pb-2" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}>
-            <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="text-[12px] text-white/80">保存图片</a>
-            <button type="button" onClick={() => setPreview(null)} className="text-[12px] text-white/80">关闭</button>
+          <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center px-3" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)" }}>
+            <img src={preview} alt="漫画大图" className="max-w-full max-h-full w-auto h-auto rounded-[10px]" onClick={e => e.stopPropagation()} />
           </div>
-          <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center px-3 pb-6">
-            <img src={preview} alt="漫画大图" className="max-w-full h-auto" onClick={e => e.stopPropagation()} />
+          <div className="shrink-0 flex items-center justify-center gap-3 px-4 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)" }}>
+            <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white">保存图片</a>
+            <button type="button" onClick={() => setPreview(null)} className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white">关闭</button>
           </div>
         </div>,
         document.body,
