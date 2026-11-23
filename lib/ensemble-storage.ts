@@ -178,6 +178,11 @@ export type EnsembleScript = {
    */
   archives?: EnsembleArchiveEntry[];
   /**
+   * 剧情记录分章：给已杀青的剧情原文打「章」书签，按剧情节点像小说一样回看。
+   * ⚠️ 纯阅读坐标：与杀青边界、AI 上下文、归档内容完全解耦，改章对模型零影响。
+   */
+  chapters?: EnsembleChapter[];
+  /**
    * 状态面板：字段定义 + 模板（对齐图 3 的「字段时间 / 模板」两段式）。
    * 未启用时 AI 不生成状态数据。
    */
@@ -204,6 +209,21 @@ export type EnsembleArchiveEntry = {
   content: string;
   /** 生成这份档案用的模型名，便于「换个模型重来」 */
   model?: string;
+};
+
+/**
+ * 剧情记录的「章」书签（2026-11-23 · 分章保存）。
+ * 只存章起点锚点：章 N 的原文范围 = [fromTurnId(N) .. 下一章起点之前]，末章延伸到最后一幕。
+ * 排序按起点幕在 turns 里的先后；起点必须是已杀青幕。
+ */
+export type EnsembleChapter = {
+  id: string;
+  /** 章名（如「第一章 · 别庄的海」） */
+  title: string;
+  /** 章起点锚点：这一幕本身属于本章 */
+  fromTurnId: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const STORAGE_KEY_SCRIPTS = "float_ensemble_scripts_v1";

@@ -76,6 +76,7 @@ import {
 } from "@/components/ensemble/ensemble-tools-sheet";
 import StoryDirectionSheet from "@/components/ensemble/story-direction-sheet";
 import { EnsembleComicSheet } from "./ensemble-comic-sheet";
+import { EnsembleChapterSheet } from "./ensemble-chapter-sheet";
 
 function ComicTool({ script }: { script: EnsembleScript }) {
   const [open, setOpen] = useState(false);
@@ -1697,6 +1698,8 @@ export function EnsembleApp({
   const [resyncBusy, setResyncBusy] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [showArchiveSheet, setShowArchiveSheet] = useState(false);
+  /** 剧情记录 · 章节目录（分章保存，入口在杀青归档面板内） */
+  const [showChapterSheet, setShowChapterSheet] = useState(false);
   const [archiveCountDraft, setArchiveCountDraft] = useState(20);
   const [archiveContentDraft, setArchiveContentDraft] = useState("");
   /**
@@ -6114,6 +6117,32 @@ ${lastSpeakerNote}
             );
           })()}
 
+          {/* ═══════════ 子弹窗：剧情记录 · 章节目录（2026-11-23 分章保存） ═══════════
+              给已杀青剧情原文打「章」书签，按剧情节点像小说一样回看。
+              纯阅读坐标：不碰归档 / AI 上下文 / 杀青流程，数据挂 script.chapters。
+              逻辑全在 lib/ensemble-chapters.ts + ensemble-chapter-sheet.tsx，这里只挂载。 */}
+          {showChapterSheet && (
+            <MiniSheet
+              title="剧情记录"
+              subtitle="CHAPTERS · READ"
+              onClose={() => setShowChapterSheet(false)}
+            >
+              <EnsembleChapterSheet
+                script={currentScript}
+                apiConfig={resolveEnsembleApiConfig(
+                  currentScript.cast[0]?.id,
+                  currentScript.apiConfigIdOverride,
+                  currentScript.modelOverride,
+                )}
+                onToast={setToast}
+                onScriptUpdated={(s) => {
+                  setCurrentScript(s);
+                  saveOrUpdateEnsembleScript(s);
+                }}
+              />
+            </MiniSheet>
+          )}
+
           {/* ═══════════ 子弹窗 7：杀青归档（2026-10-10） ═══════════
               把「已发生的剧情」用 AI 总结成档案，之后老剧情对 AI 隐藏（真删），靠归档回忆。
               布局照 chill 截图：三栏统计 → 杀青操作区 → 档案预览/编辑 → 底部两按钮。
@@ -6227,6 +6256,26 @@ ${lastSpeakerNote}
                   </div>
                 ) : null}
               </div>
+
+              {/* ── 章节目录入口（剧情记录分章保存，2026-11-23） ── */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowArchiveSheet(false);
+                  setShowToolsSheet(false);
+                  setShowChapterSheet(true);
+                }}
+                className="w-full bg-white rounded-[16px] p-3.5 flex items-center gap-2.5 text-left active:scale-[0.985] transition-transform"
+              >
+                <span className="text-[16px]">📖</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12px] font-medium text-[#111111]">章节目录</span>
+                  <span className="block text-[10px] text-black/35 mt-0.5">
+                    已杀青剧情的分章保存与回看
+                  </span>
+                </span>
+                <span className="text-[12px] text-black/25">›</span>
+              </button>
 
               {/* ── 档案预览 / 编辑区 ── */}
               <div className="bg-white rounded-[16px] p-3.5 space-y-2">
