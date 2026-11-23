@@ -125,11 +125,14 @@ export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], widt
     const lineHeight = fontSize * 1.5;
     const padX = fontSize * 0.95;
     const padY = fontSize * 0.75;
-    const maxTextWidth = width * 0.62 - padX * 2;
+    // 例图的气泡是接近正圆的椭圆：宁可窄一点多折几行，也不要拉成扁长条。
+    const maxTextWidth = width * 0.4 - padX * 2;
     const lines = wrapLines(text, maxTextWidth, fontSize);
     const textWidth = Math.max(...lines.map(line => measure(line, fontSize)), fontSize * 1.2);
-    const w = Math.min(width * 0.62, textWidth + padX * 2);
-    const h = lines.length * lineHeight + padY * 2;
+    const w = Math.min(width * 0.46, textWidth + padX * 2);
+    const rawH = lines.length * lineHeight + padY * 2;
+    // 高度不低于宽度的 0.62，短句也保持圆润
+    const h = Math.max(rawH, w * 0.62);
     const manual = panel.bubbles?.find(b => b.quoteId === id);
     const auto = autoBubbleRatios(panel)[index];
     const rawX = manual ? manual.x : auto.x;

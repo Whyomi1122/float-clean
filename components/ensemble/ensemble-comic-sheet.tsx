@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import localFont from "next/font/local";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
@@ -350,16 +351,18 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
         </>
       )}
 
-      {preview && (
-        <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col" onClick={() => setPreview(null)}>
-          <div className="shrink-0 flex items-center justify-between px-4 py-3">
+      {preview && typeof document !== "undefined" && createPortal(
+        // 用 portal 挂到 body，避免被弹窗的 transform/overflow 裁掉或半透明叠色。
+        <div className="fixed inset-0 z-[200] flex flex-col" style={{ backgroundColor: "#000" }} onClick={() => setPreview(null)}>
+          <div className="shrink-0 flex items-center justify-between px-4 pb-2" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}>
             <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="text-[12px] text-white/80">保存图片</a>
             <button type="button" onClick={() => setPreview(null)} className="text-[12px] text-white/80">关闭</button>
           </div>
-          <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center px-3 pb-4">
+          <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center px-3 pb-6">
             <img src={preview} alt="漫画大图" className="max-w-full h-auto" onClick={e => e.stopPropagation()} />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
