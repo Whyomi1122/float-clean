@@ -101,23 +101,31 @@ function Bubbles({
         const top = box.cy - box.h / 2 + (shift?.dy ?? 0);
         return (
           <div
-            key={box.quoteId}
+            key={box.id}
             className="absolute touch-none select-none"
             style={{ left, top, width: box.w, height: box.h }}
-            onPointerDown={event => handleDown(event, box.quoteId, box.cx, box.cy)}
+            onPointerDown={event => handleDown(event, box.quoteId, box.anchorCx, box.anchorCy)}
             onPointerMove={handleMove}
             onPointerUp={handleUp}
             onPointerCancel={handleUp}
             onClick={event => event.stopPropagation()}
           >
             <svg className="absolute inset-0" width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`}>
-              <ellipse cx={box.w / 2} cy={box.h / 2} rx={box.w / 2 - 1} ry={box.h / 2 - 1} fill="#fff" stroke="#1c1c1c" strokeWidth={Math.max(1.2, box.fontSize * 0.09)} />
+              {box.shape === "rect" ? (
+                <rect
+                  x={1} y={1} width={box.w - 2} height={box.h - 2}
+                  rx={Math.min(box.fontSize * 0.9, box.w / 4)} ry={Math.min(box.fontSize * 0.9, box.h / 4)}
+                  fill="#fff" stroke="#1c1c1c" strokeWidth={Math.max(1.2, box.fontSize * 0.09)}
+                />
+              ) : (
+                <ellipse cx={box.w / 2} cy={box.h / 2} rx={box.w / 2 - 1} ry={box.h / 2 - 1} fill="#fff" stroke="#1c1c1c" strokeWidth={Math.max(1.2, box.fontSize * 0.09)} />
+              )}
             </svg>
             <div
-              className="absolute inset-0 grid place-items-center px-1 text-center text-[#1c1c1c]"
+              className={`absolute inset-0 flex items-center text-[#1c1c1c] ${box.shape === "rect" ? "justify-start" : "justify-center text-center"}`}
               style={{ fontFamily: comicFont.style.fontFamily, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
             >
-              <div>
+              <div style={box.shape === "rect" ? { paddingLeft: box.fontSize * 0.95, paddingRight: box.fontSize * 0.95 } : undefined}>
                 {box.lines.map((line, i) => <div key={i}>{line}</div>)}
               </div>
             </div>

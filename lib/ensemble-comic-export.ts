@@ -37,15 +37,35 @@ export async function exportComic(book: ComicBook, family = 'ComicDeYi'): Promis
     }
     for (const box of block.bubbles) {
       ctx.font = font(box.fontSize);
-      ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       const cx = box.cx; const cy = y + box.cy;
-      // 例图那种干净的椭圆气泡：白底、黑边、没有尾巴。
-      ctx.beginPath(); ctx.ellipse(cx, cy, box.w / 2, box.h / 2, 0, 0, Math.PI * 2);
+      const radius = Math.min(box.fontSize * 0.9, box.w / 4, box.h / 4);
+      const left = cx - box.w / 2; const top = cy - box.h / 2;
+      ctx.beginPath();
+      if (box.shape === 'rect') {
+        // 长句/旁白：圆角框，文字左对齐
+        ctx.moveTo(left + radius, top);
+        ctx.arcTo(left + box.w, top, left + box.w, top + box.h, radius);
+        ctx.arcTo(left + box.w, top + box.h, left, top + box.h, radius);
+        ctx.arcTo(left, top + box.h, left, top, radius);
+        ctx.arcTo(left, top, left + box.w, top, radius);
+        ctx.closePath();
+      } else {
+        // 例图那种干净的椭圆气泡：白底、黑边、没有尾巴。
+        ctx.ellipse(cx, cy, box.w / 2, box.h / 2, 0, 0, Math.PI * 2);
+      }
       ctx.fillStyle = '#fff'; ctx.fill();
       ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = Math.max(2, box.fontSize * 0.09); ctx.stroke();
       ctx.fillStyle = '#1c1c1c';
       const startY = cy - ((box.lines.length - 1) * box.lineHeight) / 2;
-      box.lines.forEach((line, li) => ctx.fillText(line, cx, startY + li * box.lineHeight));
+      if (box.shape === 'rect') {
+        ctx.textAlign = 'left';
+        const textLeft = left + box.fontSize * 0.95;
+        box.lines.forEach((line, li) => ctx.fillText(line, textLeft, startY + li * box.lineHeight));
+      } else {
+        ctx.textAlign = 'center';
+        box.lines.forEach((line, li) => ctx.fillText(line, cx, startY + li * box.lineHeight));
+      }
     }
     y += block.height + gap;
   }

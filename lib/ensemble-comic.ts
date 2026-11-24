@@ -54,6 +54,8 @@ export function saveComicBook(scriptId: string, book: ComicBook) {
 // ══════════════════════════════════════════════════════════
 export type ComicBubbleBox = {
   quoteId: string;
+  /** 每个气泡自己的唯一键（一句台词拆成多泡时，key 不能共用 quoteId） */
+  id: string;
   speaker: string;
   lines: string[];
   fontSize: number;
@@ -64,6 +66,11 @@ export type ComicBubbleBox = {
   w: number;
   h: number;
   tail: number;
+  /** 形状：短句用接近正圆的椭圆，长句/旁白用圆角框 */
+  shape: "ellipse" | "rect";
+  /** 同一句台词拆出来的几泡共用这个锚点，拖动时按它写回 */
+  anchorCx: number;
+  anchorCy: number;
 };
 
 /** 双语句式「「韩语」（中文）」只留中文译文进气泡。 */
@@ -113,36 +120,117 @@ export function bubbleTailPoints(w: number, h: number, tail: number): [number, n
   return [p1, tip, p2];
 }
 
+/** 单泡字数上限：真实漫画一个气泡放不下太多字，超了要拆。 */
+export const MAX_BUBBLE_CHARS = 18;
+
+/**
+ * 一句台词太长就按标点拆成 2~3 个气泡（真实漫画的连环气泡），
+ * 而不是把字硬塞进一个大圈里。
+ */
+export function splitBubbleText(raw: string): string[] {
+  const chars = [...(raw || "").trim()];
+  if (chars.length <= MAX_BUBBLE_CHARS) return [chars.join("")];
+  const parts = Math.min(3, Math.ceil(chars.length / MAX_BUBBLE_CHARS));
+  const target = Math.ceil(chars.length / parts);
+  const pieces: string[] = [];
+  let buffer = "";
+  for (let i = 0; i < chars.length; i += 1) {
+    const char = chars[i];
+    buffer += char;
+    if (pieces.length >= parts - 1) continue;
+    const size = [...buffer].length;
+    const rest = chars.length - i - 1;
+    const soft = size >= target - 2 && /[。！？!?，、；：…~～—]/.test(char);
+    const hard = size >= target + 5 || (size >= target && rest <= MAX_BUBBLE_CHARS);
+    if (soft || hard) { pieces.push(buffer); buffer = ""; }
+  }
+  if (buffer) pieces.push(buffer);
+  // 尾巴太短就并回上一泡，别出现「。」单独一个泡
+  for (let i = pieces.length - 1; i > 0; i -= 1) {
+    if ([...pieces[i]].length < 4) { pieces[i - 1] += pieces[i]; pieces.splice(i, 1); }
+  }
+  return pieces.length ? pieces : [chars.join("")];
+}
+
+/** 单泡尺寸：短句走椭圆，长句走圆角框。 */
+function sizeBubble(text: string, width: number) {
+  const length = [...text].length;
+  const ratio = length <= 10 ? 0.048 : length <= 20 ? 0.04 : 0.034;
+  let fontSize = Math.max(9, Math.min(width * 0.1, width * ratio));
+  let lineHeight = fontSize * 1.5;
+  const padX = fontSize * 0.95;
+  const padY = fontSize * 0.75;
+  // 太长（或本来就是旁白式长句）用圆角框，短句才用接近正圆的椭圆。
+  const shape: "ellipse" | "rect" = length > 26 ? "rect" : "ellipse";
+  const maxTextWidth = (shape === "rect" ? width * 0.44 : width * 0.34) - padX * 2;
+  const lines = wrapLines(text, maxTextWidth, fontSize);
+  const textWidth = Math.max(...lines.map(line => measure(line, fontSize)), fontSize * 1.2);
+  let w: number;
+  let h: number;
+  if (shape === "rect") {
+    w = Math.min(width * 0.5, textWidth + padX * 2);
+    h = lines.length * lineHeight + padY * 2;
+  } else {
+    // 椭圆按「内接矩形」算：文字块半宽 W、半高 H 满足 (W/a)² + (H/b)² = 1，
+    // 目标宽高比 R=1.12（接近正圆、略宽），解出 a、b，文字就不会顶出弧线。
+    const R = 1.12;
+    const W = (textWidth / 2) * 1.12 + padX * 0.3;
+    const H = (((lines.length - 1) * lineHeight + fontSize) / 2) * 1.12 + padY * 0.3;
+    const b = Math.sqrt((W * W) / (R * R) + H * H);
+    w = 2 * R * b;
+    h = 2 * b;
+    const limit = width * 0.46;
+    if (w > limit) {
+      const k = limit / w;
+      w *= k; h *= k; fontSize *= k; lineHeight *= k;
+    }
+  }
+  return { lines, fontSize, lineHeight, w, h, shape };
+}
+
 /** 按格子实际像素尺寸排版：preview 传渲染尺寸，导出传 1080 宽。 */
 export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], width: number, height: number): ComicBubbleBox[] {
-  const ids = panel.quoteIds;
-  return ids.map((id, index) => {
+  const boxes: ComicBubbleBox[] = [];
+  if (width <= 0 || height <= 0) return boxes;
+  const autos = autoBubbleRatios(panel);
+  panel.quoteIds.forEach((id, index) => {
     const quote = quotes.find(q => q.id === id);
-    const text = bubbleText(quote?.text ?? "");
-    const length = [...text].length;
-    const ratio = length <= 10 ? 0.048 : length <= 20 ? 0.04 : length <= 34 ? 0.034 : 0.029;
-    const fontSize = Math.max(9, Math.min(width * 0.1, width * ratio));
-    const lineHeight = fontSize * 1.5;
-    const padX = fontSize * 0.95;
-    const padY = fontSize * 0.75;
-    // 例图的气泡是接近正圆的椭圆：宁可窄一点多折几行，也不要拉成扁长条。
-    const maxTextWidth = width * 0.4 - padX * 2;
-    const lines = wrapLines(text, maxTextWidth, fontSize);
-    const textWidth = Math.max(...lines.map(line => measure(line, fontSize)), fontSize * 1.2);
-    const w = Math.min(width * 0.46, textWidth + padX * 2);
-    const rawH = lines.length * lineHeight + padY * 2;
-    // 高度不低于宽度的 0.62，短句也保持圆润
-    const h = Math.max(rawH, w * 0.62);
+    const parts = splitBubbleText(bubbleText(quote?.text ?? ""));
     const manual = panel.bubbles?.find(b => b.quoteId === id);
-    const auto = autoBubbleRatios(panel)[index];
-    const rawX = manual ? manual.x : auto.x;
-    const rawY = manual ? manual.y : auto.y;
-    const halfX = w / 2 / width; const halfY = h / 2 / height;
-    const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, rawX)) * width;
-    const cy = Math.min(1 - halfY - 0.01, Math.max(halfY + 0.01, rawY)) * height;
-    const tail = -1;
-    return { quoteId: id, speaker: quote?.speaker ?? "", lines, fontSize, lineHeight, cx, cy, w, h, tail };
+    const auto = autos[index] ?? { quoteId: id, x: 0.76, y: 0.5, tail: -1 };
+    const anchorX = (manual ? manual.x : auto.x) * width;
+    const anchorY = (manual ? manual.y : auto.y) * height;
+    const sized = parts.map(part => sizeBubble(part, width));
+    const gap = (sized[0]?.fontSize ?? width * 0.04) * 0.55;
+    let totalH = sized.reduce((sum, s) => sum + s.h, 0) + gap * (sized.length - 1);
+    // 一格里堆太多行时整体等比缩小，别顶出格子
+    if (totalH > height * 0.94) {
+      const k = (height * 0.94) / totalH;
+      sized.forEach(s => { s.w *= k; s.h *= k; s.fontSize *= k; s.lineHeight *= k; });
+      totalH *= k;
+    }
+    // 整组（拆出来的几泡）作为一体夹在格子内，避免上下一推就互相叠住
+    const marginY = height * 0.015;
+    let top = anchorY - totalH / 2;
+    const maxTop = height - totalH - marginY;
+    if (maxTop <= marginY) top = marginY;
+    else top = Math.min(maxTop, Math.max(marginY, top));
+    sized.forEach((s, partIndex) => {
+      // 几泡之间左右错开一点，像手摆的连环气泡
+      const stagger = sized.length > 1 ? (partIndex % 2 === 0 ? -1 : 1) * width * 0.025 : 0;
+      const halfX = s.w / 2 / width;
+      const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, (anchorX + stagger) / width)) * width;
+      const cy = top + s.h / 2;
+      boxes.push({
+        quoteId: id, id: `${id}#${partIndex}`, speaker: quote?.speaker ?? "",
+        lines: s.lines, fontSize: s.fontSize, lineHeight: s.lineHeight,
+        cx, cy, w: s.w, h: s.h, tail: -1, shape: s.shape,
+        anchorCx: anchorX, anchorCy: anchorY,
+      });
+      top += s.h + gap;
+    });
   });
+  return boxes;
 }
 
 /** 自动落点的比例值（没手工拖过时用它）。气泡不带尾巴，例图那种干净的椭圆。 */
