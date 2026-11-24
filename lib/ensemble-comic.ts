@@ -77,9 +77,6 @@ export type ComicBubbleBox = {
   tail: number;
   /** 形状：短句用接近正圆的椭圆，长句/旁白用圆角框 */
   shape: "ellipse" | "rect";
-  /** 同一句台词拆出来的几泡共用这个锚点，拖动时按它写回 */
-  anchorCx: number;
-  anchorCy: number;
 };
 
 /** 双语句式「「韩语」（中文）」只留中文译文进气泡。 */
@@ -131,34 +128,85 @@ export function bubbleTailPoints(w: number, h: number, tail: number): [number, n
 
 /** 单泡字数上限：真实漫画一个气泡放不下太多字，超了要拆。 */
 export const MAX_BUBBLE_CHARS = 18;
+/** 一句台词最多拆成几个气泡。 */
+export const MAX_BUBBLE_PARTS = 3;
 
-/**
- * 一句台词太长就按标点拆成 2~3 个气泡（真实漫画的连环气泡），
- * 而不是把字硬塞进一个大圈里。
- */
-export function splitBubbleText(raw: string): string[] {
-  const chars = [...(raw || "").trim()];
-  if (chars.length <= MAX_BUBBLE_CHARS) return [chars.join("")];
-  const parts = Math.min(3, Math.ceil(chars.length / MAX_BUBBLE_CHARS));
-  const target = Math.ceil(chars.length / parts);
-  const pieces: string[] = [];
+const SENTENCE_END = "。！？!?…";
+const CLAUSE_END = "，、；：";
+
+/** 按句末标点切句，标点跟着上一句走（引号也算在句子里）。 */
+function splitSentences(text: string): string[] {
+  const chars = [...text];
+  const out: string[] = [];
   let buffer = "";
   for (let i = 0; i < chars.length; i += 1) {
     const char = chars[i];
     buffer += char;
-    if (pieces.length >= parts - 1) continue;
-    const size = [...buffer].length;
-    const rest = chars.length - i - 1;
-    const soft = size >= target - 2 && /[。！？!?，、；：…~～—]/.test(char);
-    const hard = size >= target + 5 || (size >= target && rest <= MAX_BUBBLE_CHARS);
-    if (soft || hard) { pieces.push(buffer); buffer = ""; }
+    const closingQuote = char === "”" || char === "」" || char === "』";
+    const prev = chars[i - 1] ?? "";
+    if (SENTENCE_END.includes(char) || (closingQuote && SENTENCE_END.includes(prev))) {
+      out.push(buffer); buffer = "";
+    }
   }
-  if (buffer) pieces.push(buffer);
+  if (buffer.trim()) out.push(buffer);
+  return out.length ? out : [text];
+}
+
+/** 单句太长（一个句号都没有）时才按逗号断，尽量一碗水端平。 */
+function splitLongSentence(sentence: string): string[] {
+  const chars = [...sentence];
+  const count = Math.min(MAX_BUBBLE_PARTS, Math.ceil(chars.length / MAX_BUBBLE_CHARS));
+  const target = Math.ceil(chars.length / count);
+  const out: string[] = [];
+  let buffer = "";
+  for (let i = 0; i < chars.length; i += 1) {
+    const char = chars[i];
+    buffer += char;
+    if (out.length >= count - 1) continue;
+    const size = [...buffer].length;
+    const clause = size >= target - 4 && CLAUSE_END.includes(char);
+    const hard = size >= target + 4;
+    if (clause || hard) { out.push(buffer); buffer = ""; }
+  }
+  if (buffer) out.push(buffer);
+  return out;
+}
+
+/**
+ * 长台词拆成 2~3 个气泡（真实漫画的连环气泡）：
+ * **先按句号分句，再按句装泡**——绝不把一句话从中间劈开，
+ * 只有一整句都超过上限（一个标点都没有）时才退而按逗号断。
+ */
+export function splitBubbleText(raw: string): string[] {
+  const text = (raw || "").trim();
+  if (!text) return [""];
+  if ([...text].length <= MAX_BUBBLE_CHARS) return [text];
+
+  const pieces: string[] = [];
+  let current = "";
+  for (const sentence of splitSentences(text)) {
+    if ([...sentence].length > MAX_BUBBLE_CHARS + 6) {
+      if (current) { pieces.push(current); current = ""; }
+      pieces.push(...splitLongSentence(sentence));
+      continue;
+    }
+    if (!current) { current = sentence; continue; }
+    if ([...current].length + [...sentence].length <= MAX_BUBBLE_CHARS) current += sentence;
+    else { pieces.push(current); current = sentence; }
+  }
+  if (current) pieces.push(current);
+
+  // 超过 3 泡就把后面的并到最后（一格里气泡太多会盖住画面）
+  if (pieces.length > MAX_BUBBLE_PARTS) {
+    const head = pieces.slice(0, MAX_BUBBLE_PARTS - 1);
+    head.push(pieces.slice(MAX_BUBBLE_PARTS - 1).join(""));
+    return head;
+  }
   // 尾巴太短就并回上一泡，别出现「。」单独一个泡
   for (let i = pieces.length - 1; i > 0; i -= 1) {
     if ([...pieces[i]].length < 4) { pieces[i - 1] += pieces[i]; pieces.splice(i, 1); }
   }
-  return pieces.length ? pieces : [chars.join("")];
+  return pieces.length ? pieces : [text];
 }
 
 /** 单泡尺寸：短句走椭圆，长句走圆角框。 */
@@ -205,10 +253,11 @@ export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], widt
   panel.quoteIds.forEach((id, index) => {
     const quote = quotes.find(q => q.id === id);
     const parts = splitBubbleText(bubbleText(quote?.text ?? ""));
-    const manual = panel.bubbles?.find(b => b.quoteId === id);
     const auto = autos[index] ?? { quoteId: id, x: 0.76, y: 0.5, tail: -1 };
-    const anchorX = (manual ? manual.x : auto.x) * width;
-    const anchorY = (manual ? manual.y : auto.y) * height;
+    // 兼容老的整句拖动记录（bubbles 里 key 还是 quoteId）
+    const legacy = panel.bubbles?.find(b => b.quoteId === id);
+    const anchorX = (legacy ? legacy.x : auto.x) * width;
+    const anchorY = (legacy ? legacy.y : auto.y) * height;
     const sized = parts.map(part => sizeBubble(part, width));
     const gap = (sized[0]?.fontSize ?? width * 0.04) * 0.55;
     let totalH = sized.reduce((sum, s) => sum + s.h, 0) + gap * (sized.length - 1);
@@ -218,23 +267,26 @@ export function layoutComicBubbles(panel: ComicPanel, quotes: ComicQuote[], widt
       sized.forEach(s => { s.w *= k; s.h *= k; s.fontSize *= k; s.lineHeight *= k; });
       totalH *= k;
     }
-    // 整组（拆出来的几泡）作为一体夹在格子内，避免上下一推就互相叠住
+    // 还没单独拖过的气泡按整组排：一体夹在格子内，几泡之间错开一点
     const marginY = height * 0.015;
     let top = anchorY - totalH / 2;
     const maxTop = height - totalH - marginY;
     if (maxTop <= marginY) top = marginY;
     else top = Math.min(maxTop, Math.max(marginY, top));
     sized.forEach((s, partIndex) => {
-      // 几泡之间左右错开一点，像手摆的连环气泡
+      const partId = `${id}#${partIndex}`;
+      // 每个气泡各自记位置：拖过哪个就只有哪个动
+      const manual = panel.bubbles?.find(b => b.quoteId === partId);
       const stagger = sized.length > 1 ? (partIndex % 2 === 0 ? -1 : 1) * width * 0.025 : 0;
       const halfX = s.w / 2 / width;
-      const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, (anchorX + stagger) / width)) * width;
-      const cy = top + s.h / 2;
+      const rawX = manual ? manual.x : (anchorX + stagger) / width;
+      const rawY = manual ? manual.y : (top + s.h / 2) / height;
+      const cx = Math.min(1 - halfX - 0.01, Math.max(halfX + 0.01, rawX)) * width;
+      const cy = Math.min(1 - s.h / 2 / height - 0.01, Math.max(s.h / 2 / height + 0.01, rawY)) * height;
       boxes.push({
-        quoteId: id, id: `${id}#${partIndex}`, speaker: quote?.speaker ?? "",
+        quoteId: id, id: partId, speaker: quote?.speaker ?? "",
         lines: s.lines, fontSize: s.fontSize, lineHeight: s.lineHeight,
         cx, cy, w: s.w, h: s.h, tail: -1, shape: s.shape,
-        anchorCx: anchorX, anchorCy: anchorY,
       });
       top += s.h + gap;
     });

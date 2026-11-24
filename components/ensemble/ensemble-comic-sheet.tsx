@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import localFont from "next/font/local";
-import { Check, Loader2, RotateCcw } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import {
@@ -74,14 +74,14 @@ function Bubbles({
   onOpen: () => void;
 }) {
   const { ref, size } = useFrameSize();
-  const drag = useRef<{ quoteId: string; startX: number; startY: number; cx: number; cy: number; moved: boolean } | null>(null);
-  const [offset, setOffset] = useState<{ quoteId: string; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ id: string; startX: number; startY: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const [offset, setOffset] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const boxes = size.w > 0 && size.h > 0 ? layoutComicBubbles(panel, quotes, size.w, size.h) : [];
 
-  const handleDown = (event: React.PointerEvent<HTMLDivElement>, quoteId: string, cx: number, cy: number) => {
+  const handleDown = (event: React.PointerEvent<HTMLDivElement>, id: string, cx: number, cy: number) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { quoteId, startX: event.clientX, startY: event.clientY, cx, cy, moved: false };
+    drag.current = { id, startX: event.clientX, startY: event.clientY, cx, cy, moved: false };
   };
   const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const current = drag.current;
@@ -90,7 +90,7 @@ function Bubbles({
     const dy = event.clientY - current.startY;
     if (!current.moved && Math.hypot(dx, dy) < 5) return;
     current.moved = true;
-    setOffset({ quoteId: current.quoteId, dx, dy });
+    setOffset({ id: current.id, dx, dy });
   };
   const handleUp = (event: React.PointerEvent<HTMLDivElement>) => {
     const current = drag.current;
@@ -99,7 +99,7 @@ function Bubbles({
     if (!current) return;
     if (!current.moved) return;
     onMove(
-      current.quoteId,
+      current.id,
       Math.min(0.97, Math.max(0.03, (current.cx + event.clientX - current.startX) / size.w)),
       Math.min(0.97, Math.max(0.03, (current.cy + event.clientY - current.startY) / size.h)),
     );
@@ -109,7 +109,7 @@ function Bubbles({
     <div ref={ref} className="relative" onClick={onOpen}>
       <img src={url} alt="" className="block w-full h-auto" />
       {boxes.map(box => {
-        const shift = offset && offset.quoteId === box.quoteId ? offset : null;
+        const shift = offset && offset.id === box.id ? offset : null;
         const left = box.cx - box.w / 2 + (shift?.dx ?? 0);
         const top = box.cy - box.h / 2 + (shift?.dy ?? 0);
         return (
@@ -117,7 +117,7 @@ function Bubbles({
             key={box.id}
             className="absolute touch-none select-none"
             style={{ left, top, width: box.w, height: box.h }}
-            onPointerDown={event => handleDown(event, box.quoteId, box.anchorCx, box.anchorCy)}
+            onPointerDown={event => handleDown(event, box.id, box.cx, box.cy)}
             onPointerMove={handleMove}
             onPointerUp={handleUp}
             onPointerCancel={handleUp}
@@ -159,7 +159,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<number | null>(null);
   const [imageOptions, setImageOptions] = useState(loadComicImageOptions);
   const [exporting, setExporting] = useState(false);
   const running = useRef(false);
@@ -327,7 +327,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
                     panel={p}
                     quotes={book.quotes}
                     url={p.url}
-                    onOpen={() => setPreview(p.url!)}
+                    onOpen={() => setPreview(i)}
                     onMove={(quoteId, x, y) => patchPanel(i, { bubbles: moveComicBubble(p, quoteId, x, y) })}
                   />
                 ) : (
@@ -339,19 +339,13 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
                       const q = book.quotes.find(v => v.id === id);
                       return q ? <div key={id} className="text-[11px] text-black/45"><span className="text-black/25 mr-1">{q.speaker}</span>{q.text}</div> : null;
                     })}
-                    <div className="text-[10px] text-black/25">出图后气泡会叠在画面里，可拖动位置</div>
                   </div>
                 )}
                 {p.error && <div className="px-3 pb-2 text-[11px] text-[#c0392b] leading-relaxed">{p.error}</div>}
-                {(p.url || p.error) && (
+                {!p.url && p.error && (
                   <div className="flex items-center justify-center gap-2 px-3 pb-2.5">
-                    {p.url && p.bubbles && (
-                      <button type="button" onClick={() => patchPanel(i, { bubbles: undefined })} className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-black/[0.05] text-[11px] text-black/55 active:scale-[0.97]">
-                        <RotateCcw size={11} />复位气泡
-                      </button>
-                    )}
-                    <button type="button" disabled={busy} onClick={() => { if (!p.url || window.confirm("重新生成这一格会再次调用生图 API，继续？")) void draw([i]); }} className="px-3 py-1.5 rounded-full bg-black/[0.05] text-[11px] text-black/55 active:scale-[0.97]">
-                      {p.url ? "重画这一格" : "重试这一格"}
+                    <button type="button" disabled={busy} onClick={() => void draw([i])} className="px-3 py-1.5 rounded-full bg-black/[0.05] text-[11px] text-black/55 active:scale-[0.97]">
+                      重试这一格
                     </button>
                   </div>
                 )}
@@ -375,16 +369,29 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
         </>
       )}
 
-      {preview && typeof document !== "undefined" && createPortal(
+      {preview !== null && book && book.panels[preview]?.url && typeof document !== "undefined" && createPortal(
         // 用 portal 挂到 body，避免被弹窗的 transform/overflow 裁掉或半透明叠色。
-        // 按钮放在图片下方，和分镜配图一致。
+        // 按钮放在图片下方，和分镜配图一致；点图片外面任意处关闭（不再放关闭按钮）。
         <div className="fixed inset-0 z-[200] flex flex-col" style={{ backgroundColor: "#000" }} onClick={() => setPreview(null)}>
           <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center px-3" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)" }}>
-            <img src={preview} alt="漫画大图" className="max-w-full max-h-full w-auto h-auto rounded-[10px]" onClick={e => e.stopPropagation()} />
+            <img src={book.panels[preview].url} alt="漫画大图" className="max-w-full max-h-full w-auto h-auto rounded-[10px]" onClick={e => e.stopPropagation()} />
           </div>
           <div className="shrink-0 flex items-center justify-center gap-3 px-4 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)" }}>
-            <a href={preview} download="comic.png" onClick={e => e.stopPropagation()} className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white">保存图片</a>
-            <button type="button" onClick={() => setPreview(null)} className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white">关闭</button>
+            <a href={book.panels[preview].url} download={`${book.title}-${preview + 1}.png`} onClick={e => e.stopPropagation()} className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white">保存图片</a>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={e => {
+                e.stopPropagation();
+                if (!window.confirm("重新生成这一格会再次调用生图 API，继续？")) return;
+                const index = preview;
+                setPreview(null);
+                void draw([index]);
+              }}
+              className="px-6 py-2.5 rounded-full bg-white/[0.14] text-[13px] text-white disabled:opacity-40"
+            >
+              重画这一格
+            </button>
           </div>
         </div>,
         document.body,
