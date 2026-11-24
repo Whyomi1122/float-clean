@@ -5,13 +5,13 @@
 //
 // 纯内容组件：由 ensemble-app.tsx 挂在 MiniSheet 外壳里；数据挂 script.chapters。
 // 铁律：只影响「回看」——不碰归档 / AI 上下文 / 杀青流程；删除章不删原文。
-// 页内三层：目录（章列表 + 未分章桶）→ 阅读（章内原文，按剧情室样式）
-//          → 新建章（选起点幕）/ AI 建议预览。
+// 页内两层：目录（章列表 + 未分章桶）→ 阅读（章内原文）。
+// 建章只走「✦ 让 AI 建议划分」（2026-11-24 用户定：手动建章入口取消，AI 划得够好，
+// 目录只是回看工具；手动兜底留给改名 / 删除）。
 
 import { useMemo, useState } from "react";
 import {
   buildChapterViews,
-  createChapterObj,
   listWrappedTurns,
   suggestChapterDivision,
   withChapters,
@@ -23,7 +23,6 @@ import type { ApiConfig } from "@/lib/settings-types";
 type Mode =
   | { kind: "index" }
   | { kind: "read"; viewIdx: number }
-  | { kind: "pick" }
   | { kind: "suggest" };
 
 const CH_INPUT =
@@ -110,13 +109,10 @@ export function EnsembleChapterSheet({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
-  const [pickTitle, setPickTitle] = useState("");
-  const [pickTurnId, setPickTurnId] = useState<string | null>(null);
 
   const views = useMemo<ChapterView[]>(() => buildChapterViews(script), [script]);
   const wrapped = useMemo<EnsembleTurn[]>(() => listWrappedTurns(script), [script]);
   const chapters = script.chapters ?? [];
-  const usedStarts = useMemo(() => new Set(chapters.map((c) => c.fromTurnId)), [script]);
 
   function commit(next: EnsembleChapter[], msg = "已保存") {
     onScriptUpdated?.(withChapters(script, next));
@@ -158,12 +154,6 @@ export function EnsembleChapterSheet({
     setConfirmDelId(null);
   }
 
-  function doCreate() {
-    if (!pickTurnId) return;
-    commit([...chapters, createChapterObj(pickTitle, pickTurnId)], "新章已建");
-    setMode({ kind: "index" });
-  }
-
   function applySuggestion() {
     if (!suggestion || suggestion.length === 0) return;
     commit(suggestion, "已应用 AI 划分");
@@ -182,17 +172,6 @@ export function EnsembleChapterSheet({
             className="flex-1 rounded-full bg-[#111] px-3 py-2.5 text-[12px] font-medium text-white disabled:opacity-40"
           >
             {busy ? "正在划分…" : "✦ 让 AI 建议划分"}
-          </button>
-          <button
-            onClick={() => {
-              setPickTurnId(null);
-              setPickTitle("");
-              setError(null);
-              setMode({ kind: "pick" });
-            }}
-            className="flex-1 rounded-full bg-black/[0.05] px-3 py-2.5 text-[12px] font-medium text-[#111]"
-          >
-            ＋ 新建一章
           </button>
         </div>
         {error ? (
@@ -319,62 +298,6 @@ export function EnsembleChapterSheet({
           {v.turns.map((t) => (
             <TurnBlock key={t.id} t={t} />
           ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── 新建章（选起点幕） ──
-  if (mode.kind === "pick") {
-    return (
-      <div className="pb-2">
-        <SubHeader
-          title="新建一章"
-          sub={`共 ${wrapped.length} 幕`}
-          onBack={() => setMode({ kind: "index" })}
-        />
-        <div className="mx-1 rounded-[16px] bg-white p-3.5">
-          <div className="text-[11px] leading-relaxed text-black/45">
-            在下方点选一幕作为新章的起点：从这一幕起（含），到下一章之前，都是新章的内容。
-          </div>
-          <input
-            className={`${CH_INPUT} mt-2`}
-            placeholder="章名，如「第一章 · 别庄的海」"
-            value={pickTitle}
-            onChange={(e) => setPickTitle(e.target.value)}
-          />
-          <button
-            onClick={doCreate}
-            disabled={!pickTurnId}
-            className="mt-2 w-full rounded-full bg-[#111] px-3 py-2.5 text-[12px] font-medium text-white disabled:opacity-30"
-          >
-            {pickTurnId ? "创建章节" : "先在下方选择起点幕"}
-          </button>
-        </div>
-        <div className="mt-2 space-y-1 px-1">
-          {wrapped.map((t, i) => {
-            const used = usedStarts.has(t.id);
-            const picked = pickTurnId === t.id;
-            return (
-              <button
-                key={t.id}
-                disabled={used}
-                onClick={() => setPickTurnId(t.id)}
-                className={`flex w-full items-baseline gap-2 rounded-[10px] px-2.5 py-1.5 text-left text-[11px] ${
-                  picked
-                    ? "bg-[#111] text-white"
-                    : used
-                      ? "cursor-not-allowed text-black/25"
-                      : "bg-white text-[#111]"
-                }`}
-              >
-                <span className="shrink-0 tabular-nums opacity-60">#{i}</span>
-                <span className="min-w-0 flex-1 truncate">{turnPreview(t)}</span>
-                {picked ? <span className="shrink-0 text-[10px] opacity-80">← 起点</span> : null}
-                {used ? <span className="shrink-0 opacity-70">已是章起点</span> : null}
-              </button>
-            );
-          })}
         </div>
       </div>
     );

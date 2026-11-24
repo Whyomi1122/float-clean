@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.24-86",
+    version: "2026.11.24-88",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.24-88",
+            title: "剧情记录：目录精简",
+            items: [
+                "取消「新建一章」手动入口——章节只用 AI 划分，改名 / 删除照常",
+            ],
+        },
         {
             version: "2026.11.24-86",
             title: "剧情记录：入口样式修正 + 新建章清单显示实际内容",
