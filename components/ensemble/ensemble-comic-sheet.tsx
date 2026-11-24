@@ -321,7 +321,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
 
           <div className={book.paperMode ? "space-y-2.5" : "space-y-0"}>
             {book.panels.map((p, i) => (
-              <article key={i} className={`bg-white overflow-hidden ${book.paperMode ? "rounded-[12px] border border-black/70" : i === 0 ? "rounded-t-[16px]" : i === book.panels.length - 1 ? "rounded-b-[16px]" : ""}`}>
+              <article key={i} className={`bg-white overflow-hidden ${book.paperMode ? "rounded-[12px] border border-black/70" : `${i === 0 ? "rounded-t-[16px]" : ""} ${i === book.panels.length - 1 ? "rounded-b-[16px]" : "border-b border-black/[0.16]"}`}`}>
                 {p.url ? (
                   <Bubbles
                     panel={p}

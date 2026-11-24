@@ -29,11 +29,16 @@ export async function exportComic(book: ComicBook, family = COMIC_FONT_FAMILY): 
   const font = (size: number) => `${COMIC_FONT_WEIGHT} ${size}px ${family}`;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, canvas.height);
   let y = 0;
+  let blockIndex = 0;
   for (const block of blocks) {
     ctx.drawImage(block.image, 0, y, width, block.height);
     if (book.paperMode) {
       ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = 4;
       ctx.strokeRect(2, y + 2, width - 4, block.height - 4);
+    } else if (blockIndex < blocks.length - 1) {
+      // 格与格之间压一条极细分隔线（预览是 1px 发丝线，导出按比例 2px）
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.fillRect(0, y + block.height - 2, width, 2);
     }
     for (const box of block.bubbles) {
       ctx.font = font(box.fontSize);
@@ -68,6 +73,7 @@ export async function exportComic(book: ComicBook, family = COMIC_FONT_FAMILY): 
       }
     }
     y += block.height + gap;
+    blockIndex += 1;
   }
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('长图导出失败')), 'image/png'));
 }
