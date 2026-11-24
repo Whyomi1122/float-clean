@@ -57,36 +57,34 @@ function SubHeader({ title, sub, onBack }: { title: string; sub?: string; onBack
   );
 }
 
+/** 系统注入幕（续写指令、剧情带入说明）——小说模式不显示，它们不是剧情正文。 */
+function isSystemLike(t: EnsembleTurn): boolean {
+  const text = (t.content ?? "").trim();
+  return /^反80续写指令/.test(text) || /^（?本次由剧情带入/.test(text) || /^【系统/.test(text);
+}
+
 function TurnBlock({ t }: { t: EnsembleTurn }) {
+  // 小说模式（2026-11-24 用户定方案 A）：
+  // 旁白当正文（正常字色、首行缩进两字）；台词名字加粗前缀、独立成段不缩进；
+  // 逐轮时间戳去掉；分镜图保留为插图。
   if (t.senderType === "narration") {
     return (
-      <div className="whitespace-pre-wrap px-1 py-1.5 text-[13px] italic leading-relaxed text-black/40">
+      <p className="my-2 text-[15px] leading-[1.9] whitespace-pre-wrap text-[#2b2b2b] [text-indent:2em]">
         {t.content}
-      </div>
+      </p>
     );
   }
-  const initial = (t.senderName ?? "?").trim().slice(0, 1) || "?";
   return (
-    <div className="flex gap-2.5 py-1.5">
-      {t.senderAvatar ? (
+    <div className="my-2">
+      <p className="text-[15px] leading-[1.9] whitespace-pre-wrap text-[#2b2b2b]">
+        <span className="font-semibold text-[#111]">{t.senderName}</span>
+        {"\u3000"}
+        {t.content}
+      </p>
+      {t.storyboardUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={t.senderAvatar} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
-      ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-[12px] font-semibold text-black/60">
-          {initial}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold text-black/55">{t.senderName}</div>
-        <div className="mt-0.5 whitespace-pre-wrap text-[14px] leading-relaxed text-[#111]">
-          {t.content}
-        </div>
-        {t.storyboardUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={t.storyboardUrl} alt="" className="mt-2 max-h-56 w-full rounded-[12px] object-cover" />
-        ) : null}
-        <div className="mt-1 text-[9px] text-black/25">{t.timestamp}</div>
-      </div>
+        <img src={t.storyboardUrl} alt="" className="mt-2.5 w-full rounded-[12px] object-cover" />
+      ) : null}
     </div>
   );
 }
@@ -285,24 +283,45 @@ export function EnsembleChapterSheet({
     );
   }
 
-  // ── 阅读页 ──
+  // ── 阅读页 · 小说模式（2026-11-24 方案 A） ──
   if (mode.kind === "read") {
     const v = views[mode.viewIdx];
     if (!v) {
       // 章被删 / AI 重划后下标失效：交给父组件回目录（commit 后已经会重置，这里只兜底）
       return null;
     }
+    const visible = v.turns.filter((t) => !isSystemLike(t));
     return (
       <div className="pb-2">
-        <SubHeader
-          title={v.title}
-          sub={`${v.turns.length} 幕 · ${v.charCount} 字`}
-          onBack={() => onModeChange({ kind: "index" })}
-        />
-        <div className="rounded-[16px] bg-white px-3 py-2">
-          {v.turns.map((t) => (
-            <TurnBlock key={t.id} t={t} />
-          ))}
+        <div className="flex items-center justify-between px-1 pb-2.5 pt-1">
+          <button
+            onClick={() => onModeChange({ kind: "index" })}
+            className="text-[12px] text-black/45 hover:text-black/75"
+          >
+            ← 返回目录
+          </button>
+          <div className="text-[10px] text-black/35">
+            {v.turns.length} 幕 · {v.charCount} 字
+          </div>
+        </div>
+        {/* 纸色正文卡：章头居中（章名 + 时间范围 + 发丝线），正文小说排版 */}
+        <div className="rounded-[16px] bg-[#FBF9F6] px-5 pb-7 pt-6">
+          <div className="text-center">
+            <div className="text-[16px] font-semibold tracking-tight text-[#111]">{v.title}</div>
+            <div className="mt-1.5 text-[10px] tracking-wide text-black/35">
+              {v.timeLabel} · {v.turns.length} 幕
+            </div>
+            <div className="mx-auto mt-4 h-px w-9 bg-black/15" />
+          </div>
+          <div className="mt-4">
+            {visible.length === 0 ? (
+              <div className="py-6 text-center text-[12px] text-black/30">
+                这一章里没有可显示的剧情正文。
+              </div>
+            ) : (
+              visible.map((t) => <TurnBlock key={t.id} t={t} />)
+            )}
+          </div>
         </div>
       </div>
     );
