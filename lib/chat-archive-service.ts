@@ -292,7 +292,7 @@ export function buildChatTranscript(params: {
         if (!text) continue;
         // 每行带「日期 + 时刻」：模型必须靠这个判断跨天与「隔了多久才回」，不许自己猜
         // 2026-11-13：日期与时刻一律换算成剧情时间，否则正文段落写 11-13、标题写 2024-08-11，两边打架
-        const when = m.createdAt ? toStoryDate(new Date(m.createdAt)) : null;
+        const when = storyMomentOf(m);
         const dayKey = when ? dayKeyOf(when) : "";
         if (when && dayKey !== lastDayKey) {
             lines.push(`—— ${when.getMonth() + 1}月${when.getDate()}日 ${WEEKDAY_CN[when.getDay()]} ——`);
@@ -302,6 +302,16 @@ export function buildChatTranscript(params: {
         lines.push(stamp ? `${stamp} ${role}：${text}` : `${role}：${text}`);
     }
     return lines.join("\n").trim();
+}
+
+/**
+ * 消息在剧情里的时刻：新消息自带 storyAt（发送那一刻的剧情时间），
+ * 老消息没有这个字段，仍按「创建时间 + 偏移」换算。
+ * 2026-11-24 剧情时间冻结后，两者会分道扬镳，所以必须优先读 storyAt。
+ */
+function storyMomentOf(m: { createdAt?: string; storyAt?: number }): Date | null {
+    if (typeof m.storyAt === "number" && Number.isFinite(m.storyAt)) return new Date(m.storyAt);
+    return m.createdAt ? toStoryDate(new Date(m.createdAt)) : null;
 }
 
 /** 本轮系统事实（代码算，不让模型猜）：本轮时间范围 + 一起听的歌单。 */
@@ -315,8 +325,10 @@ export async function collectSessionFacts(params: { characterId: string; charact
             .filter(m => !since || (m.createdAt || "") > since);
         const times = normal.map(m => m.createdAt).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
         if (times.length > 0) {
-            const first = toStoryDate(new Date(times[0]));
-            const last = toStoryDate(new Date(times[times.length - 1]));
+            const firstMsg = normal.find(m => m.createdAt === times[0]);
+            const lastMsg = normal.find(m => m.createdAt === times[times.length - 1]);
+            const first = (firstMsg && storyMomentOf(firstMsg)) || toStoryDate(new Date(times[0]));
+            const last = (lastMsg && storyMomentOf(lastMsg)) || toStoryDate(new Date(times[times.length - 1]));
             facts.push(
                 `· 本轮聊天时间：${first.getMonth() + 1}-${pad2(first.getDate())} ${WEEKDAY_CN[first.getDay()]} ` +
                 `${fmtClock(first)} 至 ${last.getMonth() + 1}-${pad2(last.getDate())} ${WEEKDAY_CN[last.getDay()]} ${fmtClock(last)}` +
@@ -402,7 +414,8 @@ async function buildLastMsgAt(params: { characterId: string; sessionId?: string;
         const times = normal.map(m => m.createdAt).filter(Boolean)
             .sort((a, b) => String(a).localeCompare(String(b)));
         if (times.length === 0) return undefined;
-        return toStoryDate(new Date(times[times.length - 1]));
+        const lastMsg = normal.find(m => m.createdAt === times[times.length - 1]);
+        return (lastMsg && storyMomentOf(lastMsg)) || toStoryDate(new Date(times[times.length - 1]));
     } catch {
         return undefined;
     }

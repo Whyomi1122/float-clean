@@ -13,7 +13,7 @@ import { UserProfilePanel } from "./user-profile-panel";
 import { PageShell } from "@/components/ui/page-shell";
 import { GroupCreateModal } from "./group-create-modal";
 import { Toggle } from "@/components/ui/form";
-import { formatChatUiTime } from "@/lib/chat-time";
+import { formatChatUiTime, formatStoryTime } from "@/lib/chat-time";
 import { getChatOfflineTurnPreview, getLastChatOfflineTurn } from "@/lib/chat-offline-storage";
 import {
     dismissMergeSignatures,
@@ -758,6 +758,8 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
     const onlinePreview = lastVisibleMessage ? (getChatMessagePreview(lastVisibleMessage) || lastVisibleMessage.content) : "";
     const preview = offlineIsNewer ? getChatOfflineTurnPreview(lastOfflineTurn) : onlinePreview;
     const displayTime = pickLaterTime(lastVisibleMessage?.createdAt, lastOfflineTurn?.createdAt) || session.updatedAt;
+    // 剧情时间冻结后，消息自带的剧情时间才是「它发生的时刻」
+    const displayStoryAt = lastVisibleMessage?.storyAt;
 
     // Group chat: build grid of participant avatars (2×2)
     const isGroup = session.isGroup;
@@ -808,7 +810,7 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
                         {isGroup ? (session.groupName || "群聊") : (session.alias || character?.name || `User_${session.contactId.slice(-4)}`)}
                     </span>
                     <span className="ts-12 text-[var(--c-icon)] font-medium">
-                        {formatChatUiTime(displayTime)}
+                        {typeof displayStoryAt === "number" ? formatStoryTime(displayStoryAt) : formatChatUiTime(displayTime)}
                     </span>
                 </div>
                 <div className="flex justify-between items-center gap-2">

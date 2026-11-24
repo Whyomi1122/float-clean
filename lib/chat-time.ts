@@ -13,6 +13,27 @@ function padTwo(n: number): string {
 export function formatChatUiTime(dateStr: string, scope?: StoryScope): string {
     // 剧情时钟（2026-11-12）：界面时间一律按剧情时间显示；没设置过偏移时与以前完全一致
     const date = toStoryDate(new Date(dateStr), scope);
+    return formatRelativeStoryText(date, scope);
+}
+
+/**
+ * 直接把「已经是剧情时间的时间戳」格式化成文案，不再做任何换算。
+ * 2026-11-24 起消息会自己存 storyAt（发送当时的剧情时间），显示走这里。
+ */
+export function formatStoryTime(ms: number, scope?: StoryScope): string {
+    if (!Number.isFinite(ms)) return "";
+    return formatRelativeStoryText(new Date(ms), scope);
+}
+
+/** 消息时间文案：优先用消息自带的剧情时间戳，老消息回退到「创建时间 + 偏移」 */
+export function formatChatMessageTime(message: { createdAt: string; storyAt?: number }, scope?: StoryScope): string {
+    if (typeof message.storyAt === "number" && Number.isFinite(message.storyAt)) {
+        return formatStoryTime(message.storyAt, scope);
+    }
+    return formatChatUiTime(message.createdAt, scope);
+}
+
+function formatRelativeStoryText(date: Date, scope?: StoryScope): string {
     if (Number.isNaN(date.getTime())) return "";
 
     const now = getStoryNow(scope);

@@ -131,7 +131,8 @@ import { buildPlotText } from "@/lib/ensemble-mood-music";
 import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sheet";
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { hydrateKvDb } from "@/lib/kv-db";
-import { advanceStoryClock } from "@/lib/story-clock";
+import { advanceStoryClock, setStoryNow } from "@/lib/story-clock";
+import { extractEnsembleArchiveTime } from "@/lib/archive-context-pack";
 import { ensureSettingsStorageHydrated } from "@/lib/settings-storage";
 import {
   loadChatAppSettings,
@@ -3305,7 +3306,18 @@ ${lastSpeakerNote}
       setCurrentScript(updated);
       saveOrUpdateEnsembleScript(updated);
       setScripts(loadEnsembleScripts());
-      refreshArchivePanelFor(updated);
+      refreshArchivePanelFor(updated)
+
+      // 剧情时间（2026-11-24）：杀青后把时钟对到归档头「至 …」那一刻 ——
+      // 这段剧情已经演完了，时钟自然走到那里；没解析到就保持不动。
+      const archiveMoment = extractEnsembleArchiveTime(content);
+      if (archiveMoment) {
+        const [datePart, timePart] = archiveMoment.split(" ");
+        const [y, mo, d] = datePart.split("-").map(Number);
+        const [hh, mi] = timePart.split(":").map(Number);
+        const target = new Date(y, mo - 1, d, hh, mi);
+        if (!Number.isNaN(target.getTime())) setStoryNow(target, s.id);
+      };
 
       // C-1 桥接：把这次杀青同步进参与角色的记忆库（只进归档层，不污染时间线）。
       // 失败不阻断杀青本身，只提示一下。

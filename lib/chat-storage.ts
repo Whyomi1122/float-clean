@@ -12,6 +12,7 @@ import { loadCharacters } from "./character-storage";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { emitChatPluginEvent, runChatPluginTransformSync } from "./chat-plugin-hooks";
 import { parseAIResponse } from "./rich-message-parser";
+import { getStoryNow } from "./story-clock";
 import type { ChatEmotion } from "./emotion";
 import { extractTextToolDirectiveText } from "./text-tool-protocol";
 
@@ -96,6 +97,12 @@ export type ChatMessage = {
     content: string;
     status: ChatMessageStatus;
     createdAt: string; // ISO date
+    /**
+     * 2026-11-24：这条消息发出时的「剧情时间」（毫秒）。
+     * 剧情时间冻结后，真实时间不再等于剧情时间，所以发送时把它记下来，
+     * 显示时优先用它；老消息没有这个字段，仍按「创建时间 + 偏移」换算。
+     */
+    storyAt?: number;
     order?: number; // Stable per-session display order
     responseBatchId?: string; // Assistant raw-response batch id
     rawResponseText?: string; // Assistant raw response before parsing/splitting
@@ -1175,6 +1182,9 @@ export function pushChatMessage(msg: Omit<ChatMessage, "id" | "createdAt" | "sta
         ...msg,
         id: createMessageId(),
         createdAt: msg.createdAt || new Date().toISOString(),
+        // 剧情时间冻结后现实时间不再等于剧情时间：落库时把「当时剧情时间」记下来，
+        // 显示时优先用它（老消息没这个字段，仍按创建时间 + 偏移换算）。
+        storyAt: typeof msg.storyAt === "number" && Number.isFinite(msg.storyAt) ? msg.storyAt : getStoryNow().getTime(),
         order: getNextMessageOrder(msg.sessionId),
         status: msg.status || "sent"
     };

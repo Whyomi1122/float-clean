@@ -155,7 +155,7 @@ function extractAnchorBlock(content: string): string | null {
  * +【时间戳】+【关键锚点】），所以 extractAnchorBlock 对群像归档一律读不到。
  * 这里退一步：把头部那行「归档 · 至 …」的时刻抠出来，当这条线的时间锚点。
  */
-function extractEnsembleArchiveTime(content: string): string | null {
+export function extractEnsembleArchiveTime(content: string): string | null {
     const text = String(content || "");
     const pattern = /(\d{4})\s*[.\-/年]\s*(\d{1,2})\s*[.\-/月]\s*(\d{1,2})\s*日?[^\d]{0,12}?(\d{1,2})\s*[:：]\s*(\d{2})/;
     const headerLine = text.split("\n").find(line => /归档\s*[·・\-—]?\s*至/.test(line));

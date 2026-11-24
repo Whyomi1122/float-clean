@@ -64,7 +64,7 @@ import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { findPlayableMatch, getNeteaseLyrics, getNeteaseSongDetail } from "@/lib/music-service";
 import { approveMemoryWriteRequest } from "@/lib/tool-executor";
 import type { MemoryWriteRequest, ToolResult } from "@/lib/tool-executor";
-import { formatChatUiTime } from "@/lib/chat-time";
+import { formatChatMessageTime, formatChatUiTime } from "@/lib/chat-time";
 import { setActiveStoryScope } from "@/lib/story-clock";
 import { getStoryScopeForCharacter } from "@/lib/story-scope";
 import { parseActionTags } from "@/lib/action-parser";
@@ -6022,7 +6022,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                             {showTime && (
                                 <div className="flex justify-center w-full">
                                     <span className="chat-sys-msg py-[2px] px-2 rounded select-none">
-                                        {formatChatUiTime(msg.createdAt)}
+                                        {formatChatMessageTime(msg)}
                                     </span>
                                 </div>
                             )}
