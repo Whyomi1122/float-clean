@@ -132,6 +132,7 @@ import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sh
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { hydrateKvDb } from "@/lib/kv-db";
 import { advanceStoryClock, setStoryNow } from "@/lib/story-clock";
+import { buildEnsembleStyleBlock } from "@/lib/ensemble-style";
 import { extractEnsembleArchiveTime } from "@/lib/archive-context-pack";
 import { ensureSettingsStorageHydrated } from "@/lib/settings-storage";
 import {
@@ -2583,6 +2584,10 @@ ${script.openingMessage.trim()}
           )
         : "";
 
+      // 群像文风（内置常驻，2026-11-24）：单人剧本挂 A+B1，≥2 人再追加 B2 多人戏。
+      // 自动按阵容人数决定，不给用户开关；用户自己的世界书/预设永远优先。
+      const styleBlock = buildEnsembleStyleBlock(script.cast.length);
+
       const systemPrompt = `你是一位擅长群像叙事的小说作者，正在续写互动剧本《${script.title}》。
 
 🚨 输出格式铁律（违反则整幕作废，必须重写）：
@@ -2593,6 +2598,7 @@ ${script.openingMessage.trim()}
 ═══════════ 参演阵容（全员名单）═══════════
 ${castDesc}${userDesc}${povBlock}
 ${sceneBlock}${openingBlock}${memoryBlock}${crossMemoryBlock}${archiveBlock}${worldBookBlock}${timeBlock}${outputLenRule}
+${styleBlock}
 ═══════════ 归档事实优先级（铁律）═══════════
 上面的「剧情归档」是既定事实，优先级高于你本轮的任何发挥：
 1. 归档「知情范围」里写明某角色**不知**的事项，该角色不得在言行、心理中体现知晓（不知情要演成不知情）；
