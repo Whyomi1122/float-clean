@@ -19,8 +19,14 @@ export const LEGACY_STORAGE_KEY = "ai_phone_story_clock_v1";
 const EVENT = "float:story-clock";
 
 export interface StoryClock {
-    /** 剧情时间 = 真实时间 + offsetMs（毫秒，可为负=剧情在过去） */
+    /** 历史换算偏移：真实时间戳 + offsetMs = 剧情时间戳（毫秒，可为负=剧情在过去） */
     offsetMs: number;
+    /**
+     * 2026-11-24 起：剧情时间的「指针」。
+     * 有值 = 已冻结，getStoryNow() 直接返回它，不再随现实流动；
+     * 没值 = 老行为（现实 + offsetMs），只有 offset=0 的线会停在这种状态。
+     */
+    frozenAt?: number;
     updatedAt: string;
 }
 
@@ -37,7 +43,11 @@ const EMPTY_STATE: StoryClockState = { default: EMPTY_CLOCK, byScript: {} };
 
 function normalizeClock(value: Partial<StoryClock> | null | undefined): StoryClock {
     const offsetMs = typeof value?.offsetMs === "number" && Number.isFinite(value.offsetMs) ? value.offsetMs : 0;
-    return { offsetMs, updatedAt: String(value?.updatedAt || "") };
+    const rawFrozen = (value as Partial<StoryClock> | null | undefined)?.frozenAt;
+    const frozenAt = typeof rawFrozen === "number" && Number.isFinite(rawFrozen) ? rawFrozen : undefined;
+    return frozenAt === undefined
+        ? { offsetMs, updatedAt: String(value?.updatedAt || "") }
+        : { offsetMs, frozenAt, updatedAt: String(value?.updatedAt || "") };
 }
 
 function readState(): StoryClockState {
@@ -55,20 +65,47 @@ function readState(): StoryClockState {
                 Object.entries(rawByScript).forEach(([key, value]) => {
                     if (!key) return;
                     const clock = normalizeClock(value as StoryClock);
-                    if (clock.offsetMs !== 0) byScript[key] = clock;
+                    if (clock.offsetMs !== 0 || clock.frozenAt !== undefined) byScript[key] = clock;
                 });
             }
-            return { default: def, byScript };
+            return migrateFreeze({ default: def, byScript });
         }
         const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
         if (legacyRaw) {
             const parsed = JSON.parse(legacyRaw) as Partial<StoryClock>;
-            return { default: normalizeClock(parsed), byScript: {} };
+            return migrateFreeze({ default: normalizeClock(parsed), byScript: {} });
         }
     } catch {
         /* ignore */
     }
     return EMPTY_STATE;
+}
+
+/**
+ * 2026-11-24 一次性迁移：设过偏移的线，自动冻结在「用户此刻看到的那一刻」。
+ * 迁移后立刻落盘，所以刷新 / 隔夜都不会再自己往前走。
+ * offsetMs 原样保留，只用来换算老消息的日期。
+ */
+function migrateFreeze(state: StoryClockState): StoryClockState {
+    let changed = false;
+    const freeze = (clock: StoryClock): StoryClock => {
+        if (clock.frozenAt !== undefined || clock.offsetMs === 0) return clock;
+        changed = true;
+        return { ...clock, frozenAt: Date.now() + clock.offsetMs };
+    };
+    const def = freeze(state.default);
+    const byScript: Record<string, StoryClock> = {};
+    Object.entries(state.byScript).forEach(([key, clock]) => {
+        byScript[key] = freeze(clock);
+    });
+    if (!changed) return state;
+    const next: StoryClockState = { default: def, byScript };
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+        /* ignore */
+    }
+    return next;
 }
 
 // 读取很频繁（聊天列表每一行都会换算时间），缓存一份，写入时更新
@@ -131,14 +168,26 @@ export function getStoryOffset(scope?: StoryScope): number {
     return getStoryClock(scope).offsetMs;
 }
 
-/** 是否启用剧情时钟（offset 非 0） */
+/** 是否启用剧情时钟（设过偏移，或已被冻结） */
 export function isStoryClockActive(scope?: StoryScope): boolean {
-    return getStoryOffset(scope) !== 0;
+    const clock = getStoryClock(scope);
+    return clock.offsetMs !== 0 || clock.frozenAt !== undefined;
 }
 
-/** 当前剧情时间 */
+/** 这条时间线是否已冻结（冻结后指针不再随现实流动） */
+export function isStoryClockFrozen(scope?: StoryScope): boolean {
+    return getStoryClock(scope).frozenAt !== undefined;
+}
+
+/** 指针的绝对值：冻结了就返回冻结值，否则现实 + 偏移 */
+function resolveClockNow(clock: StoryClock): number {
+    if (typeof clock.frozenAt === "number" && Number.isFinite(clock.frozenAt)) return clock.frozenAt;
+    return Date.now() + clock.offsetMs;
+}
+
+/** 当前剧情时间（冻结后 = 停住的那一刻） */
 export function getStoryNow(scope?: StoryScope): Date {
-    return new Date(Date.now() + getStoryOffset(scope));
+    return new Date(resolveClockNow(getStoryClock(scope)));
 }
 
 /** 把任意真实时间戳（消息 createdAt 等）换算成剧情时间 */
@@ -154,11 +203,15 @@ export function toStoryDate(value: number | string | Date | undefined | null, sc
 }
 
 /** 列出所有已设置的时间线：第一项一定是默认线（scope = null） */
-export function listStoryClockScopes(): { scope: StoryScope; offsetMs: number }[] {
+export function listStoryClockScopes(): { scope: StoryScope; offsetMs: number; frozenAt?: number }[] {
     const state = getState();
+    const toRow = (scope: StoryScope, clock: StoryClock) =>
+        clock.frozenAt === undefined
+            ? { scope, offsetMs: clock.offsetMs }
+            : { scope, offsetMs: clock.offsetMs, frozenAt: clock.frozenAt };
     return [
-        { scope: null, offsetMs: state.default.offsetMs },
-        ...Object.keys(state.byScript).map(key => ({ scope: key, offsetMs: state.byScript[key].offsetMs })),
+        toRow(null, state.default),
+        ...Object.keys(state.byScript).map(key => toRow(key, state.byScript[key])),
     ];
 }
 
@@ -168,26 +221,66 @@ function emit() {
     if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(EVENT));
 }
 
-/** 直接设定某条时间线的偏移（毫秒），0 = 这条线回到现实时间 */
-export function setStoryOffset(offsetMs: number, scope?: StoryScope) {
-    if (typeof window === "undefined" || !Number.isFinite(offsetMs)) return;
+function writeClock(clock: Partial<StoryClock> & { offsetMs: number }, scope?: StoryScope) {
+    if (typeof window === "undefined") return;
     const state = getState();
     const key = resolveScope(scope);
-    const clock: StoryClock = { offsetMs, updatedAt: new Date().toISOString() };
+    const next: StoryClock = { ...clock, offsetMs: clock.offsetMs, updatedAt: new Date().toISOString() };
     if (!key) {
-        writeState({ default: clock, byScript: { ...state.byScript } });
+        writeState({ default: next, byScript: { ...state.byScript } });
         return;
     }
     const byScript = { ...state.byScript };
-    if (offsetMs === 0) delete byScript[key];
-    else byScript[key] = clock;
+    // offset=0 且没冻结 = 这条线就是现实时间，不留空壳记录
+    if (next.offsetMs === 0 && next.frozenAt === undefined) delete byScript[key];
+    else byScript[key] = next;
     writeState({ default: state.default, byScript });
 }
 
-/** 把某条时间线拨到「剧情里现在是 target」 */
+/**
+ * 直接设定某条时间线的偏移（毫秒），0 = 这条线回到现实时间。
+ * 设定后指针会冻结在「现实 + 新偏移」这一刻（2026-11-24 起剧情时间不随现实流动）。
+ */
+export function setStoryOffset(offsetMs: number, scope?: StoryScope) {
+    if (typeof window === "undefined" || !Number.isFinite(offsetMs)) return;
+    if (offsetMs === 0) {
+        writeClock({ offsetMs: 0 }, scope);
+        return;
+    }
+    writeClock({ offsetMs, frozenAt: Date.now() + offsetMs }, scope);
+}
+
+/** 把某条时间线拨到「剧情里现在是 target」并冻结在那 */
 export function setStoryNow(target: Date, scope?: StoryScope) {
     if (!(target instanceof Date) || Number.isNaN(target.getTime())) return;
     setStoryOffset(target.getTime() - Date.now(), scope);
+}
+
+/** 把指针定在它现在的位置（不改变时间，只是让它不再跟现实走） */
+export function freezeStoryClock(scope?: StoryScope) {
+    if (typeof window === "undefined") return;
+    const clock = getStoryClock(scope);
+    if (clock.frozenAt !== undefined) return;
+    writeClock({ offsetMs: clock.offsetMs, frozenAt: resolveClockNow(clock) }, scope);
+}
+
+/** 解除冻结：这条线恢复「现实 + 偏移」（offset=0 时就是现实时间） */
+export function unfreezeStoryClock(scope?: StoryScope) {
+    if (typeof window === "undefined") return;
+    const clock = getStoryClock(scope);
+    writeClock({ offsetMs: clock.offsetMs }, scope);
+}
+
+/**
+ * 剧情推进：把指针往前拨 ms（毫秒）。
+ * 只动指针、不动 offset —— 老消息的日期保持不变。
+ * 现实线（offset=0 且未冻结）不动，避免顺手把普通聊天冻住。
+ */
+export function advanceStoryClock(ms: number, scope?: StoryScope) {
+    if (typeof window === "undefined" || !Number.isFinite(ms) || ms === 0) return;
+    const clock = getStoryClock(scope);
+    if (clock.frozenAt === undefined && clock.offsetMs === 0) return;
+    writeClock({ ...clock, frozenAt: resolveClockNow(clock) + ms }, scope);
 }
 
 /** 清掉某条时间线（scope 省略/null = 默认线；传了剧本 id 只清那条剧本） */

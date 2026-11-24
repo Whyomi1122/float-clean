@@ -15,6 +15,7 @@ import {
     clearStoryClock,
     getStoryNow,
     getStoryOffset,
+    isStoryClockFrozen,
     listStoryClockScopes,
     parseAnchorStoryTime,
     setStoryNow,
@@ -136,6 +137,10 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
         void tick;
         return getStoryOffset(currentScope);
     }, [tick, currentScope]);
+    const frozen = useMemo(() => {
+        void tick;
+        return isStoryClockFrozen(currentScope);
+    }, [tick, currentScope]);
 
     useEffect(() => {
         setManualValue(toInputValue(getStoryNow(currentScope)));
@@ -191,7 +196,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                                 }}
                             >
                                 {option.label}
-                                <span className="ml-1.5 opacity-50">{offset ? "已偏移" : "现实"}</span>
+                                <span className="ml-1.5 opacity-50">{isStoryClockFrozen(option.scope ?? null) ? "已冻结" : offset ? "跟随现实" : "现实"}</span>
                             </button>
                         );
                     })}
@@ -219,12 +224,18 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                     <span className="ts-13 text-[var(--c-text)] opacity-70 tabular-nums">{formatDateTime(realNow)}</span>
                 </div>
                 <div className="prefs-row">
-                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">偏移</span>
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">状态</span>
+                    <span className="ts-13 font-semibold text-[var(--c-text-title)]">
+                        {frozen ? "已冻结 · 推进剧情才走" : "跟随现实时间"}
+                    </span>
+                </div>
+                <div className="prefs-row">
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">老消息日期换算</span>
                     <span className="ts-13 text-[var(--c-text)] opacity-70">{describeOffset(offsetMs)}</span>
                 </div>
                 <div className="pb-3">
                     <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
-                        普通聊天、一起听、归档、界面上的时间都按剧情时间走。历史消息的时间戳不会改，只换算显示。
+                        剧情时间是剧本里的钟：不玩就停住，玩到哪儿算哪儿；现实时间只在上面的「现实时间」那行给你看。老消息的日期不会变。
                     </p>
                 </div>
             </div>
@@ -272,7 +283,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 <span className="prefs-block-label">Manual Calibration</span>
                 <div className="flex flex-col gap-3 py-2">
                     <span className="ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
-                        告诉 App「这条时间线里现在是几点」，之后都从这里继续走。（{activeOption?.label || "通用（现实）时间线"}）
+                        告诉 App「这条时间线里现在是几点」。设好之后钟就停在这一刻，只有剧情推进才会往前走。（{activeOption?.label || "通用（现实）时间线"}）
                     </span>
                     <input
                         type="datetime-local"

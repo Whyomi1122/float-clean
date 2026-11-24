@@ -131,6 +131,7 @@ import { buildPlotText } from "@/lib/ensemble-mood-music";
 import EnsembleMoodMusicSheet from "@/components/ensemble/ensemble-mood-music-sheet";
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
 import { hydrateKvDb } from "@/lib/kv-db";
+import { advanceStoryClock } from "@/lib/story-clock";
 import { ensureSettingsStorageHydrated } from "@/lib/settings-storage";
 import {
   loadChatAppSettings,
@@ -2310,6 +2311,8 @@ export function EnsembleApp({
     if (isGenerating || script.cast.length === 0) return null;
     setIsGenerating(true);
     setIsComposing(true);
+    // 剧情时间：记录这一轮从什么时候开始，出完再按实际用时推进（不玩就不走）
+    const roundStartedAt = Date.now();
     if (!opts?.rerollTurnId) setApiError(null);
     try {
       const lastTurn = script.turns[script.turns.length - 1];
@@ -2930,6 +2933,11 @@ ${lastSpeakerNote}
           }
         })();
       }
+      // 剧情时间：玩了一轮才往前走。按这一轮的真实用时推进，单轮上限 20 分钟
+      // （挂着页面去吃饭不会一下跳几小时）；不玩就停在原地。
+      // 只动指针、不动偏移，老消息的日期不受影响。
+      const playedMs = Math.min(Date.now() - roundStartedAt, 20 * 60 * 1000);
+      if (playedMs > 20 * 1000) advanceStoryClock(playedMs, script.id);
       return replyContent;
     } catch (e) {
       console.error("AI turn generation failed:", e);
