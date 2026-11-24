@@ -2,7 +2,10 @@ import { COMIC_FONT_FAMILY, COMIC_FONT_WEIGHT, layoutComicBubbles, type ComicBoo
 
 /** 导出竖版长图：四格满版上下相接（或纸漫白缝），对白气泡与预览用同一套排版。 */
 export async function exportComic(book: ComicBook, family = COMIC_FONT_FAMILY): Promise<Blob> {
-  // `-82` 起气泡改用系统黑体（苹方等），不需要再等自定义字体下载；这里只等已排队的字体就位。
+  // 苹方是随包发的自定义字体：请求失败时 Safari 会抛 NetworkError（"A network error occurred."），
+  // 所以最多等 4 秒，拉不到就退回系统字体继续导，绝不让字体把整次导出顶死。
+  const ready = document.fonts.load(`${COMIC_FONT_WEIGHT} 30px ${family}`).then(() => undefined, () => undefined);
+  await Promise.race([ready, new Promise<void>(resolve => setTimeout(resolve, 4000))]);
   await document.fonts.ready.catch(() => undefined);
   const width = 1080;
   const canvas = document.createElement('canvas');

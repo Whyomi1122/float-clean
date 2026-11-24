@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import localFont from "next/font/local";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
@@ -23,7 +24,19 @@ import {
 } from "@/lib/ensemble-comic";
 import { exportComic } from "@/lib/ensemble-comic-export";
 
-// 气泡字体走系统黑体（苹方 / 鸿蒙 / 小米 / 思源 / 雅黑），见 lib/ensemble-comic.ts 的 COMIC_FONT_FAMILY
+/**
+ * 气泡专用字体：苹方黑体-准-简（用户提供的字体，已子集化成 1.5MB woff2）。
+ * 走 next/font/local 官方管线（手写 @font-face 不生效）；拉不到时退回系统黑体栈。
+ */
+const comicFont = localFont({
+  src: "../../public/fonts/pingfang-comic.woff2",
+  weight: "400",
+  style: "normal",
+  display: "swap",
+  fallback: ["sans-serif"],
+});
+/** 预览与导出共用的字体栈：先苹方，缺字再走系统黑体 */
+const COMIC_FONT = `${comicFont.style.fontFamily}, ${COMIC_FONT_FAMILY}`;
 
 // ══════════════════════════════════════════════════════════
 // 漫画分镜（内容组件）
@@ -123,7 +136,7 @@ function Bubbles({
             </svg>
             <div
               className={`absolute inset-0 flex items-center text-[#1c1c1c] ${box.shape === "rect" ? "justify-start" : "justify-center text-center"}`}
-              style={{ fontFamily: COMIC_FONT_FAMILY, fontWeight: COMIC_FONT_WEIGHT, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
+              style={{ fontFamily: COMIC_FONT, fontWeight: COMIC_FONT_WEIGHT, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
             >
               <div style={box.shape === "rect" ? { paddingLeft: box.fontSize * 0.95, paddingRight: box.fontSize * 0.95 } : undefined}>
                 {box.lines.map((line, i) => <div key={i}>{line}</div>)}
@@ -196,7 +209,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
     if (!book || exporting) return;
     setExporting(true); setError("");
     try {
-      const blob = await exportComic(book, COMIC_FONT_FAMILY);
+      const blob = await exportComic(book, COMIC_FONT);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url; link.download = `${book.title}.png`; link.rel = "noopener";

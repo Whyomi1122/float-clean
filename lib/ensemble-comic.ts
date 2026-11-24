@@ -53,9 +53,8 @@ export function saveComicBook(scriptId: string, book: ComicBook) {
 // 保证「拖到哪儿，长图里就在哪儿」。
 // ══════════════════════════════════════════════════════════
 /**
- * 气泡字体（2026-11-23 `-82` 起）：走**系统黑体**，不再打包字体文件。
- * 苹方是 Apple 专有字体、不能随网页分发，所以只能用系统字体栈；
- * 好处是零下载、零加载失败（iOS=苹方，鸿蒙/小米=自家，安卓=思源，Windows=雅黑）。
+ * 气泡字体兜底栈（2026-11-23 `-83`）：主字体是随包的苹方（`public/fonts/pingfang-comic.woff2`，子集化 1.5MB），
+ * 这里只负责「苹方缺字 / 加载失败」时退回系统黑体（iOS=苹方系统自带，鸿蒙/小米=自家，安卓=思源，Windows=雅黑）。
  */
 export const COMIC_FONT_FAMILY =
   '"PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif';
