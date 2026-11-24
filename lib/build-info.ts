@@ -18,9 +18,16 @@ export const BUILD_INFO = {
     /** 当前构建 commit（线上 = Vercel 注入的真实值；本地 = "dev"） */
     commit: VERCEL_COMMIT || "dev",
     /** 当前版本号（用于展示） */
-    version: "2026.11.24-88",
+    version: "2026.11.24-89",
     /** 历史更新记录（新的在前） */
     entries: [
+        {
+            version: "2026.11.24-89",
+            title: "漫画分镜：气泡拖动不再弹回",
+            items: [
+                "修好气泡拖到新位置、一松手就弹回原处的问题——现在各自停在放下的地方",
+            ],
+        },
         {
             version: "2026.11.24-88",
             title: "剧情记录：目录精简",

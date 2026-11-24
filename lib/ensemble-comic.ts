@@ -303,12 +303,18 @@ export function autoBubbleRatios(panel: ComicPanel): ComicBubble[] {
   });
 }
 
-/** 拖动结束后写回画面坐标（比例值）；同一格其它气泡补上自动位置。 */
+/**
+ * 拖动结束后写回画面坐标（比例值）。
+ * 键是气泡自己的 `id`（`${quoteId}#${partIndex}`）——和 layoutComicBubbles 的
+ * 读取键必须一致，否则存进去的坐标找不到、松手就弹回原位。
+ */
 export function moveComicBubble(panel: ComicPanel, quoteId: string, x: number, y: number): ComicBubble[] {
-  const auto = autoBubbleRatios(panel);
-  const base = panel.bubbles?.length ? panel.bubbles : auto;
-  const merged = base.some(b => b.quoteId === quoteId) ? base : [...base, ...auto.filter(b => b.quoteId === quoteId)];
-  return merged.map(b => (b.quoteId === quoteId ? { ...b, x, y, tail: -1 } : b));
+  const base = panel.bubbles ?? [];
+  const next: ComicBubble = { quoteId, x, y, tail: -1 };
+  if (base.some(b => b.quoteId === quoteId)) {
+    return base.map(b => (b.quoteId === quoteId ? { ...b, x, y, tail: -1 } : b));
+  }
+  return [...base, next];
 }
 
 /**
