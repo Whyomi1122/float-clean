@@ -77,6 +77,7 @@ import {
 import StoryDirectionSheet from "@/components/ensemble/story-direction-sheet";
 import { EnsembleComicSheet } from "./ensemble-comic-sheet";
 import { EnsembleChapterSheet } from "./ensemble-chapter-sheet";
+import type { ChapterSheetMode } from "./ensemble-chapter-sheet";
 
 function ComicTool({ script }: { script: EnsembleScript }) {
   const [open, setOpen] = useState(false);
@@ -1708,6 +1709,8 @@ export function EnsembleApp({
   const [showArchiveSheet, setShowArchiveSheet] = useState(false);
   /** 剧情记录 · 章节目录（分章保存，入口在杀青归档面板内） */
   const [showChapterSheet, setShowChapterSheet] = useState(false);
+  /** 章节目录当前层级（受控，外壳「← 返回」据此回上一级） */
+  const [chapterSheetMode, setChapterSheetMode] = useState<ChapterSheetMode>({ kind: "index" });
   const [archiveCountDraft, setArchiveCountDraft] = useState(20);
   const [archiveContentDraft, setArchiveContentDraft] = useState("");
   /**
@@ -6163,6 +6166,11 @@ ${lastSpeakerNote}
             <MiniSheet
               title="剧情记录"
               subtitle="CHAPTERS · READ"
+              onBack={
+                chapterSheetMode.kind !== "index"
+                  ? () => setChapterSheetMode({ kind: "index" })
+                  : undefined
+              }
               onClose={() => setShowChapterSheet(false)}
             >
               <EnsembleChapterSheet
@@ -6172,6 +6180,8 @@ ${lastSpeakerNote}
                   currentScript.apiConfigIdOverride,
                   currentScript.modelOverride,
                 )}
+                mode={chapterSheetMode}
+                onModeChange={setChapterSheetMode}
                 onToast={setToast}
                 onScriptUpdated={(s) => {
                   setCurrentScript(s);
@@ -6300,6 +6310,7 @@ ${lastSpeakerNote}
               <button
                 type="button"
                 onClick={() => {
+                  setChapterSheetMode({ kind: "index" });
                   setShowArchiveSheet(false);
                   setShowToolsSheet(false);
                   setShowChapterSheet(true);

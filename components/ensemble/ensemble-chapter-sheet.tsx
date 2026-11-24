@@ -20,7 +20,8 @@ import {
 import type { EnsembleChapter, EnsembleScript, EnsembleTurn } from "@/lib/ensemble-storage";
 import type { ApiConfig } from "@/lib/settings-types";
 
-type Mode =
+/** 面板层级：目录 → 阅读 / AI 建议预览。受控于父组件（外壳「返回」要按层级回上一级）。 */
+export type ChapterSheetMode =
   | { kind: "index" }
   | { kind: "read"; viewIdx: number }
   | { kind: "suggest" };
@@ -93,16 +94,20 @@ function TurnBlock({ t }: { t: EnsembleTurn }) {
 export function EnsembleChapterSheet({
   script,
   apiConfig,
+  mode,
+  onModeChange,
   onToast,
   onScriptUpdated,
 }: {
   script: EnsembleScript;
   /** 已由父组件解析好的模型配置（resolveEnsembleApiConfig 的结果） */
   apiConfig: ApiConfig | null;
+  /** 当前层级（受控）：父组件拿它决定外壳「← 返回」是回目录还是关面板 */
+  mode: ChapterSheetMode;
+  onModeChange: (m: ChapterSheetMode) => void;
   onToast?: (msg: string) => void;
   onScriptUpdated?: (s: EnsembleScript) => void;
 }) {
-  const [mode, setMode] = useState<Mode>({ kind: "index" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<EnsembleChapter[] | null>(null);
@@ -129,7 +134,7 @@ export function EnsembleChapterSheet({
         return;
       }
       setSuggestion(res.chapters ?? []);
-      setMode({ kind: "suggest" });
+      onModeChange({ kind: "suggest" });
     } finally {
       setBusy(false);
     }
@@ -158,7 +163,7 @@ export function EnsembleChapterSheet({
     if (!suggestion || suggestion.length === 0) return;
     commit(suggestion, "已应用 AI 划分");
     setSuggestion(null);
-    setMode({ kind: "index" });
+    onModeChange({ kind: "index" });
   }
 
   // ── 目录页 ──
@@ -195,7 +200,7 @@ export function EnsembleChapterSheet({
                   <div className="flex items-start gap-2">
                     <button
                       className="min-w-0 flex-1 text-left"
-                      onClick={() => setMode({ kind: "read", viewIdx: i })}
+                      onClick={() => onModeChange({ kind: "read", viewIdx: i })}
                     >
                       {isEditing ? (
                         <input
@@ -284,7 +289,7 @@ export function EnsembleChapterSheet({
   if (mode.kind === "read") {
     const v = views[mode.viewIdx];
     if (!v) {
-      setMode({ kind: "index" });
+      // 章被删 / AI 重划后下标失效：交给父组件回目录（commit 后已经会重置，这里只兜底）
       return null;
     }
     return (
@@ -292,7 +297,7 @@ export function EnsembleChapterSheet({
         <SubHeader
           title={v.title}
           sub={`${v.turns.length} 幕 · ${v.charCount} 字`}
-          onBack={() => setMode({ kind: "index" })}
+          onBack={() => onModeChange({ kind: "index" })}
         />
         <div className="rounded-[16px] bg-white px-3 py-2">
           {v.turns.map((t) => (
@@ -309,7 +314,7 @@ export function EnsembleChapterSheet({
       <SubHeader
         title="AI 建议划分"
         sub={`${suggestion?.length ?? 0} 章`}
-        onBack={() => setMode({ kind: "index" })}
+        onBack={() => onModeChange({ kind: "index" })}
       />
       <div className="space-y-1.5 px-1">
         {suggestion?.map((c) => {
@@ -334,7 +339,7 @@ export function EnsembleChapterSheet({
         <button
           onClick={() => {
             setSuggestion(null);
-            setMode({ kind: "index" });
+            onModeChange({ kind: "index" });
           }}
           className="flex-1 rounded-full bg-black/[0.05] px-3 py-2.5 text-[12px] font-medium text-[#111]"
         >
