@@ -30,13 +30,19 @@ const CH_INPUT =
   "w-full rounded-[12px] bg-black/[0.04] px-3 py-2.5 text-[13px] text-[#111] outline-none placeholder:text-black/25";
 
 function turnPreview(t: EnsembleTurn, width = 26): string {
-  return (
-    (t.content ?? "")
-      .split("\n")
-      .map((s) => s.trim())
-      .find(Boolean)
-      ?.slice(0, width) || "（空）"
-  );
+  const lines = (t.content ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "（空）";
+  // 群像轮首行常是「[旁白]：」「皮韩宇：」这类纯标签行（冒号结尾、正文在下一行）——
+  // 拼上下一行正文，否则清单里全是空标签、没法判断这一幕是什么。
+  const first = lines[0];
+  const isLabelOnly = /[:：]\s*$/.test(first) && first.replace(/[:：]\s*$/, "").length <= 14;
+  if (isLabelOnly && lines.length > 1) {
+    return `${first} ${lines[1]}`.slice(0, width);
+  }
+  return first.slice(0, width);
 }
 
 function SubHeader({ title, sub, onBack }: { title: string; sub?: string; onBack: () => void }) {
@@ -329,7 +335,7 @@ export function EnsembleChapterSheet({
         />
         <div className="mx-1 rounded-[16px] bg-white p-3.5">
           <div className="text-[11px] leading-relaxed text-black/45">
-            选中的这一幕起（含）到下一章之前，都属于新章。
+            在下方点选一幕作为新章的起点：从这一幕起（含），到下一章之前，都是新章的内容。
           </div>
           <input
             className={`${CH_INPUT} mt-2`}
@@ -364,6 +370,7 @@ export function EnsembleChapterSheet({
               >
                 <span className="shrink-0 tabular-nums opacity-60">#{i}</span>
                 <span className="min-w-0 flex-1 truncate">{turnPreview(t)}</span>
+                {picked ? <span className="shrink-0 text-[10px] opacity-80">← 起点</span> : null}
                 {used ? <span className="shrink-0 opacity-70">已是章起点</span> : null}
               </button>
             );

@@ -6295,7 +6295,8 @@ ${lastSpeakerNote}
                 ) : null}
               </div>
 
-              {/* ── 章节目录入口（剧情记录分章保存，2026-11-23） ── */}
+              {/* ── 章节目录入口（剧情记录分章保存，2026-11-23）──
+                  样式对齐工具面板 ToolRow：中文 label + 英文小标 + ChevronRight，无 emoji。 */}
               <button
                 type="button"
                 onClick={() => {
@@ -6303,16 +6304,17 @@ ${lastSpeakerNote}
                   setShowToolsSheet(false);
                   setShowChapterSheet(true);
                 }}
-                className="w-full bg-white rounded-[16px] p-3.5 flex items-center gap-2.5 text-left active:scale-[0.985] transition-transform"
+                className="w-full bg-white rounded-[16px] px-4 py-3 flex items-center gap-3.5 text-left active:scale-[0.985] transition-all duration-200 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
               >
-                <span className="text-[16px]">📖</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-medium text-[#111111]">章节目录</span>
-                  <span className="block text-[10px] text-black/35 mt-0.5">
-                    已杀青剧情的分章保存与回看
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold tracking-tight leading-tight text-[#111111] text-[13px]">
+                    章节目录
+                  </span>
+                  <span className="block tracking-[0.16em] font-medium mt-1 text-black/30 text-[9px]">
+                    CHAPTERS · READ
                   </span>
                 </span>
-                <span className="text-[12px] text-black/25">›</span>
+                <ChevronRight size={17} strokeWidth={1.9} className="text-black/25 shrink-0" />
               </button>
 
               {/* ── 档案预览 / 编辑区 ── */}
