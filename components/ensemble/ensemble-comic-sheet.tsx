@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import localFont from "next/font/local";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { Toggle } from "@/components/ui/form";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import {
+  COMIC_FONT_FAMILY,
+  COMIC_FONT_WEIGHT,
   comicImagePresets,
   comicSource,
   drawComicPanel,
@@ -22,8 +23,7 @@ import {
 } from "@/lib/ensemble-comic";
 import { exportComic } from "@/lib/ensemble-comic-export";
 
-/** 得意黑（Smiley Sans）—— 气泡专用字体。走 next/font 官方管线，避免手写 @font-face 加载失败。 */
-const comicFont = localFont({ src: "../../public/fonts/comic-deyi.otf", display: "swap", fallback: ["sans-serif"] });
+// 气泡字体走系统黑体（苹方 / 鸿蒙 / 小米 / 思源 / 雅黑），见 lib/ensemble-comic.ts 的 COMIC_FONT_FAMILY
 
 // ══════════════════════════════════════════════════════════
 // 漫画分镜（内容组件）
@@ -123,7 +123,7 @@ function Bubbles({
             </svg>
             <div
               className={`absolute inset-0 flex items-center text-[#1c1c1c] ${box.shape === "rect" ? "justify-start" : "justify-center text-center"}`}
-              style={{ fontFamily: comicFont.style.fontFamily, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
+              style={{ fontFamily: COMIC_FONT_FAMILY, fontWeight: COMIC_FONT_WEIGHT, fontSize: box.fontSize, lineHeight: `${box.lineHeight}px` }}
             >
               <div style={box.shape === "rect" ? { paddingLeft: box.fontSize * 0.95, paddingRight: box.fontSize * 0.95 } : undefined}>
                 {box.lines.map((line, i) => <div key={i}>{line}</div>)}
@@ -196,7 +196,7 @@ export function EnsembleComicSheet({ script }: { script: EnsembleScript }) {
     if (!book || exporting) return;
     setExporting(true); setError("");
     try {
-      const blob = await exportComic(book, comicFont.style.fontFamily);
+      const blob = await exportComic(book, COMIC_FONT_FAMILY);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url; link.download = `${book.title}.png`; link.rel = "noopener";

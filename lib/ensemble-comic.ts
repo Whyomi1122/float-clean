@@ -52,6 +52,16 @@ export function saveComicBook(scriptId: string, book: ComicBook) {
 // 气泡排版：预览（DOM/SVG）与导出（canvas）共用同一份几何计算，
 // 保证「拖到哪儿，长图里就在哪儿」。
 // ══════════════════════════════════════════════════════════
+/**
+ * 气泡字体（2026-11-23 `-82` 起）：走**系统黑体**，不再打包字体文件。
+ * 苹方是 Apple 专有字体、不能随网页分发，所以只能用系统字体栈；
+ * 好处是零下载、零加载失败（iOS=苹方，鸿蒙/小米=自家，安卓=思源，Windows=雅黑）。
+ */
+export const COMIC_FONT_FAMILY =
+  '"PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif';
+/** 漫画正文用 Medium 字重，比 Regular 更"印刷"。 */
+export const COMIC_FONT_WEIGHT = 500;
+
 export type ComicBubbleBox = {
   quoteId: string;
   /** 每个气泡自己的唯一键（一句台词拆成多泡时，key 不能共用 quoteId） */

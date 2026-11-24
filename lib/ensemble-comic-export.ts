@@ -1,11 +1,8 @@
-import { layoutComicBubbles, type ComicBook } from './ensemble-comic';
+import { COMIC_FONT_FAMILY, COMIC_FONT_WEIGHT, layoutComicBubbles, type ComicBook } from './ensemble-comic';
 
 /** 导出竖版长图：四格满版上下相接（或纸漫白缝），对白气泡与预览用同一套排版。 */
-export async function exportComic(book: ComicBook, family = 'ComicDeYi'): Promise<Blob> {
-  // 2026-11-23：字体请求失败时 Safari 会抛 NetworkError（"A network error occurred."），
-  // 以前这句会把整次导出中断 → 表现为「点导出长图没反应」。现在最多等 4 秒，拉不到就退回系统字体继续导。
-  const fontReady = document.fonts.load(`30px ${family}`).then(() => undefined, () => undefined);
-  await Promise.race([fontReady, new Promise<void>(resolve => setTimeout(resolve, 4000))]);
+export async function exportComic(book: ComicBook, family = COMIC_FONT_FAMILY): Promise<Blob> {
+  // `-82` 起气泡改用系统黑体（苹方等），不需要再等自定义字体下载；这里只等已排队的字体就位。
   await document.fonts.ready.catch(() => undefined);
   const width = 1080;
   const canvas = document.createElement('canvas');
@@ -26,7 +23,7 @@ export async function exportComic(book: ComicBook, family = 'ComicDeYi'): Promis
   canvas.height = blocks.reduce((sum, b) => sum + b.height, 0) + gap * (blocks.length - 1);
   if (canvas.height > 32000) throw new Error('长图过长，请减少对白后导出');
   // 设完尺寸后 context 状态会被重置，字体必须重新声明，否则量字与画字不同步（气泡文字会溢出）。
-  const font = (size: number) => `${size}px ${family}, sans-serif`;
+  const font = (size: number) => `${COMIC_FONT_WEIGHT} ${size}px ${family}`;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, canvas.height);
   let y = 0;
   for (const block of blocks) {
