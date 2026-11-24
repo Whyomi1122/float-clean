@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, RotateCcw, X } from "lucide-react";
 import {
+    beginDirectionBatch,
     clearLastBatch,
     DIRECTION_TYPE_LABEL,
     drawCardTypes,
@@ -68,7 +69,9 @@ export default function StoryDirectionSheet({ open, scriptId, turnCount, context
             ...context,
             recentDirections: loadStoryDirectionState(scriptId).recent,
         };
-        const types = drawCardTypes(freshContext.recentDirections ?? []);
+        // 换一批＝走下一组类型配方（三组轮换，2026-11-24）
+        const batchIndex = beginDirectionBatch(scriptId);
+        const types = drawCardTypes(freshContext.recentDirections ?? [], batchIndex);
         const result = await generateStoryDirectionCards(freshContext, { types });
         if (seq !== requestSeq.current) return;
         setLoading(false);
@@ -215,6 +218,12 @@ export default function StoryDirectionSheet({ open, scriptId, turnCount, context
                                     </span>
                                 </span>
                                 <span className="sd-title">{card.title}</span>
+                                {card.target && (
+                                    <span className="sd-kv">
+                                        <i>针对</i>
+                                        <b>{card.target}</b>
+                                    </span>
+                                )}
                                 <span className="sd-kv">
                                     <i>会发生</i>
                                     <b>{card.event}</b>

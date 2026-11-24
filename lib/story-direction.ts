@@ -33,6 +33,12 @@ export interface StoryDirection {
     event: string;
     /** 后果：必须真的改变处境 */
     consequence: string;
+    /**
+     * 2026-11-24：这张卡「针对谁 / 针对哪件事」。
+     * 由代码从归档【关键锚点】里挑「最近最没被提到」的线头（挑不到退到最久没露面的角色），
+     * 目标是保证每张卡都有具体对象，而不是泛泛地说"他会问点什么"。
+     */
+    target?: string;
 }
 
 /** recent 里存的最小单元（展示过即记，最多 10 条 ≈ 5 批） */
@@ -48,6 +54,8 @@ export interface StoryDirectionState {
     lastBatch?: StoryDirection[];
     /** 抽这批时的回合数：回合数变了说明戏往前走过了，旧卡就作废 */
     lastBatchTurns?: number;
+    /** 2026-11-24：批次序号，`换一批` 就 +1 → 取下一组类型配方（老数据没有也行） */
+    batchIndex?: number;
     recent: DirectionRecentEntry[];
 }
 
@@ -68,6 +76,16 @@ const DIRECTION_WEIGHTS: Record<DirectionType, number> = {
 
 const ALL_TYPES: DirectionType[] = ["character", "you", "environment", "accident"];
 const RECENT_MAX = 10;
+
+/**
+ * 三组类型配方轮换（2026-11-24，借鉴《执笔》的「类型批次轮换」）。
+ * 每点一次「换一批」就换下一组，避免连着几批都是同一种味道。
+ */
+const DIRECTION_BATCH_PLAN: DirectionType[][] = [
+    ["character", "environment"], // 组1 推进：角色动 + 环境变
+    ["you", "character"],         // 组2 关系：你的选择 + 角色反应
+    ["accident", "you"],          // 组3 变数：意外 + 你的应对
+];
 
 /* ─────────────────────────── 本地存储 ─────────────────────────── */
 
@@ -150,6 +168,17 @@ export function clearLastBatch(scriptId: string | undefined) {
     saveStoryDirectionState(scriptId, { ...state, lastBatch: undefined });
 }
 
+/**
+ * 开新一批：批次序号 +1 并落盘，返回新序号。
+ * 「换一批」＝走下一组类型配方（`drawCardTypes(recent, batchIndex)`）。
+ */
+export function beginDirectionBatch(scriptId: string | undefined): number {
+    const state = loadStoryDirectionState(scriptId);
+    const next = (typeof state.batchIndex === "number" ? state.batchIndex : -1) + 1;
+    if (scriptId) saveStoryDirectionState(scriptId, { ...state, batchIndex: next });
+    return next;
+}
+
 /* ─────────────────────────── 抽类型 ─────────────────────────── */
 
 function pickWeighted(pool: DirectionType[]): DirectionType {
@@ -165,17 +194,36 @@ function pickWeighted(pool: DirectionType[]): DirectionType {
 /**
  * 抽本批两个类型（必不相同）。
  *
- * 软随机：recent 里连续 4 条（≈2 批）都没出现角色卡 → 本批强制带一张角色卡，
- * 否则纯随机会出现「连着三批都是环境卡」，体验会崩。
+ * 2026-11-24 起改为**按组轮换**（`batchIndex % 3`），不再纯随机：
+ * 换一批＝下一组，连着几批不会是同一种味道。组内仍是硬约束「两个类型不同」；
+ * 与「最近用过」的重复只做**软避让** —— 上一批出现过的类型尽量换掉，换不掉就照用。
+ * 兜底：最近两批都没出过角色卡 → 强制塞一张角色卡（角色卡是推进主力）。
  */
-export function drawCardTypes(recent: DirectionRecentEntry[]): [DirectionType, DirectionType] {
-    const recentTypes = recent.slice(0, 4).map(r => r.type);
-    const needCharacter = recentTypes.length >= 4 && !recentTypes.includes("character");
+export function drawCardTypes(recent: DirectionRecentEntry[], batchIndex = 0): [DirectionType, DirectionType] {
+    const plan = DIRECTION_BATCH_PLAN[Math.abs(Math.floor(batchIndex)) % DIRECTION_BATCH_PLAN.length] ?? DIRECTION_BATCH_PLAN[0];
+    const lastBatchTypes = recent.slice(0, 2).map(r => r.type);
 
-    const first = needCharacter ? "character" : pickWeighted(ALL_TYPES);
-    const rest = ALL_TYPES.filter(t => t !== first);
-    const second = needCharacter ? pickWeighted(rest) : pickWeighted(rest);
-    return [first, second];
+    // 软避让：本组里的类型如果刚在上一批出现过，就换成一个没出现过的
+    const picked = plan.map(t => {
+        if (!lastBatchTypes.includes(t)) return t;
+        const spare = ALL_TYPES.find(x => !lastBatchTypes.includes(x) && !plan.includes(x));
+        return spare ?? t;
+    });
+
+    // 保证两个不同
+    if (picked[0] === picked[1]) {
+        const spare = ALL_TYPES.find(x => x !== picked[0]);
+        picked[1] = spare ?? picked[1];
+    }
+
+    // 兜底：最近两批没有角色卡 → 第一张强制角色卡
+    const recentTypes = recent.slice(0, 4).map(r => r.type);
+    if (recentTypes.length >= 4 && !recentTypes.includes("character") && picked[0] !== "character") {
+        const second: DirectionType = picked[1] === "character" ? "environment" : picked[1];
+        return ["character", second];
+    }
+
+    return [picked[0], picked[1]];
 }
 
 /** 「换这张」：换一个类型（不能与另一张重复），再重写内容 */
@@ -276,6 +324,7 @@ export function buildStoryDirectionSystemPrompt(): string {
         "2. 不许写旁白、心理描写、气氛描写——那是别的模块负责的。",
         "3. 每张必须有真实后果：写不出「它改变了什么处境」的卡，直接换一个方向，不要硬凑。",
         "4. 不许与「最近已经用过的方向」重复或近义。",
+        "4.5 如果某张卡给了「针对对象」，这张卡必须**围绕它**展开（就是这个人 / 这条线），不许换成别的人或别的事。它被挑出来是因为很久没推进了。",
         "5. 只输出结构化卡片，不写解释、不写客套、不加标题之外的任何说明文字。",
         "",
         "【必须接住现场 · 不合格率最高的一项】",
@@ -300,6 +349,104 @@ export function buildStoryDirectionSystemPrompt(): string {
         "【输出格式】严格输出 JSON 数组，不要代码块标记，不要多余文字：",
         '[{"type":"character","title":"他先开口","event":"他放下杯子，直接问你昨天下午去哪了","consequence":"你得给个说法，否则他会起疑"},{"type":"environment","title":"客户提前到","event":"门铃响，客户比约定早半小时到了","consequence":"这场对话被迫打断，你们得先应付他"}]',
     ].join("\n");
+}
+
+/* ── 针对对象：直接锁归档里的锚点（2026-11-24） ─────────────────────────
+ * 用户的想法：「归档不就是线索吗，直接锁归档里的锚点」——对，但只能做到这一步：
+ * 归档是**只留最新一条的滚动摘要**，每行没有时间戳，所以没法真的算「多久没推进」；
+ * 于是用**廉价代理**：把归档【关键锚点】拆成条目 → 看哪一条在最近 14 条对话里几乎没被提到
+ * → 它就是「最久没被碰的线头」。挑不到就退到「最久没露面的角色」。
+ * 不建台账、不改存储，纯读现成的归档文本。
+ */
+
+/** 从归档【关键锚点】里拆出条目（含线头/约定/信物），过滤掉纯认知类的 */
+export function extractArchiveThreads(archiveText: string): string[] {
+    if (!archiveText) return [];
+    const marker = "【关键锚点】";
+    const at = archiveText.indexOf(marker);
+    const body = at >= 0 ? archiveText.slice(at + marker.length) : "";
+    if (!body) return [];
+    const nextSection = body.search(/【|──|===|━━/);
+    const section = nextSection > 0 ? body.slice(0, nextSection) : body;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of section.split(/\r?\n/)) {
+        const line = raw
+            .replace(/^[\s·•\-*—>]*/, "")
+            .replace(/^\d+[.、)]\s*/, "")
+            .trim()
+            .replace(/[。；;，,]+$/, "");
+        if (line.length < 4 || line.length > 120) continue;
+        if (/知情|知道的|秘密|彼此都|双方都知/.test(line)) continue; // 认知类不是可推进的线头
+        if (seen.has(line)) continue;
+        seen.add(line);
+        out.push(line);
+        if (out.length >= 8) break;
+    }
+    return out;
+}
+
+/** 二元组命中率：这段文字里有多少相邻两字在最近对话里出现过（越低＝越久没碰） */
+function mentionScore(text: string, recentText: string): number {
+    const clean = text.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "");
+    if (clean.length < 4) return 0;
+    let hit = 0;
+    let total = 0;
+    for (let i = 0; i < clean.length - 1; i++) {
+        total++;
+        if (recentText.includes(clean.slice(i, i + 2))) hit++;
+    }
+    return total === 0 ? 0 : hit / total;
+}
+
+/** 挑「最近最没被提到」的线头；归档里拆不出来就返回 null */
+export function pickStaleThread(archiveText: string, recentLines: string[]): string | null {
+    const threads = extractArchiveThreads(archiveText);
+    if (threads.length === 0) return null;
+    const recentText = recentLines.join("\n");
+    let best: string | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const t of threads) {
+        const score = mentionScore(t, recentText);
+        if (score < bestScore) {
+            bestScore = score;
+            best = t;
+        }
+    }
+    // 太长的不适合当"针对对象"，截断到 40 字以内
+    return best ? (best.length > 40 ? `${best.slice(0, 40)}…` : best) : null;
+}
+
+/** 兜底：在场角色里最近最少被提到的那个（归档拆不出线头时用） */
+function pickLeastMentionedCast(ctx: StoryDirectionContext): string | null {
+    const recentText = ctx.recentLines.join("\n");
+    const candidates = ctx.cast.filter(c => !c.isUser).map(c => c.name).filter(Boolean);
+    if (candidates.length === 0) return null;
+    let best: string | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const name of candidates) {
+        const score = recentText.split(name).length - 1;
+        if (score < bestScore) {
+            bestScore = score;
+            best = name;
+        }
+    }
+    return best;
+}
+
+/**
+ * 给这一批每张卡分配「针对对象」：
+ * - 角色卡 / 你的卡 → 最久没被碰的线头（归档里锁），没有就退到最久没露面的角色
+ * - 环境卡 / 意外卡 → 不绑（它们本来就是"场在变"，硬绑对象会变形）
+ */
+export function pickDirectionTargets(ctx: StoryDirectionContext, types: DirectionType[]): (string | undefined)[] {
+    const stale = pickStaleThread(ctx.archiveText || "", ctx.recentLines);
+    const castName = pickLeastMentionedCast(ctx);
+    return types.map(t => {
+        if (t === "character") return stale || castName || undefined;
+        if (t === "you") return stale || undefined;
+        return undefined;
+    });
 }
 
 export function buildStoryDirectionUserPrompt(ctx: StoryDirectionContext, types: DirectionType[]): string {
@@ -334,8 +481,11 @@ export function buildStoryDirectionUserPrompt(ctx: StoryDirectionContext, types:
         );
     }
 
+    const targets = pickDirectionTargets(ctx, types);
     blocks.push(
-        `【本次要写】\n${types.map(t => `- ${describeType(t)}`).join("\n")}\n\n` +
+        `【本次要写】\n${types
+            .map((t, i) => `- ${describeType(t)}${targets[i] ? `\n  针对对象：${targets[i]}\n  （这张卡必须围绕它展开，不许换成别的人/别的事；它已经很久没被推进了）` : ""}`)
+            .join("\n")}\n\n` +
         `按上面顺序输出 ${types.length} 张卡，type 字段分别用：${types.map(t => `"${t}"`).join("、")}。`
     );
 
@@ -458,7 +608,13 @@ export async function generateStoryDirectionCards(
             return true;
         });
         if (cards.length === 0) return { cards: [], error: "这次没抽出可用的卡，再试一次吧" };
-        return { cards: cards.slice(0, types.length) };
+        const kept = cards.slice(0, types.length);
+        // 针对对象：把这一批挑好的线头/角色贴回卡片（模型没写时报给它看）
+        const targets = pickDirectionTargets(ctx, kept.map(c => c.type));
+        kept.forEach((card, i) => {
+            if (!card.target && targets[i]) card.target = targets[i];
+        });
+        return { cards: kept };
     } catch (err) {
         return { cards: [], error: err instanceof Error ? err.message : "生成失败，再试一次吧" };
     }
@@ -470,6 +626,7 @@ export function buildDirectionDirective(direction: StoryDirection | null | undef
     return [
         "【本轮走向】",
         `类型：${DIRECTION_TYPE_LABEL[direction.type]}；发生：${direction.event}；后果：${direction.consequence}。`,
+        ...(direction.target ? [`针对：${direction.target}（这一轮就是这条线在动）`] : []),
         "只把它演出来，不要解释这个安排，不要复述用户已写过的内容。",
         "用户输入管「我做了什么」，这段走向管「他那一边发生了什么」，两者并列发生。",
     ].join("\n");
