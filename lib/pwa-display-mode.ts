@@ -52,6 +52,10 @@ export function writePwaDisplayPreference(preference: PwaDisplayPreference) {
 /** Preserve the upstream default: mobile browsers request fullscreen unless Edge or explicitly disabled. */
 export function shouldRequestPwaFullscreen(): boolean {
   if (typeof document === "undefined" || typeof navigator === "undefined") return false;
+  // 已经装到桌面、正以 fullscreen 显示模式跑的时候，本身就是沉浸全屏（没有地址栏和系统栏），
+  // 再调 Fullscreen API 没有任何视觉收益，只会让 Chrome 每次进入都弹
+  // 「如需退出全屏模式，请从顶部拖动，然后轻触返回按钮」并停留好几秒。
+  if (typeof window !== "undefined" && window.matchMedia("(display-mode: fullscreen)").matches) return false;
   const preference = readPwaDisplayPreference(document.cookie);
   if (preference === "standalone") return false;
   if (preference === "fullscreen") return true;
