@@ -359,31 +359,85 @@ export function buildStoryDirectionSystemPrompt(): string {
  * 不建台账、不改存储，纯读现成的归档文本。
  */
 
-/** 从归档【关键锚点】里拆出条目（含线头/约定/信物），过滤掉纯认知类的 */
+/** 小节标题里带这些字样的，整节都算线头来源（归档用来记「将来要发生的事」的叫法） */
+const THREAD_HEADINGS = /线头|待发生|待兑现|未兑现|悬而未决|待办/;
+/** 明显不是「可推进的线头」：认知范围、已完成不重播清单、已暴露的错 */
+const NOT_THREAD = /知情|知道的|不知|秘密|彼此都|双方都知|不重播|已完成|已发生|已暴露|漏法|暗号|照旧|物品|人物状态/;
+/** 「一捆线头」的标签，见到就按顿号拆开 */
+const BUNDLE_LABEL = /^(待发生线头|待发生|待兑现|未兑现|悬而未决|线头)\s*[：:]\s*(.+)$/;
+
+/** 去掉行首的 · • - * 数字编号，去行尾句读 */
+function cleanBullet(raw: string): string {
+    return raw
+        .replace(/[\uFEFF\u200B]/g, "")
+        .replace(/^[\s·•\-*—>]+/, "")
+        .replace(/^\d+[.、)]\s*/, "")
+        .trim()
+        .replace(/[。；;，,]+$/, "");
+}
+
+/** 一行是不是小节标题（【xxx】 或 ═══ / ─── 包边） */
+function isHeading(raw: string): boolean {
+    return /【[^】]{1,24}】/.test(raw) || /^\s*[═─━=]{3,}/.test(raw);
+}
+
+/**
+ * 从归档里拆出「可推进的线头」。
+ *
+ * 认两种写法（2026-11-24 按实机归档补）：
+ *  1. 【关键锚点】块里的普通条目（承诺 / 行程约定 / 待兑现 / 关系变化）；
+ *  2. 标题里带「线头 / 待发生 / 待兑现」的独立小节。
+ * 块里若有一行是「· 待发生线头：A、B、C」——那是**一捆**，拆成单条才有用
+ * （否则每次只能拿到半句话，模型也没法「围绕它展开」）。
+ * 认知范围、「已完成不重播」、「已暴露的漏法」都不是线头，一律踢掉。
+ */
 export function extractArchiveThreads(archiveText: string): string[] {
     if (!archiveText) return [];
-    const marker = "【关键锚点】";
-    const at = archiveText.indexOf(marker);
-    const body = at >= 0 ? archiveText.slice(at + marker.length) : "";
-    if (!body) return [];
-    const nextSection = body.search(/【|──|===|━━/);
-    const section = nextSection > 0 ? body.slice(0, nextSection) : body;
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of section.split(/\r?\n/)) {
-        const line = raw
-            .replace(/^[\s·•\-*—>]*/, "")
-            .replace(/^\d+[.、)]\s*/, "")
-            .trim()
-            .replace(/[。；;，,]+$/, "");
-        if (line.length < 4 || line.length > 120) continue;
-        if (/知情|知道的|秘密|彼此都|双方都知/.test(line)) continue; // 认知类不是可推进的线头
-        if (seen.has(line)) continue;
-        seen.add(line);
-        out.push(line);
-        if (out.length >= 8) break;
+    // ── 分节：只吃「关键锚点」和标题带 THREAD_HEADINGS 的小节 ──
+    const bodies: string[] = [];
+    let buf: string[] = [];
+    let keep = false;
+    const flush = () => {
+        if (keep && buf.length) bodies.push(buf.join("\n"));
+        buf = [];
+    };
+    for (const raw of archiveText.split(/\r?\n/)) {
+        if (isHeading(raw)) {
+            flush();
+            keep = /关键锚点/.test(raw) || THREAD_HEADINGS.test(raw);
+            continue;
+        }
+        buf.push(raw);
     }
-    return out;
+    flush();
+    if (bodies.length === 0) return [];
+
+    const seen = new Set<string>();
+    const bundleItems: string[] = []; // 拆开的一捆优先当候选
+    const plainItems: string[] = [];
+    const push = (target: string[], item: string) => {
+        const t = item.trim().replace(/[。；;，,]+$/, "");
+        if (t.length < 2 || t.length > 40) return;
+        if (seen.has(t)) return;
+        seen.add(t);
+        target.push(t);
+    };
+    for (const body of bodies) {
+        for (const raw of body.split(/\r?\n/)) {
+            const line = cleanBullet(raw);
+            if (line.length < 2) continue;
+            const bundle = line.match(BUNDLE_LABEL);
+            if (bundle) {
+                // 只按顿号/分号拆：「（她主张14号／他主张13号）」里的斜杠是"或"，不能拆
+                for (const part of bundle[2].split(/[、；;]/)) push(bundleItems, part);
+                continue;
+            }
+            if (line.length > 120) continue;
+            if (NOT_THREAD.test(line)) continue;
+            push(plainItems, line.length > 40 ? `${line.slice(0, 39)}…` : line);
+        }
+    }
+    return [...bundleItems, ...plainItems].slice(0, 12);
 }
 
 /** 二元组命中率：这段文字里有多少相邻两字在最近对话里出现过（越低＝越久没碰） */
