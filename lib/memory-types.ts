@@ -12,6 +12,13 @@ export type MemoryEntry = {
      * archive   = 人工确认的归档（长文档，重量级＝世界书同级）
      */
     type: "long_term" | "core" | "archive";
+    /**
+     * 记忆域：
+     * main      = 角色记忆库（缺省，旧数据归一化后也按这个处理）
+     * sideStory = 番外记忆库（来自某个番外剧本，未经手动确认永不被注入）
+     * 复用同一个 IndexedDB store，靠字段区分：备份/云备份天然覆盖，无需迁移。
+     */
+    scope?: "main" | "sideStory";
     content: string;
     embedding?: number[];
     importance: number;         // 0-1

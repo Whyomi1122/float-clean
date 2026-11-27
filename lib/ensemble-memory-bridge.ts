@@ -37,6 +37,13 @@ export async function syncEnsembleArchiveToMemory(
     script: EnsembleScript,
     archive: EnsembleArchiveEntry,
 ): Promise<EnsembleBridgeResult> {
+    // 番外：写「番外记忆库」，永不直接进角色记忆库（2026-11-27 用户拍板）
+    if (script.sideStory === true) {
+        const { saveSideStoryArchive } = await import("./side-story-memory");
+        const result = await saveSideStoryArchive(script, archive);
+        return { written: result.written, characterIds: result.characterIds, failed: [], errors: {} };
+    }
+
     const body = buildEnsembleMemoryContent(script, archive);
     if (!body) return { written: 0, characterIds: [], failed: [], errors: {} };
 
@@ -141,6 +148,13 @@ export async function resyncEnsembleArchivesToMemory(
 ): Promise<{ synced: number; failed: number; errors: Record<string, string> }> {
     const characterIds = collectCastCharacterIds(script);
     const latest = pickLatestArchive(archives);
+    if (script.sideStory === true) {
+        // 番外：只修番外记忆库（未注入的旧条清掉、重写最新），永不触碰角色记忆库
+        if (!latest) return { synced: 0, failed: 0, errors: {} };
+        const { resyncSideStoryArchive } = await import("./side-story-memory");
+        const result = await resyncSideStoryArchive(script, latest);
+        return { synced: result.written, failed: 0, errors: {} };
+    }
     const body = latest ? buildEnsembleMemoryContent(script, latest) : "";
     if (characterIds.length === 0 || !latest || !body) {
         return { synced: 0, failed: 0, errors: {} };
@@ -228,6 +242,23 @@ export async function removeEnsembleArchiveFromMemory(
     script: EnsembleScript,
     archive: EnsembleArchiveEntry,
 ): Promise<number> {
+    // 番外：撤销杀青只删番外记忆库里对应那条；已注入角色侧的副本不动（用户明确要留的）
+    if (script.sideStory === true) {
+        const { deleteSideStoryMemories, buildSideStoryMemoryContent } = await import("./side-story-memory");
+        const { loadSideStoryEntries } = await import("./memory-storage");
+        const { computeContentHash } = await import("./memory-types");
+        const all = await loadSideStoryEntries();
+        const hash = computeContentHash(buildSideStoryMemoryContent(script, archive));
+        const targets = all.filter((entry: { id: string; metadata?: Record<string, unknown> }) => {
+            const meta = (entry.metadata as Record<string, unknown> | undefined) ?? {};
+            if (meta.ensembleArchiveId === archive.id) return true;
+            return meta.contentHash === hash;
+        });
+        if (targets.length === 0) return 0;
+        await deleteSideStoryMemories(targets.map(entry => entry.id));
+        return targets.length;
+    }
+
     const body = buildEnsembleMemoryContent(script, archive);
     if (!body) return 0;
 

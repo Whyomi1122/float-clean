@@ -1,8 +1,9 @@
 "use client";
 
 import { Component, useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
-import { Trash2, Zap, Clock, Users, Archive, AlertCircle, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter } from "lucide-react";
+import { Trash2, Zap, Clock, Users, Archive, Layers, AlertCircle, MoreHorizontal, Plus, Edit3, X, Check, ChevronRight, Filter } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/modal";
+import { SideStoryMemoryPanel } from "./side-story-memory-panel";
 import { MemoryTimeline } from "./memory-timeline";
 import { Toggle } from "@/components/ui/form";
 import { loadCharacters } from "@/lib/character-storage";
@@ -32,7 +33,7 @@ import { generateEmbedding, resolveEmbeddingModel } from "@/lib/memory-embedding
 import { BINDING_ACCENTS } from "@/lib/ui-accent-colors";
 
 type MemoryView = "list" | "detail" | "settings";
-type MemoryTab = "short" | "shared" | "long" | "archive";
+type MemoryTab = "short" | "shared" | "long" | "archive" | "side";
 type MemoryBudgetKey = "shortTermTokenBudget" | "longTermTokenBudget";
 
 const MEMORY_TOKEN_BUDGET_MAX = 100000;
@@ -1051,6 +1052,9 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                                 userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
                             />
                         )
+                    ) : activeTab === "side" ? (
+                        /* ── 番外记忆：番外剧本杀青先落这里，手动确认后才注入角色记忆 ── */
+                        <SideStoryMemoryPanel characterId={selectedCharId} onNotice={onNotice} />
                     ) : activeTab === "archive" ? (
                         /* ── 归档：群像杀青写入的剧情归档，并列只读，不进总结素材 ── */
                         archiveEntries.length === 0 ? (
@@ -1096,6 +1100,7 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                         { key: "shared" as const, icon: Users, label: "共享事件" },
                         { key: "long" as const, icon: Archive, label: "长期" },
                         { key: "archive" as const, icon: Archive, label: "归档" },
+                        { key: "side" as const, icon: Layers, label: "番外" },
                     ]).map(tab => (
                         <button
                             key={tab.key}

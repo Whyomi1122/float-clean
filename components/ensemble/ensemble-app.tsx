@@ -58,6 +58,8 @@ import {
   makeStoryRangeLabel,
 } from "@/lib/ensemble-archive";
 import { syncEnsembleArchiveToMemory, removeEnsembleArchiveFromMemory, resyncEnsembleArchivesToMemory, restoreEnsembleArchiveTombstones } from "@/lib/ensemble-memory-bridge";
+import { SideStoryWizard } from "@/components/ensemble/side-story-wizard";
+import { SideStorySettings } from "@/components/ensemble/side-story-settings";
 import { deliverToChat, describePendingSessions, getPendingSessions, discardDeliverySession, loadSessionTranscript, getDeliveredTurnIds, sanitizeChatLine } from "@/lib/ensemble-delivery";
 import type { ApiConfig } from "@/lib/settings-types";
 import { simpleLLMCall } from "@/lib/api-helpers";
@@ -119,6 +121,8 @@ import {
   loadEnsembleScripts,
   saveOrUpdateEnsembleScript,
   deleteEnsembleScript,
+  countSideStoriesOf,
+  isSideStory,
   appendEnsembleTurn,
   deleteEnsembleTurn,
   updateEnsembleTurn,
@@ -1458,6 +1462,22 @@ export function EnsembleApp({
   const [showTimeSheet, setShowTimeSheet] = useState(false);
   /** 世界书绑定子弹窗（2026-10-09 M2-b） */
   const [showWorldBookSheet, setShowWorldBookSheet] = useState(false);
+  /** 建番外向导弹窗（2026-11-27）：parent = 从哪个主剧本开番外 */
+  const [sideStoryParent, setSideStoryParent] = useState<EnsembleScript | null>(null);
+  /** 打开「新建番外」向导 */
+  const openSideStoryWizard = (main: EnsembleScript) => setSideStoryParent(main);
+  /** 向导完成后落库并直接进番外 */
+  const handleSideStoryCreated = (script: EnsembleScript, copiedBooks: number) => {
+    saveOrUpdateEnsembleScript(script);
+    const next = loadEnsembleScripts();
+    setScripts(next);
+    setSideStoryParent(null);
+    const fresh = next.find(item => item.id === script.id) ?? script;
+    setCurrentScript(fresh);
+    setEarlierBatches(1);
+    setView("workspace");
+    setToast(copiedBooks > 0 ? `番外已创建，世界书复制了 ${copiedBooks} 本` : "番外已创建");
+  };
   const [showStoryboardSheet, setShowStoryboardSheet] = useState(false);
   /** 「分镜配图」面板顶部的两个 tab（2026-11-23 -79）：分镜配图 / 漫画分镜合并入口 */
   const [storyboardTab, setStoryboardTab] = useState<"storyboard" | "comic">("storyboard");
@@ -1899,6 +1919,36 @@ export function EnsembleApp({
   const visibleScripts = activeId
     ? scripts.filter((s) => !s.personaId || s.personaId === activeId)
     : scripts;
+
+  /**
+   * 列表排序：主线剧本按更新时间倒序；每个主线后面紧跟它名下的番外（按创建时间升序）。
+   * 番外只在这里归组，storage 层不归组、不隐藏（案件 App 的绑定下拉要用全量）。
+   */
+  const orderedScripts = (() => {
+    const mains = visibleScripts
+      .filter((s) => s.sideStory !== true)
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    const sidesByParent = new Map<string, EnsembleScript[]>();
+    for (const s of visibleScripts) {
+      if (s.sideStory !== true) continue;
+      const parentId = s.parentScriptId || "__orphan__";
+      const list = sidesByParent.get(parentId) ?? [];
+      list.push(s);
+      sidesByParent.set(parentId, list);
+    }
+    for (const list of sidesByParent.values()) {
+      list.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    }
+    const ordered: EnsembleScript[] = [];
+    for (const main of mains) {
+      ordered.push(main);
+      ordered.push(...(sidesByParent.get(main.id) ?? []));
+      sidesByParent.delete(main.id);
+    }
+    // 父剧本已经不在的番外：不隐藏，放最后（避免"我的番外不见了"）
+    for (const list of sidesByParent.values()) ordered.push(...list);
+    return ordered;
+  })();
 
   // ── 对白语音朗读：点播放键 → 解析该角色语音配置 → 合成 → 播放 ──
   const playEnsembleVoice = useCallback(
@@ -3325,11 +3375,14 @@ ${lastSpeakerNote}
         if (!Number.isNaN(target.getTime())) setStoryNow(target, s.id);
       };
 
-      // C-1 桥接：把这次杀青同步进参与角色的记忆库（只进归档层，不污染时间线）。
-      // 失败不阻断杀青本身，只提示一下。
+      // C-1 桥接：主线写进参与角色的记忆库；番外写进「番外记忆库」（2026-11-27）。
+      // 番外永不直接进角色记忆，需要用户在记忆库页手动确认注入。失败不阻断杀青本身。
+      const isSide = updated.sideStory === true;
       void syncEnsembleArchiveToMemory(updated, entry).then(result => {
         if (result.written > 0 && result.failed.length === 0) {
-          setToast(`已杀青 ${target.length} 幕 · ${result.written} 位角色已记住`);
+          setToast(isSide
+            ? `已杀青 ${target.length} 幕 · ${result.written} 条已进「番外记忆库」（不会自动影响角色记忆）`
+            : `已杀青 ${target.length} 幕 · ${result.written} 位角色已记住`);
         } else if (result.written > 0) {
           setToast(`已杀青 · ${result.written} 位角色已记住，${result.failed.length} 位失败，可用「重新同步记忆库」补`);
         } else {
@@ -3748,7 +3801,7 @@ ${lastSpeakerNote}
               </button>
             </div>
           ) : (
-            visibleScripts.map((s) => (
+            orderedScripts.map((s) => (
               <div
                 key={s.id}
                 role="button"
@@ -3762,30 +3815,70 @@ ${lastSpeakerNote}
                   setEarlierBatches(1);
                   setView("workspace");
                 }}
-                className="bg-white/80 backdrop-blur-sm border border-black/[0.04] rounded-2xl p-4 shadow-sm active:scale-[0.99] transition cursor-pointer flex flex-col gap-2.5"
+                className={`bg-white/80 backdrop-blur-sm border border-black/[0.04] rounded-2xl p-4 shadow-sm active:scale-[0.99] transition cursor-pointer flex flex-col gap-2.5 ${
+                  s.sideStory === true ? "ml-5 border-dashed bg-[#FBF8F3]/80" : ""
+                }`}
                 style={{ touchAction: "manipulation" }}
               >
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold text-sm text-[#1a1a1a] line-clamp-1">
-                    {s.title}
+                  <div className="font-semibold text-sm text-[#1a1a1a] line-clamp-1 flex items-center gap-1.5">
+                    {s.sideStory === true && (
+                      <span
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-normal"
+                        style={{ background: "rgba(192,174,142,0.20)", color: "#8a7550" }}
+                      >
+                        番外
+                      </span>
+                    )}
+                    <span className="line-clamp-1">{s.title}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-[11px] text-black/40 font-mono">
                       {s.cast.length} CAST
                     </div>
+                    {s.sideStory !== true && (
+                      <button
+                        type="button"
+                        title="新建番外（if 线/测试线，记忆与主线分开）"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openSideStoryWizard(s);
+                        }}
+                        className="p-1 rounded hover:text-[#5B8FB9] text-black/25"
+                      >
+                        <Layers size={13} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       title="删除剧本"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        const sideCount = countSideStoriesOf(s.id);
                         setConfirmState({
-                          title: "删除这个剧本？",
-                          message: `《${s.title}》及其 ${s.turns.length} 幕剧情将被永久删除，无法恢复。`,
+                          title: s.sideStory === true ? "删除这个番外？" : "删除这个剧本？",
+                          message:
+                            s.sideStory === true
+                              ? `《${s.title}》及其 ${s.turns.length} 幕剧情将被永久删除，无法恢复。\n\n它名下的番外记忆也会一并清除；已经手动注入到角色记忆库的内容会保留。`
+                              : `《${s.title}》及其 ${s.turns.length} 幕剧情将被永久删除，无法恢复。${
+                                  sideCount > 0
+                                    ? `\n\n注意：它下面还有 ${sideCount} 个番外，会一起留在列表里变成孤儿（不会自动删除），建议先处理。`
+                                    : ""
+                                }`,
                           onConfirm: () => {
-                            deleteEnsembleScript(s.id);
-                            setScripts(loadEnsembleScripts());
-                            setConfirmState(null);
+                            void (async () => {
+                              // 番外：连带清掉番外记忆库里属于它的条目（角色侧已注入的副本不动）
+                              if (s.sideStory === true) {
+                                const { purgeSideStoryMemoryOfScript } = await import("@/lib/side-story-memory");
+                                await purgeSideStoryMemoryOfScript(s.id);
+                              }
+                              deleteEnsembleScript(s.id);
+                              setScripts(loadEnsembleScripts());
+                              if (currentScript?.id === s.id) setCurrentScript(null);
+                              setConfirmState(null);
+                            })();
                           },
                         });
                       }}
@@ -3832,6 +3925,15 @@ ${lastSpeakerNote}
             confirmLabel={confirmState.confirmLabel}
             onCancel={() => setConfirmState(null)}
             onConfirm={confirmState.onConfirm}
+          />
+        )}
+
+        {/* 新建番外向导弹窗（2026-11-27） */}
+        {sideStoryParent && (
+          <SideStoryWizard
+            parent={sideStoryParent}
+            onClose={() => setSideStoryParent(null)}
+            onCreated={handleSideStoryCreated}
           />
         )}
       </div>
@@ -6850,6 +6952,19 @@ ${lastSpeakerNote}
                   </div>
 
                   {/* 06 TYPOGRAPHY（字体）已迁入「自定义 CSS」面板，见 showCssSheet。 */}
+
+                  {/* 07 番外专属（2026-11-27）：阵容人设就地编辑 + 番外自己的剧情时间 */}
+                  {currentScript.sideStory === true && (
+                    <SideStorySettings
+                      script={currentScript}
+                      onToast={(message) => setToast(message)}
+                      onSaved={(updated) => {
+                        setCurrentScript(updated);
+                        saveOrUpdateEnsembleScript(updated);
+                        setScripts(loadEnsembleScripts());
+                      }}
+                    />
+                  )}
 
                   {/* 底部：SAVE DATA + 清空记录 */}
                   <button

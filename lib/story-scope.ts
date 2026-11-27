@@ -110,6 +110,9 @@ export async function refreshStoryScopes(): Promise<ScopeMap> {
         for (const script of loadEnsembleScripts()) {
             const scriptId = String(script?.id || "");
             if (!scriptId) continue;
+            // 番外不参与「角色 → 剧本」映射，也不进时间线目录：
+            // 否则番外一有归档、又比主线新，就会把角色抢到 if 线的时间线上（单聊日期全错）。
+            if (script.sideStory === true) continue;
             const scriptTitle = String(script.title || "").trim() || "群像剧情";
             catalog.push({ scriptId, scriptTitle });
             const archived = (script.archives || []).some(entry => String(entry.content || "").trim());
@@ -153,6 +156,8 @@ export async function refreshStoryScopes(): Promise<ScopeMap> {
             let latestAt = "";
             for (const entry of entries) {
                 if (entry.sourceApp !== "ensemble") continue;
+                // 手动注入的番外条虽然进了角色记忆库，但它代表的是 if 线，不能当主线时间线的依据
+                if ((entry.metadata as Record<string, unknown> | undefined)?.sideStorySource === true) continue;
                 const scriptId = typeof entry.metadata?.ensembleScriptId === "string" ? entry.metadata.ensembleScriptId.trim() : "";
                 if (!scriptId) continue;
                 const at = String(entry.updatedAt || entry.createdAt || "");

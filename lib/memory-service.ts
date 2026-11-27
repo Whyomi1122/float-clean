@@ -96,13 +96,21 @@ export async function retrieveArchivesForPrompt(
     const archives = await loadMemoryEntriesByType(characterId, "archive");
     if (archives.length === 0) return [];
     const sorted = [...archives].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a, b) => {
+            // 番外注入的副本永远排在主线归档之后（预算不够时最先被截掉）
+            const aSide = a.metadata?.sideStorySource === true;
+            const bSide = b.metadata?.sideStorySource === true;
+            if (aSide !== bSide) return aSide ? 1 : -1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
     );
     // 群像归档去重（2026-11-09 用户口径）：同一剧本只注入最新一条。
     // 群像每次杀青都会写一条新归档，旧归档留着没有任何信息增量，只是把提示词撑长。
     // 写入侧已经会清掉旧条目，这里是兜底（老数据 / 清理失败时也不会重复注入）。
     const seenEnsembleKeys = new Set<string>();
     const deduped = sorted.filter(entry => {
+        // 番外记忆库里未经确认的条目永远不进注入（正常也到不了这里，纯防御）
+        if (entry.scope === "sideStory") return false;
         // 一起听歌单记录只作存档，不进提示词（2026-11-12）：
         // 聊天归档正文里已经写了这一轮的歌单，每场一条歌单记录会越攒越多，把真正的剧情归档挤出预算。
         if (entry.metadata?.listenRecord) return false;

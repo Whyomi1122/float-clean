@@ -85,10 +85,40 @@ export async function loadMemoryEntries(characterId: string): Promise<MemoryEntr
             entries = allEntries.filter(entry => entry.characterId === characterId);
         }
         entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        return entries;
+        // 番外记忆不属于角色记忆库：未手动注入的番外条永不进入任何注入路径
+        return entries.filter(entry => entry.scope !== "sideStory");
     } finally {
         db.close();
     }
+}
+
+// ── 番外记忆（scope = sideStory） ──
+// 与角色记忆共用一个 store，读侧靠过滤隔离；写侧永远带 scope 标记。
+
+/** 列出番外记忆（可按角色过滤；不参与任何注入） */
+export async function loadSideStoryEntries(characterId?: string): Promise<MemoryEntry[]> {
+    const db = await openDb();
+    if (!db) return [];
+    try {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const all: MemoryEntry[] = await runRequest(tx.objectStore(STORE_NAME).getAll());
+        return all
+            .filter(e => e.scope === "sideStory")
+            .filter(e => !characterId || e.characterId === characterId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    } finally {
+        db.close();
+    }
+}
+
+/** 删除某个番外剧本名下的全部番外记忆（删剧本时用） */
+export async function deleteSideStoryEntriesByScript(scriptId: string): Promise<number> {
+    const entries = await loadSideStoryEntries();
+    const targets = entries.filter(
+        e => (e.metadata as Record<string, unknown> | undefined)?.sideStoryScriptId === scriptId,
+    );
+    await deleteMemoryEntries(targets.map(e => e.id));
+    return targets.length;
 }
 
 export async function loadMemoryEntriesByType(

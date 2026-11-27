@@ -216,7 +216,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
             <div className="prefs-block">
                 <span className="prefs-block-label">Story Time</span>
                 <div className="prefs-row">
-                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">剧情时间</span>
+                    <span className="flex-1 text-left ts-14 font-semibold text-[var(--c-text-title)]">主线剧情时间</span>
                     <span className="ts-14 font-bold text-[var(--c-text-title)] tabular-nums">{formatDateTime(storyNow)}</span>
                 </div>
                 <div className="prefs-row">
@@ -235,7 +235,7 @@ export function StoryClockSettings({ timeAware, onTimeAwareChange }: StoryClockS
                 </div>
                 <div className="pb-3">
                     <p className="m-0 ts-11 leading-relaxed text-[var(--c-text)] opacity-70">
-                        剧情时间是剧本里的钟：不玩就停住，玩到哪儿算哪儿；现实时间只在上面的「现实时间」那行给你看。老消息的日期不会变。
+                        主线剧情时间是主线剧本里的钟：不玩就停住，玩到哪儿算哪儿；现实时间只在上面的「现实时间」那行给你看。老消息的日期不会变。番外（if 线/支线）有自己的时间线，在各番外剧本的「剧本设置 → 番外专属」里单独拨，这里不管、也不会被它们影响。
                     </p>
                 </div>
             </div>

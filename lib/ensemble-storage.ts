@@ -193,6 +193,20 @@ export type EnsembleScript = {
     /** 模板引擎：HTML/CSS/JS 全放开时为 "html" */
     engine: "html" | "text";
   };
+  /**
+   * 番外：父剧本 id。
+   * 空 = 主线剧本；有值 = 本剧本是那个剧本的番外（if 线 / 测试线）。
+   * ⚠️ 只用于列表归组与删除提示，**不做任何内容继承**。
+   */
+  parentScriptId?: string;
+  /**
+   * 番外标记（唯一判定口径）。
+   * true 时：① 杀青归档写「番外记忆库」而不是角色记忆库；
+   *          ② 不参与「角色 → 剧本」剧情时间映射，也不进设置页时间线列表；
+   *          ③ 剧本列表里折叠在父剧本下面。
+   * 判定一律用 `isSideStory(script)`，不要靠标题猜。
+   */
+  sideStory?: boolean;
 };
 
 /** 一次「杀青」归档的记录（支持撤销到上一版） */
@@ -321,6 +335,23 @@ export function saveOrUpdateEnsembleScript(script: EnsembleScript): void {
 export function deleteEnsembleScript(id: string): void {
   const scripts = loadEnsembleScripts().filter((s) => s.id !== id);
   saveEnsembleScripts(scripts);
+}
+
+/** 番外判定（唯一口径）：别靠标题或 parentScriptId 推断。 */
+export function isSideStory(script: Pick<EnsembleScript, "sideStory">): boolean {
+  return script.sideStory === true;
+}
+
+/** 主剧本的全部番外（按创建时间升序，列表归组用） */
+export function listSideStoriesOf(parentId: string): EnsembleScript[] {
+  return loadEnsembleScripts()
+    .filter((s) => s.parentScriptId === parentId && isSideStory(s))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** 某个剧本下面挂着的番外数量（删除提示用） */
+export function countSideStoriesOf(parentId: string): number {
+  return listSideStoriesOf(parentId).length;
 }
 
 /** 追加一幕，返回更新后的剧本（找不到则返回 null） */
