@@ -5,8 +5,17 @@ import { Clock, Layers, UserRound } from "lucide-react";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import { getStoryNow, isStoryClockActive, setStoryNow } from "@/lib/story-clock";
 
+type CastCandidate = {
+    id: string;
+    name: string;
+    avatar?: string | null;
+    persona: string;
+};
+
 type Props = {
     script: EnsembleScript;
+    /** 可添加的角色卡（绑定当前面具的卡，父组件用 castableCharacters 传进来） */
+    candidates?: CastCandidate[];
     /** 保存后就地更新（父组件负责 setCurrentScript + 落库 + 刷新列表） */
     onSaved: (updated: EnsembleScript) => void;
     onToast?: (message: string) => void;
@@ -29,12 +38,17 @@ function toLocalInput(date: Date): string {
  * 2) 番外剧情时间：只拨这条番外的时间线，主线与其他剧本不动。
  *    全局设置页那条是「主线剧情时间」，番外不进那个列表。
  */
-export function SideStorySettings({ script, onSaved, onToast }: Props) {
+export function SideStorySettings({ script, candidates = [], onSaved, onToast }: Props) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [draftPersona, setDraftPersona] = useState<string>("");
     const [timeInput, setTimeInput] = useState("");
+    const [showAddPicker, setShowAddPicker] = useState(false);
 
     const now = useMemo(() => getStoryNow(script.id), [script.id, script.updatedAt]);
+    const pickable = useMemo(
+        () => candidates.filter(candidate => !(script.cast ?? []).some(member => member.id === candidate.id)),
+        [candidates, script.cast],
+    );
 
     useEffect(() => {
         setTimeInput(toLocalInput(getStoryNow(script.id)));
@@ -62,6 +76,46 @@ export function SideStorySettings({ script, onSaved, onToast }: Props) {
         onSaved(updated);
         setExpandedId(null);
         onToast?.("本幕阵容人设已更新（只影响这个番外）");
+    }
+
+    function addMember(candidate: CastCandidate) {
+        const cast = script.cast ?? [];
+        if (cast.some(member => member.id === candidate.id)) return;
+        const updated: EnsembleScript = {
+            ...script,
+            updatedAt: new Date().toISOString(),
+            cast: [
+                ...cast,
+                {
+                    id: candidate.id,
+                    name: candidate.name,
+                    avatar: candidate.avatar ?? "",
+                    persona: candidate.persona ?? "",
+                },
+            ],
+        };
+        onSaved(updated);
+        onToast?.(`「${candidate.name}」已加入本番外阵容（只影响这条番外）`);
+    }
+
+    function removeMember(memberId: string, name: string) {
+        const cast = script.cast ?? [];
+        if (cast.length <= 1) {
+            onToast?.("阵容至少留一个人");
+            return;
+        }
+        const ok = window.confirm(
+            `把「${name}」移出本番外阵容？\n\n只改这条番外：角色卡本体和主剧本阵容都不动，已经写下的剧情也不删。`,
+        );
+        if (!ok) return;
+        const updated: EnsembleScript = {
+            ...script,
+            updatedAt: new Date().toISOString(),
+            cast: cast.filter(member => member.id !== memberId),
+        };
+        onSaved(updated);
+        if (expandedId === memberId) setExpandedId(null);
+        onToast?.(`「${name}」已移出本番外阵容（只影响这条番外）`);
     }
 
     function commitTime() {
@@ -105,14 +159,23 @@ export function SideStorySettings({ script, onSaved, onToast }: Props) {
                                     <span className="text-[12px] text-[#1a1a1a] line-clamp-1">
                                         {member.name}
                                     </span>
-                                    <button
-                                        type="button"
-                                        onClick={() => (editing ? setExpandedId(null) : startEdit(member.id, member.persona ?? ""))}
-                                        className="text-[11px]"
-                                        style={{ color: "#5B8FB9" }}
-                                    >
-                                        {editing ? "收起" : "编辑人设"}
-                                    </button>
+                                    <span className="flex shrink-0 items-center gap-2.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => (editing ? setExpandedId(null) : startEdit(member.id, member.persona ?? ""))}
+                                            className="text-[11px]"
+                                            style={{ color: "#5B8FB9" }}
+                                        >
+                                            {editing ? "收起" : "编辑人设"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeMember(member.id, member.name)}
+                                            className="text-[11px] text-[#c0392b]"
+                                        >
+                                            移出
+                                        </button>
+                                    </span>
                                 </div>
                                 {editing && (
                                     <div className="mt-1.5">
@@ -144,6 +207,41 @@ export function SideStorySettings({ script, onSaved, onToast }: Props) {
                             </div>
                         );
                     })}
+                    <button
+                        type="button"
+                        onClick={() => setShowAddPicker(prev => !prev)}
+                        className="mt-1 self-start rounded-lg bg-black/[0.06] px-3 py-1 text-[11px] text-black/60"
+                    >
+                        {showAddPicker ? "收起候选" : "＋ 添加成员"}
+                    </button>
+                    {showAddPicker && (
+                        <div className="rounded-xl bg-white/80 px-3 py-2">
+                            <p className="text-[11px] leading-relaxed text-black/40">
+                                只列绑定当前面具的角色卡。加入只写本番外的人设快照，角色卡本体和主剧本阵容都不动；
+                                已经写下的剧情也不会回改。
+                            </p>
+                            <div className="mt-1.5 flex flex-col gap-1">
+                                {pickable.map(candidate => (
+                                    <div key={candidate.id} className="flex items-center justify-between gap-2">
+                                        <span className="truncate text-[12px] text-[#1a1a1a]">{candidate.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => addMember(candidate)}
+                                            className="shrink-0 text-[11px]"
+                                            style={{ color: "#5B8FB9" }}
+                                        >
+                                            加入
+                                        </button>
+                                    </div>
+                                ))}
+                                {pickable.length === 0 && (
+                                    <p className="text-[11px] text-black/40">
+                                        当前面具下没有可加的角色卡（没绑面具的卡不会出现在这里）。
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     {(script.cast ?? []).length === 0 && (
                         <p className="text-[11px] text-black/40">这个番外还没有阵容。</p>
                     )}

@@ -6964,6 +6964,12 @@ ${lastSpeakerNote}
                   {currentScript.sideStory === true && (
                     <SideStorySettings
                       script={currentScript}
+                      candidates={castableCharacters.map(ch => ({
+                        id: ch.id,
+                        name: ch.name,
+                        avatar: ch.avatar,
+                        persona: ch.persona,
+                      }))}
                       onToast={(message) => setToast(message)}
                       onSaved={(updated) => {
                         setCurrentScript(updated);
