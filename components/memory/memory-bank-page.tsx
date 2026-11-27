@@ -212,6 +212,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onPickChar,
     const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null);
     const [confirmClearAll, setConfirmClearAll] = useState(false);
     const [pickedCharId, setPickedCharId] = useState<string | null>(null);
+    /** 带「配角」标签的角色在选人页默认收起来，避免挤占主角位置（番外配角同样按标签收） */
+    const [showSupporting, setShowSupporting] = useState(false);
     const [entryMenuId, setEntryMenuId] = useState<string | null>(null);
     const [memoryEditor, setMemoryEditor] = useState<MemoryEditorState | null>(null);
     const [savingMemory, setSavingMemory] = useState(false);
@@ -1622,6 +1624,18 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
     }
 
     // ── Character List View ──
+    const supportingItems = characters.filter(({ character }) => (character.tags ?? []).includes("配角"));
+    const leadingItems = characters.filter(({ character }) => !(character.tags ?? []).includes("配角"));
+    const renderPickerChip = (character: Character) => (
+        <button
+            key={character.id}
+            className="ui-chip"
+            {...(pickedCharId === character.id ? { "data-selected": "" } : {})}
+            onClick={() => setPickedCharId(pickedCharId === character.id ? null : character.id)}
+        >
+            {character.name}
+        </button>
+    );
     return (
         <div className="mem-picker">
             <div className="mem-picker-card">
@@ -1656,16 +1670,16 @@ function parseMemoryExportText(text: string): Array<{ content: string; createdAt
                     </p>
 
                     <div className="mem-picker-chips">
-                        {characters.map(({ character }) => (
+                        {leadingItems.map(({ character }) => renderPickerChip(character))}
+                        {supportingItems.length > 0 && (
                             <button
-                                key={character.id}
                                 className="ui-chip"
-                                {...(pickedCharId === character.id ? { "data-selected": "" } : {})}
-                                onClick={() => setPickedCharId(pickedCharId === character.id ? null : character.id)}
+                                onClick={() => setShowSupporting(prev => !prev)}
                             >
-                                {character.name}
+                                {showSupporting ? "收起配角" : `配角 · ${supportingItems.length}`}
                             </button>
-                        ))}
+                        )}
+                        {showSupporting && supportingItems.map(({ character }) => renderPickerChip(character))}
                     </div>
 
                     <div className="mem-picker-tear">
