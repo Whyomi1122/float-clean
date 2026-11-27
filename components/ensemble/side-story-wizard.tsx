@@ -5,8 +5,19 @@ import { Layers, X } from "lucide-react";
 import type { EnsembleScript } from "@/lib/ensemble-storage";
 import { buildSideStoryScript, inheritStoryClock } from "@/lib/side-story";
 
+type CastCandidate = {
+    id: string;
+    name: string;
+    avatar?: string | null;
+    persona: string;
+    /** 这张卡绑的面具名（没绑就传空） */
+    maskName?: string;
+};
+
 type Props = {
     parent: EnsembleScript | null;
+    /** 可补充的角色卡（除父剧本阵容外的全部角色） */
+    candidates?: CastCandidate[];
     onClose: () => void;
     onCreated: (script: EnsembleScript, copiedWorldBooks: number) => void;
 };
@@ -14,30 +25,49 @@ type Props = {
 /**
  * 建番外向导（2026-11-27）
  *
- * 只收集"名字"和"要不要复制世界书"，其余全部按父剧本复制：
+ * 收集"名字 / 要不要复制世界书 / 要不要补充参演角色"，其余全部按父剧本复制：
  * 阵容（人设快照）/ 模型 / 设置；开场白清空、场景设定预填、剧情时间继承父剧本当前时刻。
+ * 补充的角色只写本番外 cast 快照，不动角色卡本体、不动父剧本。
  */
-export function SideStoryWizard({ parent, onClose, onCreated }: Props) {
+export function SideStoryWizard({ parent, candidates = [], onClose, onCreated }: Props) {
     const [title, setTitle] = useState("");
     const [copyBooks, setCopyBooks] = useState(true);
+    const [extraIds, setExtraIds] = useState<string[]>([]);
+    const [showPicker, setShowPicker] = useState(false);
     const [creating, setCreating] = useState(false);
 
     useEffect(() => {
         if (!parent) return;
         setTitle(`${parent.title} · 番外`);
         setCopyBooks(true);
+        setExtraIds([]);
+        setShowPicker(false);
         setCreating(false);
     }, [parent?.id]);
 
     if (!parent) return null;
 
     const bookCount = (parent.worldBookIds ?? []).length;
+    const inCast = new Set((parent.cast ?? []).map(member => member.id));
+    const pickable = candidates.filter(candidate => !inCast.has(candidate.id));
+
+    function toggleExtra(id: string) {
+        setExtraIds(prev => (prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]));
+    }
 
     function handleCreate() {
         if (!parent || creating) return;
         setCreating(true);
         try {
-            const result = buildSideStoryScript({ parent, title, copyWorldBooks: copyBooks });
+            const extraCast = candidates
+                .filter(candidate => extraIds.includes(candidate.id))
+                .map(candidate => ({
+                    id: candidate.id,
+                    name: candidate.name,
+                    avatar: candidate.avatar ?? "",
+                    persona: candidate.persona,
+                }));
+            const result = buildSideStoryScript({ parent, title, copyWorldBooks: copyBooks, extraCast });
             inheritStoryClock(parent, result.script);
             onCreated(result.script, result.copiedWorldBooks.length);
         } finally {
@@ -101,6 +131,50 @@ export function SideStoryWizard({ parent, onClose, onCreated }: Props) {
                             />
                             复制世界书副本（建议保持勾选）
                         </label>
+                    )}
+                </div>
+
+                <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3">
+                    <button
+                        type="button"
+                        onClick={() => setShowPicker(prev => !prev)}
+                        className="flex w-full items-center justify-between text-left text-[12px]"
+                    >
+                        <span className="font-medium text-[#1a1a1a]">补充参演角色（可选）</span>
+                        <span className="text-black/45">
+                            {extraIds.length > 0 ? `已选 ${extraIds.length} 人` : "不补充"}
+                        </span>
+                    </button>
+                    {showPicker && (
+                        <div className="mt-2">
+                            {pickable.length === 0 ? (
+                                <p className="text-[12px] text-black/40">没有可补充的角色卡。</p>
+                            ) : (
+                                <div className="max-h-[184px] space-y-1 overflow-y-auto pr-1">
+                                    {pickable.map(candidate => (
+                                        <label
+                                            key={candidate.id}
+                                            className="flex items-center gap-2 rounded-lg px-1 py-1 text-[12px] text-black/65"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={extraIds.includes(candidate.id)}
+                                                onChange={() => toggleExtra(candidate.id)}
+                                            />
+                                            <span className="truncate">{candidate.name}</span>
+                                            {candidate.maskName ? (
+                                                <span className="ml-auto shrink-0 text-[11px] text-black/35">
+                                                    {candidate.maskName}
+                                                </span>
+                                            ) : null}
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-black/40">
+                                只写本番外的人设快照，不改角色卡本体，也不改《{parent.title}》的阵容。
+                            </p>
+                        </div>
                     )}
                 </div>
 

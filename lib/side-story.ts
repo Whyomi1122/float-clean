@@ -19,6 +19,11 @@ export type SideStoryCreateOptions = {
     title: string;
     /** 默认 true：把父剧本绑定的世界书复制成副本（推荐，避免互相影响） */
     copyWorldBooks?: boolean;
+    /**
+     * 补充参演角色（可选）：在父剧本阵容之外再追加几个。
+     * 只写本番外的 cast 快照，不动角色卡本体、不动父剧本。
+     */
+    extraCast?: { id: string; name: string; avatar?: string; persona: string }[];
 };
 
 export type SideStoryCreateResult = {
@@ -73,7 +78,7 @@ function copyWorldBooksOf(parent: EnsembleScript): {
 
 /** 建一个番外剧本（只构造对象，落库由调用方决定） */
 export function buildSideStoryScript(options: SideStoryCreateOptions): SideStoryCreateResult {
-    const { parent, title, copyWorldBooks = true } = options;
+    const { parent, title, copyWorldBooks = true, extraCast = [] } = options;
     const now = new Date().toISOString();
 
     const { ids: worldBookIds, copied } = copyWorldBooks
@@ -86,13 +91,27 @@ export function buildSideStoryScript(options: SideStoryCreateOptions): SideStory
         personaId: parent.personaId,
         createdAt: now,
         updatedAt: now,
-        // 阵容：人设快照深拷贝（之后改角色卡不影响本剧本）
-        cast: (parent.cast ?? []).map(member => ({
-            id: member.id,
-            name: member.name,
-            avatar: member.avatar,
-            persona: member.persona,
-        })),
+        // 阵容：父剧本快照深拷贝 + 补充角色（同一个 id 只留一份）
+        cast: (() => {
+            const base = (parent.cast ?? []).map(member => ({
+                id: member.id,
+                name: member.name,
+                avatar: member.avatar,
+                persona: member.persona,
+            }));
+            const seen = new Set(base.map(member => member.id));
+            for (const extra of extraCast) {
+                if (!extra || seen.has(extra.id)) continue;
+                seen.add(extra.id);
+                base.push({
+                    id: extra.id,
+                    name: extra.name,
+                    avatar: extra.avatar ?? "",
+                    persona: extra.persona,
+                });
+            }
+            return base;
+        })(),
         turns: [],
         worldBookIds,
         // 开场白清空：番外要自己的开场

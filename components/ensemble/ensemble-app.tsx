@@ -3932,6 +3932,13 @@ ${lastSpeakerNote}
         {sideStoryParent && (
           <SideStoryWizard
             parent={sideStoryParent}
+            candidates={characters.map(ch => ({
+              id: ch.id,
+              name: ch.name,
+              avatar: ch.avatar,
+              persona: ch.persona,
+              maskName: resolveUserIdentity(ch.id)?.name ?? "",
+            }))}
             onClose={() => setSideStoryParent(null)}
             onCreated={handleSideStoryCreated}
           />
