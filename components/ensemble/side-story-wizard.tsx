@@ -16,7 +16,7 @@ type CastCandidate = {
 
 type Props = {
     parent: EnsembleScript | null;
-    /** 可补充的角色卡（除父剧本阵容外的全部角色） */
+    /** 可补充的角色卡（当前面具下的角色卡，除父剧本阵容外） */
     candidates?: CastCandidate[];
     onClose: () => void;
     onCreated: (script: EnsembleScript, copiedWorldBooks: number) => void;
@@ -148,7 +148,7 @@ export function SideStoryWizard({ parent, candidates = [], onClose, onCreated }:
                     {showPicker && (
                         <div className="mt-2">
                             {pickable.length === 0 ? (
-                                <p className="text-[12px] text-black/40">没有可补充的角色卡。</p>
+                                <p className="text-[12px] text-black/40">当前面具下没有其他角色卡（没绑面具的卡不会出现在这里）。</p>
                             ) : (
                                 <div className="max-h-[184px] space-y-1 overflow-y-auto pr-1">
                                     {pickable.map(candidate => (
@@ -172,7 +172,7 @@ export function SideStoryWizard({ parent, candidates = [], onClose, onCreated }:
                                 </div>
                             )}
                             <p className="mt-1.5 text-[11px] leading-relaxed text-black/40">
-                                只写本番外的人设快照，不改角色卡本体，也不改《{parent.title}》的阵容。
+                                只列绑定当前面具的角色卡；只写本番外的人设快照，不改角色卡本体，也不改《{parent.title}》的阵容。
                             </p>
                         </div>
                     )}

@@ -3932,7 +3932,7 @@ ${lastSpeakerNote}
         {sideStoryParent && (
           <SideStoryWizard
             parent={sideStoryParent}
-            candidates={characters.map(ch => ({
+            candidates={castableCharacters.map(ch => ({
               id: ch.id,
               name: ch.name,
               avatar: ch.avatar,
