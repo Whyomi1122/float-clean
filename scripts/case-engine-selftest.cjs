@@ -1,5 +1,5 @@
 // 案件引擎纯函数自测（不碰 kv / React）。跑法：
-//   npx tsc lib/case-engine/engine.ts lib/case-engine/cases/exit9_invalid_nods.ts --outDir .tmp-case-test --module commonjs --target es2020 --moduleResolution node --skipLibCheck
+//   npx tsc lib/case-engine/engine.ts lib/case-engine/link.ts lib/case-engine/cases/exit9_invalid_nods.ts --outDir .tmp-case-test --module commonjs --target es2020 --moduleResolution node --skipLibCheck
 //   node scripts/case-engine-selftest.cjs
 // 结束后可删 .tmp-case-test。
 const { EXIT9_INVALID_NODS: pkg } = require("../.tmp-case-test/cases/exit9_invalid_nods.js");
@@ -75,6 +75,31 @@ ok("空白开局 → rejected", E.computeEnding(pkg, fresh) === "rejected");
 // 真相不进任何可读文本
 const blob = JSON.stringify([todos, sub.value]);
 ok("材料正文里没有真相原文", !JSON.stringify(pkg.evidence).includes("保安先动手") && !blob.includes("保安先动手"), "truth 泄漏");
+
+// ---------------------------------------------------------------- 剧情 → App
+const L = require("../.tmp-case-test/link.js");
+
+let linkBase = E.createSession(pkg, "script-x", "wolinyu", 20000);
+linkBase = E.requestEvidence(pkg, linkBase, "E-03", 20100).session;
+linkBase = E.updateDraft(linkBase, "E-03", "崔检察官，第一次讯问的录像能给我一份吗。", 20200).session;
+linkBase = E.markDraftSent(linkBase, "E-03", 21000).session;
+
+const early = L.syncStoryDeliveries(pkg, linkBase, [{ content: "崔永进：这份讯问录像我调出来了。", timestamp: new Date(9000).toISOString() }], 22000);
+ok("求之前的回合不解锁", early.deliveries.length === 0 && early.session.access["E-03"] === "pending");
+
+const refusal = L.syncStoryDeliveries(pkg, linkBase, [{ content: "崔永进：讯问录像我暂时不能给你。", timestamp: new Date(22000).toISOString() }], 23000);
+ok("拒绝句不解锁", refusal.deliveries.length === 0 && refusal.session.access["E-03"] === "pending");
+
+const noMention = L.syncStoryDeliveries(pkg, linkBase, [{ content: "崔永进：下雨了，早点回去。", timestamp: new Date(22000).toISOString() }], 23000);
+ok("不提材料不解锁", noMention.deliveries.length === 0 && noMention.session.access["E-03"] === "pending");
+
+const gave = L.syncStoryDeliveries(pkg, linkBase, [{ content: "崔永进：这份讯问录像我调出来了，你拿去看。", timestamp: new Date(22000).toISOString() }], 24000);
+ok("剧情递到才解锁", gave.deliveries.length === 1 && gave.session.access["E-03"] === "granted");
+ok("递到留一条通讯", gave.session.comms.some((c) => c.source === "story" && c.text.includes("录像")));
+ok("解锁后可核", E.checkEvidence(pkg, gave.session, "E-03", 25000).ok === true);
+
+const unasked = L.syncStoryDeliveries(pkg, E.createSession(pkg, "script-x", "wolinyu", 26000), [{ content: "崔永进：值班表我调出来了，你看看。", timestamp: new Date(27000).toISOString() }], 28000);
+ok("没求过不递", unasked.deliveries.length === 0 && unasked.session.access["E-06"] === "pending");
 
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

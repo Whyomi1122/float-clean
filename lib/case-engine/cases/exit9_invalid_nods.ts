@@ -59,6 +59,7 @@ export const EXIT9_INVALID_NODS: CasePackage = {
         {
             id: "E-03",
             name: "第一次讯问录像",
+            aliases: ["讯问录像", "第一次讯问", "讯问画面", "讯问全程", "录像"],
             sectionMark: "节选 · 前 22 分钟",
             desc: "画面二十二分四十一秒。第 8 分 03 秒，警员说「点头就是不反对吧」，被告点头；第 9 分 12 秒同一句又问一次，被告又点头。全程没有手语翻译入镜，桌面上没有写字板。",
             pointsTo: ["procedure", "semantics"],
@@ -102,6 +103,7 @@ export const EXIT9_INVALID_NODS: CasePackage = {
         {
             id: "E-06",
             name: "讯问在场人员记录",
+            aliases: ["在场人员记录", "在场记录", "值班表", "翻译那栏", "翻译一栏", "在场人员"],
             sectionMark: "节选 · 值班表",
             desc: "在场人员一栏：办案警员两名、值班组长一名。翻译一栏空白。备注写着「嫌疑人可以正常沟通」，没有注明依据，也没有写用什么方式沟通。",
             pointsTo: ["procedure"],

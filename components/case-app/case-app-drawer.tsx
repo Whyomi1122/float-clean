@@ -33,7 +33,9 @@ import {
     updateDraft,
 } from "@/lib/case-engine/engine";
 import { CASES, getCasePackage } from "@/lib/case-engine/cases";
+import { syncStoryDeliveries } from "@/lib/case-engine/link";
 import { loadCaseSession, saveCaseSession } from "@/lib/case-engine/storage";
+import { loadEnsembleScripts } from "@/lib/ensemble-storage";
 import type { CaseIdentity, CaseSession } from "@/lib/case-engine/types";
 
 const IDENTITIES: { id: CaseIdentity; label: string }[] = [
@@ -47,6 +49,13 @@ const ACCESS_LABEL: Record<string, string> = {
     pending: "待授权",
     obtained: "非常规获得",
     locked: "锁",
+};
+
+const FROM_LABEL: Record<string, string> = {
+    wolinyu: "我",
+    pi: "皮韩宇",
+    kim: "金成帝",
+    court: "法院",
 };
 
 export type CaseAppDrawerProps = {
@@ -67,9 +76,25 @@ export function CaseAppDrawer({ scriptId, scriptTitle, onClose, onPrefillInput }
     const [ending, setEnding] = useState<{ title: string; text: string } | null>(null);
 
     useEffect(() => {
-        setSession(loadCaseSession(scriptId, defaultCaseId, identity));
+        const saved = loadCaseSession(scriptId, defaultCaseId, identity);
         setOpenEvidenceId(null);
         setEnding(null);
+        if (!saved) {
+            setSession(null);
+            setNotice("");
+            return;
+        }
+        // 剧情 → App：打开 App 时把「求过、剧情里真的递到手上」的材料解锁
+        const p = getCasePackage(saved.caseId);
+        const script = loadEnsembleScripts().find((s) => s.id === scriptId);
+        const synced = p && script ? syncStoryDeliveries(p, saved, script.turns) : null;
+        if (synced && synced.deliveries.length > 0) {
+            saveCaseSession(synced.session);
+            setSession(synced.session);
+            setNotice(`剧情把${synced.deliveries.map((d) => d.name).join("、")}递到你手上了。`);
+            return;
+        }
+        setSession(saved);
         setNotice("");
     }, [scriptId, defaultCaseId, identity]);
 
@@ -368,6 +393,21 @@ function Overview(props: {
                     </ul>
                 )}
             </div>
+
+            {/* 通讯（只读）：剧情里对他说的话自动摘进来 */}
+            {session.comms.length > 0 && (
+                <div className="mt-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
+                    <div className="text-[11px] text-black/35">通讯 · 只读</div>
+                    <ul className="mt-1.5 space-y-1.5">
+                        {session.comms.slice(-6).map((c, i) => (
+                            <li key={`${c.at}-${i}`} className="text-[11.5px] leading-relaxed text-black/60">
+                                <span className="text-black/30">{FROM_LABEL[c.from] ?? "剧情"}：</span>
+                                {c.text}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {props.notice && (
                 <div className="mt-3 rounded-xl bg-[#5B8FB9]/8 px-3 py-2 text-[11.5px] text-[#3F6E92]">

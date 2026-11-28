@@ -32,6 +32,8 @@ export interface CaseEvidenceAsk {
 export interface CaseEvidence {
     id: string;
     name: string;
+    /** 剧情里更常出现的叫法（用于「剧情把材料递到手」的识别）；不给＝只认 name */
+    aliases?: string[];
     /** 页眉上的节选标记，如「节选 · 2027고합0147 · 3/7 页起」 */
     sectionMark?: string;
     /** 材料正文节选（60~200 字，AI 不许改） */
