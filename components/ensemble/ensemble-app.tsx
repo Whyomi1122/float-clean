@@ -62,7 +62,6 @@ import { syncEnsembleArchiveToMemory, removeEnsembleArchiveFromMemory, resyncEns
 import { SideStoryWizard } from "@/components/ensemble/side-story-wizard";
 import { SideStorySettings } from "@/components/ensemble/side-story-settings";
 import { CaseAppDrawer } from "@/components/case-app/case-app-drawer";
-import { isCaseEnabledFor } from "@/lib/case-engine/storage";
 import { buildCasePromptBlock } from "@/lib/case-engine/inject";
 import { deliverToChat, describePendingSessions, getPendingSessions, discardDeliverySession, loadSessionTranscript, getDeliveredTurnIds, sanitizeChatLine } from "@/lib/ensemble-delivery";
 import type { ApiConfig } from "@/lib/settings-types";
@@ -4890,8 +4889,8 @@ ${lastSpeakerNote}
               </div>
             )}
             <div className="flex items-center gap-2">
-              {/* 唯一的入口：+ 号 → 底部「功能」面板（旁白/配色/CSS/模型都收进去） */}
-              {isCaseEnabledFor(currentScript?.id) && (
+              {/* 案件 App 唯一入口：常显，没绑定的话抽屉里第一步就是绑定 */}
+              {currentScript && (
                 <button
                   type="button"
                   onPointerDown={(e) => e.stopPropagation()}
@@ -4903,6 +4902,7 @@ ${lastSpeakerNote}
                   <FolderSearch size={16} strokeWidth={2} />
                 </button>
               )}
+              {/* + 号 → 底部「功能」面板（旁白/配色/CSS/模型都收进去） */}
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -6351,7 +6351,7 @@ ${lastSpeakerNote}
 
           {/* ═══════════ 案件 App（2026-11-27）：绑定的剧本才出现 ═══════════
               半屏抽屉盖在剧情室上，聊天室不关；求的草稿只回填输入框，App 不对外发消息。 */}
-          {showCaseApp && currentScript && isCaseEnabledFor(currentScript.id) && (
+          {showCaseApp && currentScript && (
             <CaseAppDrawer
               scriptId={currentScript.id}
               scriptTitle={currentScript.title}

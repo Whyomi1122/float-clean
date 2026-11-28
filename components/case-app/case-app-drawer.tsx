@@ -34,7 +34,7 @@ import {
 } from "@/lib/case-engine/engine";
 import { CASES, getCasePackage } from "@/lib/case-engine/cases";
 import { syncStoryDeliveries } from "@/lib/case-engine/link";
-import { loadCaseSession, saveCaseSession } from "@/lib/case-engine/storage";
+import { loadCaseSession, saveCaseSession, isCaseEnabledFor, setBoundScript } from "@/lib/case-engine/storage";
 import { loadEnsembleScripts } from "@/lib/ensemble-storage";
 import type { CaseIdentity, CaseSession } from "@/lib/case-engine/types";
 
@@ -74,8 +74,11 @@ export function CaseAppDrawer({ scriptId, scriptTitle, onClose, onPrefillInput }
     const [obsText, setObsText] = useState("");
     const [notice, setNotice] = useState("");
     const [ending, setEnding] = useState<{ title: string; text: string } | null>(null);
+    // 绑定＝白名单：这个剧本绑了才真的开案、才注入；没绑就先在这里绑
+    const [bound, setBound] = useState(() => isCaseEnabledFor(scriptId));
 
     useEffect(() => {
+        setBound(isCaseEnabledFor(scriptId));
         const saved = loadCaseSession(scriptId, defaultCaseId, identity);
         setOpenEvidenceId(null);
         setEnding(null);
@@ -158,7 +161,15 @@ export function CaseAppDrawer({ scriptId, scriptTitle, onClose, onPrefillInput }
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-                    {!session ? (
+                    {!bound ? (
+                        <BindScreen
+                            scriptTitle={scriptTitle}
+                            onBind={() => {
+                                setBoundScript({ id: scriptId, title: scriptTitle || "" });
+                                setBound(true);
+                            }}
+                        />
+                    ) : !session ? (
                         <StartScreen
                             caseTitle={pkg?.title ?? ""}
                             caseNo={pkg?.caseNo ?? ""}
@@ -206,6 +217,31 @@ export function CaseAppDrawer({ scriptId, scriptTitle, onClose, onPrefillInput }
             </div>
         </div>,
         document.body,
+    );
+}
+
+function BindScreen(props: { scriptTitle?: string; onBind: () => void }) {
+    return (
+        <div className="pt-2">
+            <div className="rounded-2xl bg-white px-4 py-3.5 shadow-sm">
+                <div className="text-[11px] tracking-wide text-black/35">案件 App</div>
+                <div className="mt-0.5 text-[16px] font-semibold text-black/80">本剧本还没开案</div>
+                <div className="mt-2 text-[12px] leading-relaxed text-black/55">
+                    一个剧本只认一个绑定。绑上之后，剧情那边才会知道有你手上这桩案子 ——
+                    每轮多读一段案件状态（≤600 字），案结了就自动不再读。
+                </div>
+                <div className="mt-2 text-[11.5px] leading-relaxed text-black/35">
+                    绑的是「{props.scriptTitle || "当前剧本"}」。换剧本要重新绑。
+                </div>
+            </div>
+            <button
+                type="button"
+                onClick={props.onBind}
+                className="mt-4 w-full rounded-xl bg-[#5B8FB9] py-2.5 text-[13px] font-medium text-white"
+            >
+                就绑这个剧本
+            </button>
+        </div>
     );
 }
 

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, type CSSProperties, type ReactNode } from "react";
-import { Activity, Check, ChevronRight, Clock, Database, Eye, FileText, Fingerprint, Globe, HardDrive, Image, Info, KeyRound, Laptop, Layers, Link2, Loader2, LogOut, MessageSquare, Mic, ShieldAlert, SlidersHorizontal, UserCircle, Wrench, X, Zap, CloudUpload, FolderSearch, type LucideIcon } from "lucide-react";
+import { Activity, Check, ChevronRight, Clock, Database, Eye, FileText, Fingerprint, Globe, HardDrive, Image, Info, KeyRound, Laptop, Layers, Link2, Loader2, LogOut, MessageSquare, Mic, ShieldAlert, SlidersHorizontal, UserCircle, Wrench, X, Zap, CloudUpload, type LucideIcon } from "lucide-react";
 import { ConfirmDialog } from "./ui/modal";
 import { useAccount } from "@/lib/account-context";
 import { isSelfHostedModeEnabled } from "@/lib/self-hosting";
@@ -22,7 +22,6 @@ import { ToolboxSettings } from "./settings/toolbox-settings";
 import { ModerationCenter } from "./settings/moderation-center";
 import { AgentComputerSettings } from "./settings/agent-computer-settings";
 import { StoryClockSettings } from "./settings/story-clock-settings";
-import { CaseAppSettings } from "./settings/case-app-settings";
 import { getStoryNow, isStoryClockActive, subscribeStoryClock } from "@/lib/story-clock";
 import { fetchIsAdmin } from "@/lib/moderation-client";
 import { PageShell } from "./ui/page-shell";
@@ -60,7 +59,6 @@ type SubPage =
     | "agentComputer"
     | "moderation"
     | "storyClock"
-    | "caseApp"
     | "about";
 
 const SETTINGS_MENU = [
@@ -77,7 +75,6 @@ const SETTINGS_MENU = [
     { id: "toolbox", icon: Wrench, label: "聊天工具箱", desc: "外部工具调用", iconColor: BINDING_ACCENTS.voice , glass: "toolbox" },
     { id: "agentComputer", icon: Laptop, label: "角色电脑", desc: "云端小电脑（自部署）", iconColor: BINDING_ACCENTS.memory , glass: "agent-computer" },
     { id: "storyClock", icon: Clock, label: "剧情时间", desc: "和群像目前的剧情对齐", iconColor: BINDING_ACCENTS.api , glass: "" },
-    { id: "caseApp", icon: FolderSearch, label: "案件 App", desc: "绑定剧本、注入开关、清存档", iconColor: BINDING_ACCENTS.identity , glass: "" },
     { id: "identity", icon: UserCircle, label: "用户身份", desc: "个人信息", iconColor: BINDING_ACCENTS.identity , glass: "identity" },
     { id: "about", icon: Info, label: "关于与声明", desc: "版本与协议", iconColor: BINDING_ACCENTS.memory , glass: "about" },
 ] as const;
@@ -374,8 +371,6 @@ export function PhoneSettingsApp({ onClose, onNotice }: SettingsPageProps) {
                 return <UserIdentitySettings />;
             case "storyClock":
                 return <StoryClockSettings timeAware={timeAware} onTimeAwareChange={handleTimeAwareChange} />;
-            case "caseApp":
-                return <CaseAppSettings />;
             case "about":
                 return <AboutDeclaration />;
             default:
