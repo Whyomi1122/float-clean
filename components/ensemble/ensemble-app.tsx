@@ -26,6 +26,7 @@ import {
   Upload,
   MessageCircle,
   X,
+  FolderSearch,
 } from "lucide-react";
 import type { Character } from "@/lib/character-types";
 import {
@@ -60,6 +61,9 @@ import {
 import { syncEnsembleArchiveToMemory, removeEnsembleArchiveFromMemory, resyncEnsembleArchivesToMemory, restoreEnsembleArchiveTombstones } from "@/lib/ensemble-memory-bridge";
 import { SideStoryWizard } from "@/components/ensemble/side-story-wizard";
 import { SideStorySettings } from "@/components/ensemble/side-story-settings";
+import { CaseAppDrawer } from "@/components/case-app/case-app-drawer";
+import { isCaseEnabledFor } from "@/lib/case-engine/storage";
+import { buildCasePromptBlock } from "@/lib/case-engine/inject";
 import { deliverToChat, describePendingSessions, getPendingSessions, discardDeliverySession, loadSessionTranscript, getDeliveredTurnIds, sanitizeChatLine } from "@/lib/ensemble-delivery";
 import type { ApiConfig } from "@/lib/settings-types";
 import { simpleLLMCall } from "@/lib/api-helpers";
@@ -1453,6 +1457,8 @@ export function EnsembleApp({
 
   // ── 「功能」面板（+ 号）及其子弹窗 ──
   const [showToolsSheet, setShowToolsSheet] = useState(false);
+  /** 案件 App 半屏抽屉（只对绑定的剧本出现，见 设置 → 案件 App） */
+  const [showCaseApp, setShowCaseApp] = useState(false);
   // showPaletteSheet 已删除（卡片配色已移除）
   const [showCssSheet, setShowCssSheet] = useState(false);
   const [showModelSheet, setShowModelSheet] = useState(false);  /** 剧本设置（输出长度）子弹窗 */
@@ -2638,6 +2644,10 @@ ${script.openingMessage.trim()}
       // 自动按阵容人数决定，不给用户开关；用户自己的世界书/预设永远优先。
       const styleBlock = buildEnsembleStyleBlock(script.cast.length);
 
+      // 案件 App 注入（2026-11-27）：只对「设置 → 案件 App」绑定的剧本生效，
+      // 且该剧本要有未结案件；否则返回空串，对 prompt 零影响。总开关在设置页。
+      const caseBlock = buildCasePromptBlock(script.id);
+
       const systemPrompt = `你是一位擅长群像叙事的小说作者，正在续写互动剧本《${script.title}》。
 
 🚨 输出格式铁律（违反则整幕作废，必须重写）：
@@ -2649,6 +2659,7 @@ ${script.openingMessage.trim()}
 ${castDesc}${userDesc}${povBlock}
 ${sceneBlock}${openingBlock}${memoryBlock}${crossMemoryBlock}${archiveBlock}${worldBookBlock}${timeBlock}${outputLenRule}
 ${styleBlock}
+${caseBlock}
 ═══════════ 归档事实优先级（铁律）═══════════
 上面的「剧情归档」是既定事实，优先级高于你本轮的任何发挥：
 1. 归档「知情范围」里写明某角色**不知**的事项，该角色不得在言行、心理中体现知晓（不知情要演成不知情）；
@@ -4880,6 +4891,18 @@ ${lastSpeakerNote}
             )}
             <div className="flex items-center gap-2">
               {/* 唯一的入口：+ 号 → 底部「功能」面板（旁白/配色/CSS/模型都收进去） */}
+              {isCaseEnabledFor(currentScript?.id) && (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setShowCaseApp(true)}
+                  className="w-8 h-8 grid place-items-center rounded-full bg-black/[0.05] hover:bg-black/[0.09] text-black/55 shrink-0 active:scale-90 transition"
+                  title="案件"
+                  aria-label="案件"
+                >
+                  <FolderSearch size={16} strokeWidth={2} />
+                </button>
+              )}
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -6324,6 +6347,26 @@ ${lastSpeakerNote}
                 }}
               />
             </MiniSheet>
+          )}
+
+          {/* ═══════════ 案件 App（2026-11-27）：绑定的剧本才出现 ═══════════
+              半屏抽屉盖在剧情室上，聊天室不关；求的草稿只回填输入框，App 不对外发消息。 */}
+          {showCaseApp && currentScript && isCaseEnabledFor(currentScript.id) && (
+            <CaseAppDrawer
+              scriptId={currentScript.id}
+              scriptTitle={currentScript.title}
+              onClose={() => setShowCaseApp(false)}
+              onPrefillInput={(text) => {
+                setInputText(text);
+                requestAnimationFrame(() => {
+                  const el = composerRef.current;
+                  if (!el) return;
+                  el.style.height = "auto";
+                  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                  el.focus();
+                });
+              }}
+            />
           )}
 
           {/* ═══════════ 子弹窗 7：杀青归档（2026-10-10） ═══════════
